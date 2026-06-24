@@ -147,7 +147,12 @@ function LibraryItem({
             <button type="button" className="secondary-action compact-action" onClick={() => setConfirmingRemove(false)}>
               {removeConfirmCancel}
             </button>
-            <button type="button" className="primary-action compact-action" onClick={() => onFavoriteToggle(record, false)}>
+            <button
+              type="button"
+              className="primary-action compact-action"
+              disabled={!onFavoriteToggle}
+              onClick={() => onFavoriteToggle?.(record, false)}
+            >
               {removeConfirmAction}
             </button>
           </div>

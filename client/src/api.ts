@@ -91,7 +91,7 @@ export const fallbackConfig: PublicConfig = {
   name: appConfig.name,
   defaultLocale: appConfig.defaultLocale as Locale,
   productionContact: appConfig.productionContact,
-  questions,
+  questions: questions as QuestionConfig["questions"],
   experts,
   i18n: {
     "zh-Hans": zhHans,

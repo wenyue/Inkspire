@@ -57,7 +57,7 @@ export function optionValueForQuestion(question: Question, option: string, local
     return option;
   }
 
-  const index = question.options[locale]?.indexOf(option) ?? -1;
+  const index = question.options?.[locale]?.indexOf(option) ?? -1;
   return index === 1 ? "calligraphy" : "painting";
 }
 

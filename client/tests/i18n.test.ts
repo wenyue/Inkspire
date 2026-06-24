@@ -43,7 +43,7 @@ describe("i18n", () => {
 
     expect(t("studio.title")).toBe("Inkspire");
     expect(t("studio.subtitle")).toBe("Chinese painting and calligraphy in a garden scroll");
-    expect(t("result.continue")).toBe("Generate again");
+    expect(t("result.continue")).toBe("Adjust from this artwork");
     expect(t("production.confirm")).toBe("Confirm production");
   });
 

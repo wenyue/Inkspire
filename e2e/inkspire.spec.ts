@@ -15,7 +15,7 @@ async function completePaintingFlow(page) {
   for (const option of ["山水", "水墨", "清雅", "竖幅", "适中"]) {
     await page.getByRole("button", { name: option }).click();
   }
-  await expect(page.getByRole("heading", { name: "您想要把作品摆在哪里？" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "可选：添加摆放环境照片" })).toBeVisible();
   await expect(page.getByRole("button", { name: "生成", exact: true })).not.toBeVisible();
 }
 
@@ -60,9 +60,9 @@ test("mobile user can complete Inkspire creation flow with mocked generation", a
   await page.getByRole("button", { name: "生成", exact: true }).click();
 
   await expect(page.getByRole("img", { name: "作品图" })).toBeVisible({ timeout: 30_000 });
-  await expect(page.getByRole("img", { name: "融合图" })).toBeVisible();
+  await expect(page.getByRole("img", { name: "效果图" })).toBeVisible();
   await expect(page.getByText("作品图", { exact: true })).toBeVisible();
-  await expect(page.getByText("融合图", { exact: true })).toBeVisible();
+  await expect(page.getByText("效果图", { exact: true })).toBeVisible();
   await expect(page.getByText(/制作作品/)).toBeVisible({ timeout: 30_000 });
   await page.getByText("制作作品").click();
   await expect(page.getByText("专家定制")).toBeVisible();
@@ -95,7 +95,7 @@ test("wide viewport shows artwork and fusion side by side", async ({ page }) => 
   await page.getByRole("button", { name: "生成", exact: true }).click();
 
   await expect(page.getByRole("img", { name: "作品图" })).toBeVisible({ timeout: 30_000 });
-  await expect(page.getByRole("img", { name: "融合图" })).toBeVisible();
+  await expect(page.getByRole("img", { name: "效果图" })).toBeVisible();
   const resultColumns = await page.locator(".result-grid").first().evaluate((element) => {
     return window.getComputedStyle(element).gridTemplateColumns.split(" ").length;
   });

@@ -2,6 +2,9 @@ const crypto = require("node:crypto");
 const path = require("node:path");
 const { convertPngToWebp } = require("./imagePipeline");
 const { buildArtworkPrompt, buildFusionPrompt } = require("./prompts");
+const { validateRecordAssetPath } = require("./storage");
+
+const SOURCE_PHOTO_FILES = new Set(["source-photo.webp"]);
 
 function newId(prefix) {
   return `${prefix}-${Date.now().toString(36)}-${crypto.randomBytes(4).toString("hex")}`;
@@ -23,6 +26,23 @@ function relativeRecordPath(recordId, fileName) {
 
 function diagnosticsFromError(error) {
   return error?.diagnostics || { reason: "runner_error" };
+}
+
+function badRequest(message) {
+  const error = new Error(message);
+  error.status = 400;
+  return error;
+}
+
+function normalizeSourcePhotoPath(sourcePhotoPath) {
+  if (!sourcePhotoPath) {
+    return "";
+  }
+  try {
+    return validateRecordAssetPath(sourcePhotoPath, SOURCE_PHOTO_FILES);
+  } catch {
+    throw badRequest("Invalid source photo path");
+  }
 }
 
 function createJobManager({ config, storage, runner }) {
@@ -73,6 +93,7 @@ function createJobManager({ config, storage, runner }) {
 
   async function createArtwork({ type, answers = {}, conversationNotes = "", sourcePhotoPath = "", recommendedArtworkSize = null }) {
     return runLocked("artwork", async () => {
+      const safeSourcePhotoPath = normalizeSourcePhotoPath(sourcePhotoPath);
       const recordId = newId("record");
       const job = createJob("artwork", recordId);
       const artworkPath = relativeRecordPath(recordId, "artwork.webp");
@@ -84,7 +105,7 @@ function createJobManager({ config, storage, runner }) {
         title: titleFromRequest(type, answers),
         answers,
         conversation_notes: conversationNotes,
-        source_photo_path: sourcePhotoPath,
+        source_photo_path: safeSourcePhotoPath,
         recommended_artwork_size: recommendedArtworkSize,
         artwork_path: artworkPath,
         favorite: true,
@@ -126,13 +147,14 @@ function createJobManager({ config, storage, runner }) {
   async function createFusion({ recordId, sourcePhotoPath = "" }) {
     return runLocked("fusion_render", async () => {
       const record = await storage.getRecord(recordId);
+      const safeSourcePhotoPath = normalizeSourcePhotoPath(sourcePhotoPath);
       const job = createJob("fusion_render", recordId);
       const fusionPath = relativeRecordPath(recordId, "fusion.webp");
       const pngPath = path.join(storage.dataDir, "records", recordId, "fusion.png");
       job.status = "running";
       record.status = "running";
-      if (sourcePhotoPath) {
-        record.source_photo_path = sourcePhotoPath;
+      if (safeSourcePhotoPath) {
+        record.source_photo_path = safeSourcePhotoPath;
       }
       await storage.saveRecord(record);
 

@@ -481,6 +481,7 @@ export default function Studio({
             ) : showPhotoStep ? (
               <div className="photo-step">
                 <h2>{t("studio.photo")}</h2>
+                <p className="photo-step-hint">{t("studio.photoHint")}</p>
                 {isUploading ? (
                   <p className="status-line" role="status">
                     {t("studio.uploadingPhoto")}

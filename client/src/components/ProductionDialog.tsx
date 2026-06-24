@@ -13,21 +13,29 @@ import {
 import type { Locale } from "../domain";
 
 type ProductionSize = ArtworkSize & {
+  labelText: Record<Locale, string>;
   hint: Record<Locale, string>;
 };
 
-const DEFAULT_SIZE: ArtworkSize = {
+const DEFAULT_SIZE: ArtworkSize & { labelText: Record<Locale, string>; reasonText: Record<Locale, string> } = {
   preset_id: "medium",
   label: "中幅雅作",
   width_cm: 45,
   height_cm: 68,
-  reason: "常用客厅、书房尺寸，先按中幅预填。"
+  reason: "常用客厅、书房尺寸，先按中幅预填。",
+  labelText: { "zh-Hans": "中幅雅作", "zh-Hant": "中幅雅作", en: "Medium artwork" },
+  reasonText: {
+    "zh-Hans": "常用客厅、书房尺寸，先按中幅预填。",
+    "zh-Hant": "常用客廳、書房尺寸，先按中幅預填。",
+    en: "A common living-room or study size, prefilled as a medium artwork."
+  }
 };
 
 const SIZE_OPTIONS: ProductionSize[] = [
   {
     preset_id: "small",
     label: "小幅点景",
+    labelText: { "zh-Hans": "小幅点景", "zh-Hant": "小幅點景", en: "Small accent" },
     width_cm: 30,
     height_cm: 45,
     hint: { "zh-Hans": "约一张海报大小，适合玄关、书桌旁。", "zh-Hant": "約一張海報大小，適合玄關、書桌旁。", en: "Poster-like, good for entryways and desks." }
@@ -35,6 +43,7 @@ const SIZE_OPTIONS: ProductionSize[] = [
   {
     preset_id: "medium",
     label: "中幅雅作",
+    labelText: { "zh-Hans": "中幅雅作", "zh-Hant": "中幅雅作", en: "Medium artwork" },
     width_cm: 45,
     height_cm: 68,
     hint: { "zh-Hans": "最常用，适合书房、客厅边柜、礼赠。", "zh-Hant": "最常用，適合書房、客廳邊櫃、禮贈。", en: "Most common, good for studies, sideboards, and gifts." }
@@ -42,6 +51,7 @@ const SIZE_OPTIONS: ProductionSize[] = [
   {
     preset_id: "large",
     label: "厅堂主景",
+    labelText: { "zh-Hans": "厅堂主景", "zh-Hant": "廳堂主景", en: "Feature wall" },
     width_cm: 60,
     height_cm: 90,
     hint: { "zh-Hans": "更有存在感，适合沙发墙或厅堂主位。", "zh-Hant": "更有存在感，適合沙發牆或廳堂主位。", en: "More prominent, good for feature walls." }
@@ -49,6 +59,7 @@ const SIZE_OPTIONS: ProductionSize[] = [
   {
     preset_id: "square_scene",
     label: "方形点景",
+    labelText: { "zh-Hans": "方形点景", "zh-Hant": "方形點景", en: "Square accent" },
     width_cm: 50,
     height_cm: 50,
     hint: { "zh-Hans": "接近抱枕宽度，适合方形留白或组合陈设。", "zh-Hant": "接近抱枕寬度，適合方形留白或組合陳設。", en: "Square accent size for balanced displays." }
@@ -56,6 +67,7 @@ const SIZE_OPTIONS: ProductionSize[] = [
   {
     preset_id: "landscape_scene",
     label: "横向陈设",
+    labelText: { "zh-Hans": "横向陈设", "zh-Hant": "橫向陳設", en: "Landscape display" },
     width_cm: 68,
     height_cm: 45,
     hint: { "zh-Hans": "适合横向墙面、边柜上方或长桌背景。", "zh-Hant": "適合橫向牆面、邊櫃上方或長桌背景。", en: "Wide format for horizontal walls." }
@@ -117,8 +129,41 @@ function text(value: Record<Locale, string>, locale: Locale): string {
   return value[locale] ?? value["zh-Hans"] ?? Object.values(value)[0] ?? "";
 }
 
-function sizeLabel(size: ArtworkSize): string {
-  return `${size.label} · 约 ${size.width_cm} × ${size.height_cm} cm`;
+function customSizeLabel(locale: Locale): string {
+  return locale === "en" ? "Custom size" : locale === "zh-Hant" ? "自訂尺寸" : "自定义尺寸";
+}
+
+function localizedSizeName(size: ArtworkSize, locale: Locale): string {
+  if (size.preset_id === "custom") {
+    return customSizeLabel(locale);
+  }
+  const preset = SIZE_OPTIONS.find((option) => option.preset_id === size.preset_id);
+  if (preset) {
+    return text(preset.labelText, locale);
+  }
+  if (size.preset_id === DEFAULT_SIZE.preset_id) {
+    return text(DEFAULT_SIZE.labelText, locale);
+  }
+  return locale === "en" && /[\u3400-\u9fff]/.test(size.label) ? "Suggested size" : size.label;
+}
+
+function sizeLabel(size: ArtworkSize, locale: Locale): string {
+  const qualifier = locale === "en" ? "approx." : "约";
+  return `${localizedSizeName(size, locale)} · ${qualifier} ${size.width_cm} × ${size.height_cm} cm`;
+}
+
+function sizeHint(size: ArtworkSize, locale: Locale): string {
+  const preset = SIZE_OPTIONS.find((option) => option.preset_id === size.preset_id);
+  if (preset) {
+    return text(preset.hint, locale);
+  }
+  if (size.preset_id === DEFAULT_SIZE.preset_id) {
+    return text(DEFAULT_SIZE.reasonText, locale);
+  }
+  if (!size.reason) {
+    return "";
+  }
+  return locale === "en" && /[\u3400-\u9fff]/.test(size.reason) ? "Suggested from the artwork size estimate." : size.reason;
 }
 
 function estimateSizeKey(size: ArtworkSize): string {
@@ -216,7 +261,7 @@ export default function ProductionDialog({
   const chooseCustomSize = () => {
     setDraftSize({
       preset_id: "custom",
-      label: locale === "en" ? "Custom size" : "自定义尺寸",
+      label: customSizeLabel(locale),
       width_cm: Number(customWidth) || selectedSize.width_cm,
       height_cm: Number(customHeight) || selectedSize.height_cm
     });
@@ -229,7 +274,7 @@ export default function ProductionDialog({
     const nextSize = customSelected
       ? {
         preset_id: "custom",
-        label: locale === "en" ? "Custom size" : "自定义尺寸",
+        label: customSizeLabel(locale),
         width_cm: Number(customWidth),
         height_cm: Number(customHeight)
       }
@@ -286,8 +331,8 @@ export default function ProductionDialog({
                   className={draftSize.preset_id === option.preset_id ? "size-chip selected" : "size-chip"}
                   onClick={() => chooseSize(option)}
                 >
-                  <strong>{sizeLabel(option)}</strong>
-                  <span>{option.hint ? text(option.hint, locale) : option.reason}</span>
+                  <strong>{sizeLabel(option, locale)}</strong>
+                  <span>{sizeHint(option, locale)}</span>
                 </button>
               ))}
               <div
@@ -304,17 +349,17 @@ export default function ProductionDialog({
                   }
                 }}
               >
-                <strong>{locale === "en" ? "Custom size" : "自定义尺寸"}</strong>
+                <strong>{customSizeLabel(locale)}</strong>
                 <span>{locale === "en" ? "Enter width and height in centimeters." : "自己输入宽和高，单位是厘米。"}</span>
                 {customSelected ? (
                   <div className="custom-size-grid" onClick={(event) => event.stopPropagation()}>
                     <label>
-                      宽度 cm
-                      <input aria-label="宽度 cm" inputMode="decimal" value={customWidth} onChange={(event) => setCustomWidth(event.target.value)} />
+                      {locale === "en" ? "Width cm" : locale === "zh-Hant" ? "寬度 cm" : "宽度 cm"}
+                      <input aria-label={locale === "en" ? "Width cm" : locale === "zh-Hant" ? "寬度 cm" : "宽度 cm"} inputMode="decimal" value={customWidth} onChange={(event) => setCustomWidth(event.target.value)} />
                     </label>
                     <label>
-                      高度 cm
-                      <input aria-label="高度 cm" inputMode="decimal" value={customHeight} onChange={(event) => setCustomHeight(event.target.value)} />
+                      {locale === "en" ? "Height cm" : locale === "zh-Hant" ? "高度 cm" : "高度 cm"}
+                      <input aria-label={locale === "en" ? "Height cm" : "高度 cm"} inputMode="decimal" value={customHeight} onChange={(event) => setCustomHeight(event.target.value)} />
                     </label>
                   </div>
                 ) : null}
@@ -333,8 +378,8 @@ export default function ProductionDialog({
               <div className="selected-size-panel">
                 <Ruler aria-hidden="true" size={18} />
                 <div>
-                  <strong>{sizeLabel(selectedSize)}</strong>
-                  {selectedSize.reason ? <span>{selectedSize.reason}</span> : null}
+                  <strong>{sizeLabel(selectedSize, locale)}</strong>
+                  {sizeHint(selectedSize, locale) ? <span>{sizeHint(selectedSize, locale)}</span> : null}
                 </div>
                 <button className="secondary-action compact-action" type="button" onClick={() => {
                   setDraftSize(selectedSize);

@@ -10,10 +10,11 @@ const CLIENT_OVERRIDES: Dictionaries = {
     studio: {
       title: "墨起",
       subtitle: "园林卷轴里的书画生成",
-      photo: "您想要把作品摆在哪里？",
+      photo: "可选：添加摆放环境照片",
+      photoHint: "用于生成摆放效果图；不添加也能直接生成作品图。",
       camera: "拍照",
       album: "相册",
-      skipPhoto: "跳过",
+      skipPhoto: "不需要效果图，直接生成",
       uploadingPhoto: "正在整理照片",
       photoReady: "已提供环境图，将用于生成效果图。",
       photoUploaded: "已选照片",
@@ -32,8 +33,8 @@ const CLIENT_OVERRIDES: Dictionaries = {
     result: {
       artwork: "作品图",
       fusion: "效果图",
-      continue: "继续生成",
-      attachPhotoFusion: "您想要把作品摆在哪里？",
+      continue: "按这张图继续调整",
+      attachPhotoFusion: "添加摆放照片生成效果图",
       addNotes: "补充要求",
       makeHint: "可先看尺寸和估价，确认意向后再联系制作。",
       failedTitle: "生成未完成",
@@ -70,7 +71,7 @@ const CLIENT_OVERRIDES: Dictionaries = {
       sampleHeading: "风格样张",
       currentWork: "当前作品",
       currentWorkPreview: "当前作品预览",
-      ctaStart: "提交创作需求",
+      ctaStart: "先生成作品，再咨询雅匠",
       ctaWithRecord: "用当前作品咨询雅匠"
     },
     production: {
@@ -91,10 +92,11 @@ const CLIENT_OVERRIDES: Dictionaries = {
     studio: {
       title: "墨起",
       subtitle: "園林卷軸裡的書畫生成",
-      photo: "您想把作品擺在哪裡？",
+      photo: "可選：加入擺放環境照片",
+      photoHint: "用於生成擺放效果圖；不加入也能直接生成作品圖。",
       camera: "拍照",
       album: "相簿",
-      skipPhoto: "跳過",
+      skipPhoto: "不需要效果圖，直接生成",
       uploadingPhoto: "正在整理照片",
       photoReady: "已提供環境圖，將用於生成效果圖。",
       photoUploaded: "已選照片",
@@ -113,8 +115,8 @@ const CLIENT_OVERRIDES: Dictionaries = {
     result: {
       artwork: "作品圖",
       fusion: "效果圖",
-      continue: "繼續生成",
-      attachPhotoFusion: "您想把作品擺在哪裡？",
+      continue: "按這張圖繼續調整",
+      attachPhotoFusion: "加入擺放照片生成效果圖",
       addNotes: "補充要求",
       makeHint: "可先看尺寸和估價，確認意向後再聯絡製作。",
       failedTitle: "生成未完成",
@@ -151,7 +153,7 @@ const CLIENT_OVERRIDES: Dictionaries = {
       sampleHeading: "風格樣張",
       currentWork: "目前作品",
       currentWorkPreview: "目前作品預覽",
-      ctaStart: "提交創作需求",
+      ctaStart: "先生成作品，再諮詢雅匠",
       ctaWithRecord: "用目前作品諮詢雅匠"
     },
     production: {
@@ -171,10 +173,11 @@ const CLIENT_OVERRIDES: Dictionaries = {
     studio: {
       title: "Inkspire",
       subtitle: "Chinese painting and calligraphy in a garden scroll",
-      photo: "Where would you like to place the artwork?",
+      photo: "Optional: add a placement photo",
+      photoHint: "Use it to generate a room preview. You can skip it and create artwork now.",
       camera: "Camera",
       album: "Album",
-      skipPhoto: "Skip photo",
+      skipPhoto: "No preview photo, generate artwork",
       uploadingPhoto: "Preparing photo",
       photoReady: "Environment image added. It will be used to generate a preview.",
       photoUploaded: "Selected photo",
@@ -193,8 +196,8 @@ const CLIENT_OVERRIDES: Dictionaries = {
     result: {
       artwork: "Artwork",
       fusion: "Preview",
-      continue: "Generate again",
-      attachPhotoFusion: "Where would you like to place the artwork?",
+      continue: "Adjust from this artwork",
+      attachPhotoFusion: "Add a placement photo for preview",
       addNotes: "Add notes",
       makeHint: "Preview size and estimate first; contact follows after confirming intent.",
       failedTitle: "Generation did not finish",
@@ -231,7 +234,7 @@ const CLIENT_OVERRIDES: Dictionaries = {
       sampleHeading: "Style samples",
       currentWork: "Current artwork",
       currentWorkPreview: "Current artwork preview",
-      ctaStart: "Submit a creative request",
+      ctaStart: "Create artwork before consulting",
       ctaWithRecord: "Consult with current artwork"
     },
     production: {
