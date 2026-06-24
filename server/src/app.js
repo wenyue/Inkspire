@@ -10,7 +10,8 @@ const { loadConfig, publicConfig } = require("./config");
 const { runCodexImageGeneration } = require("./codexRunner");
 const { archiveSourcePhoto } = require("./imagePipeline");
 const { createJobManager } = require("./jobs");
-const { createStorage } = require("./storage");
+const { createStorage, resolveRecordAssetPath, validateRecordId } = require("./storage");
+const { userIdentityMiddleware } = require("./userIdentity");
 
 function asyncHandler(fn) {
   return (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
@@ -35,6 +36,9 @@ const PRODUCTION_SIZE_MULTIPLIERS = {
   medium: 1,
   large: 1.5
 };
+const SOURCE_PHOTO_FILES = new Set(["source-photo.webp"]);
+const ARTWORK_FILES = new Set(["artwork.webp"]);
+const FUSION_FILES = new Set(["fusion.webp"]);
 
 function newId(prefix) {
   return `${prefix}-${Date.now().toString(36)}-${crypto.randomBytes(4).toString("hex")}`;
@@ -42,6 +46,31 @@ function newId(prefix) {
 
 function productionSize(value) {
   return Object.hasOwn(PRODUCTION_SIZE_MULTIPLIERS, value) ? value : "medium";
+}
+
+function badRequest(message) {
+  const error = new Error(message);
+  error.status = 400;
+  return error;
+}
+
+function maxUploadBytes(config) {
+  const maxInputSizeMb = Number(config.app?.image?.maxInputSizeMb || 10);
+  return Math.max(1, maxInputSizeMb) * 1024 * 1024;
+}
+
+function createUploadMiddleware(dataDir, config) {
+  return multer({
+    dest: path.join(dataDir, "uploads"),
+    limits: { fileSize: maxUploadBytes(config) },
+    fileFilter: (req, file, callback) => {
+      if (/^image\/(png|jpe?g|webp)$/i.test(file.mimetype || "")) {
+        callback(null, true);
+        return;
+      }
+      callback(badRequest("Unsupported image type"));
+    }
+  });
 }
 
 function inferArtworkSizeFromScene(metadata = {}) {
@@ -169,11 +198,12 @@ function createApp(options = {}) {
     generatedImagesRoot: configuredGeneratedImagesRoot(projectRoot, config)
   })));
   const jobs = options.jobs || createJobManager({ config, storage, runner });
-  const upload = multer({ dest: path.join(dataDir, "uploads") });
+  const upload = createUploadMiddleware(dataDir, config);
   const app = express();
   const clientDist = path.join(projectRoot, "client", "dist");
 
   app.use(express.json({ limit: "1mb" }));
+  app.use(userIdentityMiddleware);
 
   app.get("/api/health", asyncHandler(async (req, res) => {
     await storage.ensureStore();
@@ -213,7 +243,10 @@ function createApp(options = {}) {
       res.status(404).json({ error: "image not found" });
       return;
     }
-    res.sendFile(path.join(dataDir, record[field]));
+    const allowedFiles = req.params.kind === "fusion" ? FUSION_FILES
+      : req.params.kind === "source" || req.params.kind === "source-photo" ? SOURCE_PHOTO_FILES
+        : ARTWORK_FILES;
+    res.sendFile(resolveRecordAssetPath(dataDir, record[field], allowedFiles));
   }));
 
   app.post("/api/uploads/photo", upload.single("photo"), asyncHandler(async (req, res) => {
@@ -221,23 +254,40 @@ function createApp(options = {}) {
       res.status(400).json({ error: "photo is required" });
       return;
     }
-    const recordId = req.body.recordId || `upload-${Date.now().toString(36)}`;
-    const outputPath = path.join(dataDir, "records", recordId, "source-photo.webp");
-    const metadata = await sharp(req.file.path).metadata();
-    const scene = {
-      width: metadata.width || 0,
-      height: metadata.height || 0,
-      orientation: metadata.width && metadata.height
-        ? metadata.width > metadata.height ? "landscape" : metadata.width < metadata.height ? "portrait" : "square"
-        : "unknown"
-    };
-    await archiveSourcePhoto(req.file.path, outputPath, config.app.image.webpQuality);
-    res.status(201).json({
-      record_id: recordId,
-      source_photo_path: path.relative(dataDir, outputPath).replace(/\\/g, "/"),
-      scene,
-      recommended_artwork_size: inferArtworkSizeFromScene(metadata)
-    });
+    let responseBody;
+    try {
+      const recordId = req.body.recordId || `upload-${Date.now().toString(36)}`;
+      validateRecordId(recordId);
+      const sourcePhotoPath = `records/${recordId}/source-photo.webp`;
+      const outputPath = resolveRecordAssetPath(dataDir, sourcePhotoPath, SOURCE_PHOTO_FILES);
+      let metadata;
+      try {
+        metadata = await sharp(req.file.path).metadata();
+      } catch {
+        throw badRequest("Invalid image");
+      }
+      const scene = {
+        width: metadata.width || 0,
+        height: metadata.height || 0,
+        orientation: metadata.width && metadata.height
+          ? metadata.width > metadata.height ? "landscape" : metadata.width < metadata.height ? "portrait" : "square"
+          : "unknown"
+      };
+      try {
+        await archiveSourcePhoto(req.file.path, outputPath, config.app.image.webpQuality);
+      } catch {
+        throw badRequest("Invalid image");
+      }
+      responseBody = {
+        record_id: recordId,
+        source_photo_path: sourcePhotoPath,
+        scene,
+        recommended_artwork_size: inferArtworkSizeFromScene(metadata)
+      };
+    } finally {
+      await fs.promises.rm(req.file.path, { force: true });
+    }
+    res.status(201).json(responseBody);
   }));
 
   app.post("/api/generations", asyncHandler(async (req, res) => {
@@ -349,7 +399,7 @@ function createApp(options = {}) {
       next(error);
       return;
     }
-    const status = /not found|ENOENT/i.test(error.message) ? 404 : 500;
+    const status = error.status || (/not found|ENOENT/i.test(error.message) ? 404 : 500);
     res.status(status).json({ error: error.message });
   });
 

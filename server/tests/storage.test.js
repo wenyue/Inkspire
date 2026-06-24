@@ -183,6 +183,21 @@ test("getRecordForUser rejects records owned by another user", async () => {
   });
 });
 
+test("getRecordForUser rejects missing records with not found", async () => {
+  await withTempStore(async (temp) => {
+    const storage = createStorage(temp);
+
+    await assert.rejects(
+      () => storage.getRecordForUser("missing", "user-a"),
+      (error) => {
+        assert.match(error.message, /not found/i);
+        assert.equal(error.status, 404);
+        return true;
+      }
+    );
+  });
+});
+
 test("saveRecord backfills legacy user_id when owner is provided", async () => {
   await withTempStore(async (temp) => {
     const storage = createStorage(temp);

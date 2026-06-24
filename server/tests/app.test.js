@@ -67,6 +67,17 @@ test("GET /api/config/public returns tabs/questions/experts without codex intern
   });
 });
 
+test("API assigns an inkspire_user cookie when missing", async () => {
+  await withTempApp(async ({ app }) => {
+    const response = await request(app).get("/api/library").expect(200);
+
+    assert.match(
+      response.headers["set-cookie"].join("; "),
+      /inkspire_user=user-[a-z0-9-]+; Path=\/; HttpOnly; SameSite=Lax/i
+    );
+  });
+});
+
 test("POST /api/generations creates a job and eventually a record with artwork", async () => {
   await withTempApp(async ({ app, temp }) => {
     const response = await request(app)
@@ -111,6 +122,36 @@ test("POST /api/uploads/photo returns source_photo_path and inferred artwork siz
   });
 });
 
+test("POST /api/uploads/photo rejects unsafe record ids before writing files", async () => {
+  await withTempApp(async ({ app, temp }) => {
+    await request(app)
+      .post("/api/uploads/photo")
+      .field("recordId", "../../escaped")
+      .attach("photo", pngBuffer(), { filename: "source.png", contentType: "image/png" })
+      .expect(400);
+
+    await assert.rejects(fs.access(path.join(temp, "..", "..", "escaped", "source-photo.webp")));
+  });
+});
+
+test("POST /api/uploads/photo removes temporary upload files after success and image failures", async () => {
+  await withTempApp(async ({ app, temp }) => {
+    await request(app)
+      .post("/api/uploads/photo")
+      .attach("photo", pngBuffer(), { filename: "source.png", contentType: "image/png" })
+      .expect(201);
+
+    assert.deepEqual(await fs.readdir(path.join(temp, "uploads")), []);
+
+    await request(app)
+      .post("/api/uploads/photo")
+      .attach("photo", Buffer.from("not an image"), { filename: "source.png", contentType: "image/png" })
+      .expect(400);
+
+    assert.deepEqual(await fs.readdir(path.join(temp, "uploads")), []);
+  });
+});
+
 test("GET /api/records/:id/images/source reads source_photo_path", async () => {
   await withTempApp(async ({ app }) => {
     const upload = await request(app)
@@ -132,6 +173,23 @@ test("GET /api/records/:id/images/source reads source_photo_path", async () => {
       .expect(200);
 
     assert.equal(response.body.subarray(8, 12).toString("ascii"), "WEBP");
+  });
+});
+
+test("GET /api/records/:id/images/source refuses source paths outside the data directory", async () => {
+  await withTempApp(async ({ app, temp }) => {
+    await fs.writeFile(path.join(temp, "..", "secret.txt"), "secret");
+
+    const created = await request(app)
+      .post("/api/generations")
+      .send({
+        type: "painting",
+        answers: { painting_subject: "山水" },
+        source_photo_path: "../secret.txt"
+      })
+      .expect(400);
+
+    assert.equal(created.body.error, "Invalid source photo path");
   });
 });
 
