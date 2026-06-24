@@ -1,0 +1,25 @@
+{
+  "tabs": {
+    "studio": "画案",
+    "library": "藏卷",
+    "experts": "雅匠"
+  },
+  "buttons": {
+    "skip": "跳过",
+    "generate": "生成",
+    "make": "制作作品"
+  },
+  "status": {
+    "idle": "准备就绪",
+    "generating": "正在生成"
+  },
+  "errors": {
+    "generic": "暂时无法完成，请稍后再试。"
+  },
+  "making": {
+    "title": "制作作品"
+  },
+  "empty": {
+    "library": "还没有收藏作品"
+  }
+}

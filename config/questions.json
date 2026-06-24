@@ -1,0 +1,166 @@
+{
+  "painting": [
+    {
+      "id": "painting_subject",
+      "applies_to": ["painting", "fusion"],
+      "preview_prompt": "中国画主题选择，留白构图",
+      "title": {
+        "zh-Hans": "想画什么主题？",
+        "zh-Hant": "想畫什麼主題？",
+        "en": "What subject should the painting show?"
+      },
+      "options": {
+        "zh-Hans": ["山水", "花鸟", "人物", "由墨起决定"],
+        "zh-Hant": ["山水", "花鳥", "人物", "由墨起決定"],
+        "en": ["Landscape", "Birds and Flowers", "Figures", "Let Inkspire decide"]
+      },
+      "default_option": "由墨起决定"
+    },
+    {
+      "id": "painting_palette",
+      "applies_to": ["painting", "fusion"],
+      "preview_prompt": "中国画设色，水墨与青绿",
+      "title": {
+        "zh-Hans": "偏好哪种设色？",
+        "zh-Hant": "偏好哪種設色？",
+        "en": "Which color treatment do you prefer?"
+      },
+      "options": {
+        "zh-Hans": ["水墨", "青绿", "浅绛", "由墨起决定"],
+        "zh-Hant": ["水墨", "青綠", "淺絳", "由墨起決定"],
+        "en": ["Ink wash", "Blue-green", "Light umber", "Let Inkspire decide"]
+      },
+      "default_option": "由墨起决定"
+    },
+    {
+      "id": "painting_mood",
+      "applies_to": ["painting", "fusion"],
+      "preview_prompt": "中国画意境，清雅静远",
+      "title": {
+        "zh-Hans": "希望作品是什么气质？",
+        "zh-Hant": "希望作品是什麼氣質？",
+        "en": "What mood should the work carry?"
+      },
+      "options": {
+        "zh-Hans": ["清雅", "雄浑", "温润", "由墨起决定"],
+        "zh-Hant": ["清雅", "雄渾", "溫潤", "由墨起決定"],
+        "en": ["Refined", "Grand", "Gentle", "Let Inkspire decide"]
+      },
+      "default_option": "由墨起决定"
+    },
+    {
+      "id": "painting_composition",
+      "applies_to": ["painting", "fusion"],
+      "preview_prompt": "中国画构图，留白与远近",
+      "title": {
+        "zh-Hans": "喜欢哪种构图？",
+        "zh-Hant": "喜歡哪種構圖？",
+        "en": "Which composition do you like?"
+      },
+      "options": {
+        "zh-Hans": ["横幅", "竖幅", "斗方", "由墨起决定"],
+        "zh-Hant": ["橫幅", "豎幅", "斗方", "由墨起決定"],
+        "en": ["Horizontal", "Vertical", "Square", "Let Inkspire decide"]
+      },
+      "default_option": "由墨起决定"
+    },
+    {
+      "id": "painting_detail",
+      "applies_to": ["painting", "fusion"],
+      "preview_prompt": "中国画细节密度，疏密有致",
+      "title": {
+        "zh-Hans": "细节希望多还是少？",
+        "zh-Hant": "細節希望多還是少？",
+        "en": "How much detail should it have?"
+      },
+      "options": {
+        "zh-Hans": ["简淡", "适中", "繁密", "由墨起决定"],
+        "zh-Hant": ["簡淡", "適中", "繁密", "由墨起決定"],
+        "en": ["Sparse", "Balanced", "Dense", "Let Inkspire decide"]
+      },
+      "default_option": "由墨起决定"
+    }
+  ],
+  "calligraphy": [
+    {
+      "id": "calligraphy_script",
+      "applies_to": ["calligraphy", "fusion"],
+      "preview_prompt": "书法字体选择，行草楷隶",
+      "title": {
+        "zh-Hans": "偏好哪种书体？",
+        "zh-Hant": "偏好哪種書體？",
+        "en": "Which script do you prefer?"
+      },
+      "options": {
+        "zh-Hans": ["楷书", "行书", "草书", "由墨起决定"],
+        "zh-Hant": ["楷書", "行書", "草書", "由墨起決定"],
+        "en": ["Regular", "Running", "Cursive", "Let Inkspire decide"]
+      },
+      "default_option": "由墨起决定"
+    },
+    {
+      "id": "calligraphy_energy",
+      "applies_to": ["calligraphy", "fusion"],
+      "preview_prompt": "书法笔势，飞白与墨韵",
+      "title": {
+        "zh-Hans": "笔势希望如何？",
+        "zh-Hant": "筆勢希望如何？",
+        "en": "What brush energy should it have?"
+      },
+      "options": {
+        "zh-Hans": ["沉稳", "灵动", "苍劲", "由墨起决定"],
+        "zh-Hant": ["沉穩", "靈動", "蒼勁", "由墨起決定"],
+        "en": ["Steady", "Lively", "Forceful", "Let Inkspire decide"]
+      },
+      "default_option": "由墨起决定"
+    },
+    {
+      "id": "calligraphy_layout",
+      "applies_to": ["calligraphy", "fusion"],
+      "preview_prompt": "书法章法，竖排横排与落款",
+      "title": {
+        "zh-Hans": "想要哪种章法？",
+        "zh-Hant": "想要哪種章法？",
+        "en": "Which layout do you want?"
+      },
+      "options": {
+        "zh-Hans": ["竖排", "横排", "匾额", "由墨起决定"],
+        "zh-Hant": ["豎排", "橫排", "匾額", "由墨起決定"],
+        "en": ["Vertical", "Horizontal", "Plaque", "Let Inkspire decide"]
+      },
+      "default_option": "由墨起决定"
+    },
+    {
+      "id": "calligraphy_paper",
+      "applies_to": ["calligraphy", "fusion"],
+      "preview_prompt": "书法纸色，宣纸质感",
+      "title": {
+        "zh-Hans": "纸张氛围偏好？",
+        "zh-Hant": "紙張氛圍偏好？",
+        "en": "What paper mood do you prefer?"
+      },
+      "options": {
+        "zh-Hans": ["素宣", "洒金", "仿古", "由墨起决定"],
+        "zh-Hant": ["素宣", "灑金", "仿古", "由墨起決定"],
+        "en": ["Plain xuan", "Gold-flecked", "Antique", "Let Inkspire decide"]
+      },
+      "default_option": "由墨起决定"
+    },
+    {
+      "id": "calligraphy_ink",
+      "applies_to": ["calligraphy", "fusion"],
+      "preview_prompt": "书法墨色，浓淡干湿",
+      "title": {
+        "zh-Hans": "墨色希望怎样？",
+        "zh-Hant": "墨色希望怎樣？",
+        "en": "How should the ink feel?"
+      },
+      "options": {
+        "zh-Hans": ["浓墨", "淡墨", "干湿变化", "由墨起决定"],
+        "zh-Hant": ["濃墨", "淡墨", "乾濕變化", "由墨起決定"],
+        "en": ["Deep ink", "Light ink", "Dry-wet variation", "Let Inkspire decide"]
+      },
+      "default_option": "由墨起决定"
+    }
+  ]
+}

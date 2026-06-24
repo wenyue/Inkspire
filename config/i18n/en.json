@@ -1,0 +1,25 @@
+{
+  "tabs": {
+    "studio": "Studio",
+    "library": "Library",
+    "experts": "Artisans"
+  },
+  "buttons": {
+    "skip": "Skip",
+    "generate": "Generate",
+    "make": "Make Artwork"
+  },
+  "status": {
+    "idle": "Ready",
+    "generating": "Generating"
+  },
+  "errors": {
+    "generic": "Unable to complete this right now. Please try again."
+  },
+  "making": {
+    "title": "Make Artwork"
+  },
+  "empty": {
+    "library": "No saved works yet"
+  }
+}

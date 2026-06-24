@@ -1,0 +1,21 @@
+{
+  "name": "墨起",
+  "defaultLocale": "zh-Hans",
+  "locales": ["zh-Hans", "zh-Hant", "en"],
+  "runtime": {
+    "codexCommand": "codex",
+    "codexModel": "gpt-5.5",
+    "codexReasoningEffort": "medium",
+    "generatedImagesRoot": "",
+    "generationCanvas": {
+      "width": 1024,
+      "height": 1536,
+      "aspectRatio": "2:3"
+    }
+  },
+  "image": {
+    "outputFormat": "webp",
+    "webpQuality": 82,
+    "maxInputSizeMb": 10
+  }
+}

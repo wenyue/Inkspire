@@ -1,0 +1,48 @@
+[
+  {
+    "id": "wu_jiayin",
+    "name": "吴嘉茵",
+    "region": "广东省",
+    "bio": "广东岭南书画领域青年艺术家，中国书法家协会会员，中山大学中国美学博士，长期关注书法理论与创作。",
+    "phone": "",
+    "wechat": "",
+    "services": [
+      {
+        "id": "expert_custom",
+        "name": {
+          "zh-Hans": "专家定制",
+          "zh-Hant": "專家定製",
+          "en": "Expert Custom"
+        },
+        "description": {
+          "zh-Hans": "专家直接创作或深度主导，价格更高。",
+          "zh-Hant": "專家直接創作或深度主導，價格更高。",
+          "en": "The artisan creates directly or leads the work closely, with higher pricing."
+        },
+        "priceEstimate": {
+          "base": 1800,
+          "currency": "CNY",
+          "rule": "按尺寸、复杂度和交付周期估算"
+        }
+      },
+      {
+        "id": "expert_guided",
+        "name": {
+          "zh-Hans": "专家指导",
+          "zh-Hant": "專家指導",
+          "en": "Expert Guided"
+        },
+        "description": {
+          "zh-Hans": "专家给方向、修改意见或把关，价格更低。",
+          "zh-Hant": "專家給方向、修改意見或把關，價格更低。",
+          "en": "The artisan gives direction, revision notes, or review at a lower price."
+        },
+        "priceEstimate": {
+          "base": 600,
+          "currency": "CNY",
+          "rule": "按咨询次数、修改轮次和复杂度估算"
+        }
+      }
+    ]
+  }
+]
