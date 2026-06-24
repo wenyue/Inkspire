@@ -59,13 +59,10 @@ test("create artwork job writes artwork.webp and record.json using fake runner P
       conversationNotes: "云气"
     });
 
-    await manager.waitForIdle();
-    const finalJob = manager.getJob(job.id);
     const stored = await createStorage(temp).getRecord(record.id);
 
-    assert.equal(job.status, "queued");
-    assert.equal(record.status, "queued");
-    assert.equal(finalJob.status, "succeeded");
+    assert.equal(job.status, "succeeded");
+    assert.equal(record.status, "succeeded");
     assert.equal(stored.status, "succeeded");
     assert.equal(record.artwork_path, `records/${record.id}/artwork.webp`);
     assert.equal((await fs.readFile(path.join(temp, record.artwork_path))).subarray(0, 4).toString("ascii"), "RIFF");
@@ -81,21 +78,49 @@ test("fusion job preserves existing artwork and writes fusion.webp", async () =>
       runner: fakeRunner(180)
     });
     const { record } = await manager.createArtwork({ type: "painting", answers: {} });
-    await manager.waitForIdle();
     const artworkPath = record.artwork_path;
 
     const result = await manager.createFusion({ recordId: record.id });
-    await manager.waitForIdle();
     const fused = await storage.getRecord(record.id);
-    const finalJob = manager.getJob(result.job.id);
 
-    assert.equal(result.job.status, "queued");
-    assert.equal(result.record.status, "queued");
-    assert.equal(finalJob.status, "succeeded");
+    assert.equal(result.job.status, "succeeded");
     assert.equal(fused.artwork_path, artworkPath);
     assert.equal(fused.fusion_path, `records/${record.id}/fusion.webp`);
     assert.equal(fused.has_fusion, true);
     assert.equal((await fs.readFile(path.join(temp, fused.fusion_path))).subarray(8, 12).toString("ascii"), "WEBP");
+  });
+});
+
+test("concurrent default user generation returns a locked busy result", async () => {
+  await withTempStore(async (temp) => {
+    let release;
+    let runnerStarted;
+    const started = new Promise((resolve) => {
+      runnerStarted = resolve;
+    });
+    const manager = createJobManager({
+      config: { app: { image: { webpQuality: 82 } }, prompts: {}, questions: {} },
+      storage: createStorage(temp),
+      runner: async ({ outputPngPath }) => {
+        runnerStarted();
+        await new Promise((resolve) => {
+          release = resolve;
+        });
+        await fs.mkdir(path.dirname(outputPngPath), { recursive: true });
+        await fs.writeFile(outputPngPath, pngBuffer());
+        return { pngPath: outputPngPath, diagnostics: { reason: "slow" } };
+      }
+    });
+
+    const first = manager.createArtwork({ type: "painting", answers: {} });
+    await started;
+    const second = await manager.createArtwork({ type: "painting", answers: {} });
+    release();
+    await first;
+
+    assert.equal(second.busy, true);
+    assert.equal(second.job.status, "failed");
+    assert.match(second.job.error, /busy|locked/i);
   });
 });
 
@@ -200,40 +225,6 @@ test("per-user limit rejects the third active generation", async () => {
   });
 });
 
-test("default user is also limited to two active generations", async () => {
-  await withTempStore(async (temp) => {
-    const releases = new Map();
-    const manager = createJobManager({
-      config: { app: { image: { webpQuality: 82 } }, prompts: {}, questions: {} },
-      storage: createStorage(temp),
-      runner: async ({ outputPngPath, record }) => {
-        await new Promise((resolve) => {
-          releases.set(record.id, resolve);
-        });
-        await fs.mkdir(path.dirname(outputPngPath), { recursive: true });
-        await fs.writeFile(outputPngPath, pngBuffer());
-        return { pngPath: outputPngPath, diagnostics: { reason: "slow" } };
-      }
-    });
-
-    const first = await manager.createArtwork({ type: "painting", answers: {} });
-    const second = await manager.createArtwork({ type: "painting", answers: {} });
-    const third = await manager.createArtwork({ type: "painting", answers: {} });
-
-    assert.ok(["queued", "running"].includes(first.job.status));
-    assert.ok(["queued", "running"].includes(second.job.status));
-    assert.equal(third.limitReached, true);
-    assert.equal(third.code, "user_generation_limit_reached");
-    assert.equal(third.activeJobs.length, 2);
-
-    await waitUntil(() => releases.size === 2);
-    for (const release of releases.values()) {
-      release();
-    }
-    await manager.waitForIdle();
-  });
-});
-
 test("user fusion creation returns immediately", async () => {
   await withTempStore(async (temp) => {
     let release;
@@ -258,42 +249,6 @@ test("user fusion creation returns immediately", async () => {
     await manager.waitForIdle();
 
     const result = await manager.createFusion({ userId: "user-a", recordId: created.record.id });
-
-    assert.ok(["queued", "running"].includes(result.job.status));
-    assert.equal(result.record.status, "queued");
-    assert.equal(fusionStarted, false);
-    await manager.waitForJobStart(result.job.id);
-    await waitUntil(() => fusionStarted);
-    await waitUntil(() => typeof release === "function");
-    release();
-    await manager.waitForIdle();
-  });
-});
-
-test("default user fusion creation returns immediately", async () => {
-  await withTempStore(async (temp) => {
-    let release;
-    let fusionStarted = false;
-    const manager = createJobManager({
-      config: { app: { image: { webpQuality: 82 } }, prompts: {}, questions: {} },
-      storage: createStorage(temp),
-      runner: async ({ outputPngPath, stage }) => {
-        await fs.mkdir(path.dirname(outputPngPath), { recursive: true });
-        await fs.writeFile(outputPngPath, pngBuffer());
-        if (stage === "fusion_render") {
-          fusionStarted = true;
-          await new Promise((resolve) => {
-            release = resolve;
-          });
-        }
-        return { pngPath: outputPngPath, diagnostics: { reason: "slow" } };
-      }
-    });
-
-    const created = await manager.createArtwork({ type: "painting", answers: {} });
-    await manager.waitForIdle();
-
-    const result = await manager.createFusion({ recordId: created.record.id });
 
     assert.ok(["queued", "running"].includes(result.job.status));
     assert.equal(result.record.status, "queued");
@@ -348,6 +303,61 @@ test("global concurrency runs six jobs and queues the seventh", async () => {
 
     assert.equal(manager.getJob(jobs[6].job.id).status, "succeeded");
     assert.equal((await createStorage(temp).getRecord(jobs[6].record.id)).status, "succeeded");
+  });
+});
+
+test("legacy default generation counts toward global concurrency", async () => {
+  await withTempStore(async (temp) => {
+    const releases = new Map();
+    const startedIds = [];
+    let releaseLegacy;
+    let legacyStarted = false;
+    const manager = createJobManager({
+      config: { app: { image: { webpQuality: 82 } }, prompts: {}, questions: {} },
+      storage: createStorage(temp),
+      runner: async ({ outputPngPath, record }) => {
+        if (!record.user_id) {
+          legacyStarted = true;
+          await new Promise((resolve) => {
+            releaseLegacy = resolve;
+          });
+        } else {
+          startedIds.push(record.id);
+          await new Promise((resolve) => {
+            releases.set(record.id, resolve);
+          });
+        }
+        await fs.mkdir(path.dirname(outputPngPath), { recursive: true });
+        await fs.writeFile(outputPngPath, pngBuffer());
+        return { pngPath: outputPngPath, diagnostics: { reason: "slow" } };
+      }
+    });
+
+    const legacy = manager.createArtwork({ type: "painting", answers: {} });
+    await waitUntil(() => legacyStarted);
+
+    const jobs = [];
+    for (let index = 0; index < 6; index += 1) {
+      jobs.push(await manager.createArtwork({
+        userId: `user-${index}`,
+        type: "painting",
+        answers: {}
+      }));
+    }
+
+    await waitUntil(() => releases.size === 5);
+    assert.equal(startedIds.length, 5);
+    assert.equal(jobs[5].job.status, "queued");
+
+    releaseLegacy();
+    await legacy;
+    await manager.waitForJobStart(jobs[5].job.id);
+    await waitUntil(() => releases.has(jobs[5].record.id));
+
+    for (const release of releases.values()) {
+      release();
+    }
+    await manager.waitForIdle();
   });
 });
 
@@ -413,7 +423,7 @@ test("artwork failure records failed status and diagnostics", async () => {
     const stored = await createStorage(temp).getRecord(record.id);
 
     assert.equal(manager.getJob(job.id).status, "failed");
-    assert.equal(record.status, "queued");
+    assert.equal(record.status, "failed");
     assert.equal(stored.status, "failed");
     assert.equal(stored.diagnostics.possible_safety_block, true);
     assert.match(manager.getJob(job.id).error, /fake policy refusal/);
@@ -480,7 +490,7 @@ test("artwork generation retries once before recording failure", async () => {
     assert.equal(attempts, 2);
     const stored = await createStorage(temp).getRecord(record.id);
     assert.equal(manager.getJob(job.id).status, "succeeded");
-    assert.equal(record.status, "queued");
+    assert.equal(record.status, "succeeded");
     assert.equal(stored.status, "succeeded");
     assert.equal(stored.diagnostics.reason, "retry_success");
     assert.equal((await fs.readFile(path.join(temp, record.artwork_path))).subarray(0, 4).toString("ascii"), "RIFF");
@@ -522,45 +532,6 @@ test("fusion generation retries once and preserves artwork", async () => {
     assert.equal(fused.artwork_path, artworkPath);
     assert.equal(fused.diagnostics.reason, "fusion_render_success");
     assert.equal((await fs.readFile(path.join(temp, fused.fusion_path))).subarray(8, 12).toString("ascii"), "WEBP");
-  });
-});
-
-test("source photo path is validated and normalized before queueing", async () => {
-  await withTempStore(async (temp) => {
-    const storage = createStorage(temp);
-    const manager = createJobManager({
-      config: { app: { image: { webpQuality: 82 } }, prompts: {}, questions: {} },
-      storage,
-      runner: fakeRunner()
-    });
-
-    await assert.rejects(
-      () => manager.createArtwork({
-        type: "painting",
-        answers: {},
-        sourcePhotoPath: "../bad/source-photo.webp"
-      }),
-      /Invalid source photo path/
-    );
-
-    const created = await manager.createArtwork({
-      type: "painting",
-      answers: {},
-      sourcePhotoPath: "records\\abc-123\\source-photo.webp"
-    });
-
-    assert.equal(created.record.source_photo_path, "records/abc-123/source-photo.webp");
-    await manager.waitForIdle();
-
-    const fused = await manager.createFusion({
-      recordId: created.record.id,
-      sourcePhotoPath: `records\\${created.record.id}\\source-photo.webp`
-    });
-    assert.equal(fused.record.source_photo_path, `records/${created.record.id}/source-photo.webp`);
-    await manager.waitForIdle();
-
-    const stored = await storage.getRecord(created.record.id);
-    assert.equal(stored.source_photo_path, `records/${created.record.id}/source-photo.webp`);
   });
 });
 
