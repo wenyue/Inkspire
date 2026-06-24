@@ -4,6 +4,7 @@ data/
 .manual-data/
 .real-data*/
 .superpowers/
+.worktrees/
 test-results/
 playwright-report/
 coverage/
