@@ -376,6 +376,8 @@ function createJobManager({ config, storage, runner }) {
     task.job.status = "running";
     task.job.started_at = new Date().toISOString();
     task.record.status = "running";
+    let finalJobStatus = "succeeded";
+    let finalJobError = "";
     if (task.stage === "fusion_render" && task.sourcePhotoPath) {
       task.record.source_photo_path = task.sourcePhotoPath;
     }
@@ -411,9 +413,6 @@ function createJobManager({ config, storage, runner }) {
       task.record.status = "succeeded";
       task.record.diagnostics = result.diagnostics || null;
       delete task.record.error;
-      task.job.status = "succeeded";
-      task.job.error = "";
-      task.job.diagnostics = task.record.diagnostics;
 
       if (task.stage === "fusion_render") {
         task.record.fusion_path = task.outputWebpPath;
@@ -422,9 +421,8 @@ function createJobManager({ config, storage, runner }) {
       }
     } catch (error) {
       task.record.diagnostics = diagnosticsFromError(error);
-      task.job.diagnostics = task.record.diagnostics;
-      task.job.status = "failed";
-      task.job.error = error.message;
+      finalJobStatus = "failed";
+      finalJobError = error.message;
 
       if (task.stage === "artwork") {
         task.record.status = "failed";
@@ -435,14 +433,17 @@ function createJobManager({ config, storage, runner }) {
         task.record.error = error.message;
       }
     } finally {
-      task.job.completed_at = new Date().toISOString();
-      releaseRunningSlot(task.userId);
-      releaseActiveSlot(task.userId);
       try {
         await saveRecordSerial(task.record, task.userId);
       } catch (error) {
         // Persisting the final state is best effort; the in-memory state remains updated.
       }
+      task.job.status = finalJobStatus;
+      task.job.error = finalJobError;
+      task.job.diagnostics = task.record.diagnostics;
+      task.job.completed_at = new Date().toISOString();
+      releaseRunningSlot(task.userId);
+      releaseActiveSlot(task.userId);
       flushWaiters();
       scheduleQueue();
     }
