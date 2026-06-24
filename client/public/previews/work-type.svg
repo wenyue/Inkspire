@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 540" role="img">
+  <defs>
+    <linearGradient id="paper" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#fbf4e5"/>
+      <stop offset=".58" stop-color="#eaf0df"/>
+      <stop offset="1" stop-color="#d9e7df"/>
+    </linearGradient>
+    <filter id="soft"><feGaussianBlur stdDeviation="3"/></filter>
+  </defs>
+  <rect width="960" height="540" fill="url(#paper)"/>
+  <path d="M94 90c190 10 302-42 470-4 126 28 201 96 300 82" fill="none" stroke="#a98453" stroke-width="2" opacity=".34"/>
+  <path d="M0 420c130-76 234-56 338-99 109-45 189-138 325-111 85 17 145 73 297 44v286H0z" fill="#d8e6d8"/>
+  <path d="M0 456c146-52 247-35 382-75 158-46 267-120 450-63 42 13 83 22 128 24v198H0z" fill="#88a88e" opacity=".55"/>
+  <g fill="#263b34" opacity=".82">
+    <path d="M225 140c31 80 21 163-18 246-8 17 4 34 23 28 91-30 151-93 150-185-1-96-86-134-155-89z"/>
+    <path d="M616 118c-31 85-34 184 0 291 4 13 21 16 29 6 70-91 78-188 36-290-11-25-55-33-65-7z"/>
+    <path d="M679 150c55 68 84 139 84 216 0 18 25 24 34 8 44-78 41-162-19-246-19-28-73-9-99 22z" opacity=".62"/>
+  </g>
+  <circle cx="748" cy="126" r="46" fill="#b74c3f" opacity=".72"/>
+  <circle cx="720" cy="102" r="78" fill="#ffe8a8" opacity=".28" filter="url(#soft)"/>
+</svg>

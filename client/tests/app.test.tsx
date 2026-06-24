@@ -2,6 +2,13 @@ import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../src/App";
+import { getProgressLabel } from "../src/components/Studio";
+
+function generationRequestBodies(): Array<Record<string, unknown>> {
+  return vi.mocked(fetch).mock.calls
+    .filter(([input]) => String(input).endsWith("/api/generations"))
+    .map(([, init]) => init?.body ? JSON.parse(String(init.body)) as Record<string, unknown> : {});
+}
 
 const publicConfig = {
   questions: {
@@ -9,7 +16,18 @@ const publicConfig = {
       {
         id: "painting_subject",
         applies_to: ["painting", "fusion"],
-        preview_prompt: "中国画主题选择，留白构图",
+        preview_image: "/previews/questions/painting-subject.webp",
+        option_preview_images: [
+          "/previews/options/painting-subject-0-landscape.webp",
+          "/previews/options/painting-subject-1-birds-flowers.webp",
+          "/previews/options/painting-subject-2-figures.webp",
+          "/previews/options/painting-subject-3-inkspire-decide.webp"
+        ],
+        preview_prompt: {
+          "zh-Hans": "中国画主题选择，留白构图",
+          "zh-Hant": "中國畫主題選擇，留白構圖",
+          en: "Painting subject preview"
+        },
         title: {
           "zh-Hans": "想画什么主题？",
           "zh-Hant": "想畫什麼主題？",
@@ -27,7 +45,18 @@ const publicConfig = {
       {
         id: "calligraphy_script",
         applies_to: ["calligraphy", "fusion"],
-        preview_prompt: "书法字体选择，行草楷隶",
+        preview_image: "/previews/questions/calligraphy-script.webp",
+        option_preview_images: [
+          "/previews/options/calligraphy-script-0-regular.webp",
+          "/previews/options/calligraphy-script-1-running.webp",
+          "/previews/options/calligraphy-script-2-cursive.webp",
+          "/previews/options/calligraphy-script-3-inkspire-decide.webp"
+        ],
+        preview_prompt: {
+          "zh-Hans": "书法字体选择，行草楷隶",
+          "zh-Hant": "書法字體選擇，行草楷隸",
+          en: "Calligraphy script preview"
+        },
         title: {
           "zh-Hans": "偏好哪种书体？",
           "zh-Hant": "偏好哪種書體？",
@@ -50,6 +79,11 @@ const publicConfig = {
       bio: "中国书法家协会会员，中山大学中国美学博士，岭南书画领域青年艺术家。",
       phone: "",
       wechat: "",
+      credentials: ["中国书法家协会会员", "中山大学中国美学博士"],
+      sampleImages: [
+        "/previews/options/calligraphy-script-1-running.webp",
+        "/previews/options/painting-subject-0-landscape.webp"
+      ],
       services: [
         {
           id: "expert_custom",
@@ -110,20 +144,51 @@ const publicConfig = {
   }
 };
 
+const calligraphyTextQuestion = {
+  id: "text",
+  applies_to: ["calligraphy", "fusion"],
+  input_type: "textarea",
+  preview_image: "/previews/questions/calligraphy-script.webp",
+  preview_prompt: {
+    "zh-Hans": "书法正文，祝福语或诗句",
+    "zh-Hant": "書法正文，祝福語或詩句",
+    en: "Calligraphy wording preview"
+  },
+  title: {
+    "zh-Hans": "想写什么正文？",
+    "zh-Hant": "想寫什麼正文？",
+    en: "What text should the calligraphy write?"
+  },
+  placeholder: {
+    "zh-Hans": "例如：年年有余、平安喜乐，或一两句祝福语",
+    "zh-Hant": "例如：年年有餘、平安喜樂，或一兩句祝福語",
+    en: "For example: Peace and joy, or a short blessing"
+  },
+  submit_label: {
+    "zh-Hans": "继续定书体",
+    "zh-Hant": "繼續定書體",
+    en: "Continue to script"
+  }
+};
+
 describe("App", () => {
   let failLateFusion = false;
   let failLateFusionJob = false;
+  let configResponse = publicConfig;
+  let libraryRecords: unknown[] = [];
 
   beforeEach(() => {
     failLateFusion = false;
     failLateFusionJob = false;
+    configResponse = publicConfig;
+    libraryRecords = [];
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       if (url.endsWith("/api/config/public")) {
-        return Response.json(publicConfig);
+        return Response.json(configResponse);
       }
       if (url.endsWith("/api/library")) {
-        return Response.json({ records: [] });
+        return Response.json({ records: libraryRecords });
       }
       if (url.endsWith("/api/uploads/photo")) {
         return Response.json({
@@ -151,6 +216,13 @@ describe("App", () => {
             artwork_path: "records/record-1/artwork.webp",
             fusion_path: "",
             source_photo_path: "records/upload-1/source-photo.webp",
+            recommended_artwork_size: {
+              preset_id: "square_scene",
+              label: "方形点景",
+              width_cm: 50,
+              height_cm: 50,
+              reason: "根据场景图比例推算，适合作为方形点景作品。"
+            },
             status: "succeeded"
           }
         }, { status: 201 });
@@ -203,6 +275,20 @@ describe("App", () => {
           }
         });
       }
+      if (url.endsWith("/api/records/record-1/production-orders")) {
+        const body = init?.body ? JSON.parse(String(init.body)) : {};
+        return Response.json({
+          order: {
+            id: "order-20260624-0001",
+            record_id: "record-1",
+            expert_id: body.expertId,
+            service_id: body.serviceId,
+            size: body.size,
+            reference_level: body.referenceLevel,
+            created_at: "2026-06-24T12:00:00.000Z"
+          }
+        }, { status: 201 });
+      }
       if (url.endsWith("/api/records/record-1") && (!init || !init.method || init.method === "GET")) {
         return Response.json({
           id: "record-1",
@@ -229,10 +315,21 @@ describe("App", () => {
       return Response.json({});
     });
     vi.stubGlobal("fetch", fetchMock);
+    Object.defineProperty(URL, "createObjectURL", {
+      configurable: true,
+      writable: true,
+      value: vi.fn(() => "blob:photo-preview")
+    });
+    Object.defineProperty(URL, "revokeObjectURL", {
+      configurable: true,
+      writable: true,
+      value: vi.fn()
+    });
   });
 
   afterEach(() => {
     cleanup();
+    window.localStorage.clear();
     vi.unstubAllGlobals();
   });
 
@@ -240,9 +337,81 @@ describe("App", () => {
     render(<App />);
 
     expect(await screen.findByRole("heading", { name: "墨起" })).toBeInTheDocument();
+    expect(screen.getAllByText("园林卷轴里的书画生成")).toHaveLength(1);
     expect(screen.getByRole("button", { name: "画案" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "藏卷" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "雅匠" })).toBeInTheDocument();
+  });
+
+  it("places optional photo controls after the question card", async () => {
+    const { container } = render(<App />);
+
+    await screen.findByRole("heading", { name: "墨起" });
+
+    const questionCard = container.querySelector(".scroll-question");
+    const photoStrip = container.querySelector(".photo-strip");
+    expect(questionCard).toBeTruthy();
+    expect(photoStrip).toBeTruthy();
+    expect(questionCard!.compareDocumentPosition(photoStrip!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("keeps optional photo controls lightweight on the first screen", async () => {
+    render(<App />);
+
+    await screen.findByLabelText("相册");
+
+    expect(screen.getByLabelText("拍照")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "先不放照片" })).not.toBeInTheDocument();
+  });
+
+  it("keeps branch questions focused by hiding optional photo controls until completion", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole("button", { name: "国画" }));
+
+    expect(screen.getByText("想画什么主题？")).toBeInTheDocument();
+    expect(screen.queryByLabelText("相册")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("拍照")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "山水" }));
+
+    expect(screen.getByLabelText("相册")).toBeInTheDocument();
+    expect(screen.getByLabelText("拍照")).toBeInTheDocument();
+  });
+
+  it("uses a low-emphasis back action during branch questions", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole("button", { name: "国画" }));
+
+    expect(screen.getByRole("button", { name: "上一步" })).toHaveClass("back-action");
+  });
+
+  it("shows the full expected progress on the first step", async () => {
+    render(<App />);
+
+    await screen.findByRole("heading", { name: "墨起" });
+
+    expect(screen.getByText("第 1 / 2 步")).toBeInTheDocument();
+    expect(screen.queryByText("第 1 / 1 步")).not.toBeInTheDocument();
+  });
+
+  it("does not promise a fake total before choosing a type when branch lengths differ", () => {
+    const unevenConfig = {
+      ...publicConfig,
+      questions: {
+        painting: [
+          ...publicConfig.questions.painting,
+          { ...publicConfig.questions.painting[0], id: "painting_extra" }
+        ],
+        calligraphy: publicConfig.questions.calligraphy
+      }
+    };
+
+    expect(getProgressLabel(unevenConfig, {}, "zh-Hans")).toBe("第 1 步");
+    expect(getProgressLabel(unevenConfig, {}, "en")).toBe("Step 1");
   });
 
   it("updates visible tab text when language changes", async () => {
@@ -273,6 +442,21 @@ describe("App", () => {
     expect(screen.getByText("語言")).toBeInTheDocument();
   });
 
+  it("persists the selected language across remounts", async () => {
+    const user = userEvent.setup();
+    const view = render(<App />);
+
+    await screen.findByLabelText("语言");
+    await user.selectOptions(screen.getByLabelText("语言"), "en");
+    expect(screen.getByRole("button", { name: "Studio" })).toBeInTheDocument();
+
+    view.unmount();
+    render(<App />);
+
+    expect(await screen.findByLabelText("Language")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Studio" })).toBeInTheDocument();
+  });
+
   it("renders visual previews for options without leaking Chinese preview text in English", async () => {
     const user = userEvent.setup();
     const { container } = render(<App />);
@@ -282,12 +466,30 @@ describe("App", () => {
 
     expect(screen.getByText("Choose the work type")).toBeInTheDocument();
     expect(screen.queryByText("选择国画或书法创作方向")).not.toBeInTheDocument();
-    expect(container.querySelectorAll(".option-preview")).toHaveLength(2);
+    expect(screen.getByRole("img", { name: "Preview the artwork direction" })).toHaveAttribute("src", expect.stringContaining("/previews/questions/"));
+    const workTypePreviews = [...container.querySelectorAll(".option-preview-image")].map((image) => image.getAttribute("src"));
+    expect(workTypePreviews).toHaveLength(2);
+    expect(new Set(workTypePreviews).size).toBe(2);
 
     await user.click(screen.getByRole("button", { name: "Painting" }));
 
     expect(screen.getByRole("heading", { name: "What subject should the painting show?" })).toBeInTheDocument();
-    expect(container.querySelectorAll(".option-preview")).toHaveLength(4);
+    expect(screen.getByRole("img", { name: "What subject should the painting show?" })).toHaveAttribute("src", expect.stringContaining("/previews/questions/"));
+    const subjectPreviews = [...container.querySelectorAll(".option-preview-image")].map((image) => image.getAttribute("src"));
+    expect(subjectPreviews).toHaveLength(4);
+    expect(new Set(subjectPreviews).size).toBe(4);
+  });
+
+  it("shows local fallback glyphs for calligraphy option previews before images decode", async () => {
+    const user = userEvent.setup();
+    const { container } = render(<App />);
+
+    await user.click(await screen.findByRole("button", { name: "书法" }));
+
+    expect(screen.getByRole("heading", { name: "偏好哪种书体？" })).toBeInTheDocument();
+    const fallbackGlyphs = [...container.querySelectorAll(".option-preview-fallback")].map((item) => item.textContent?.trim());
+    expect(fallbackGlyphs).toEqual(["楷", "行", "草", "墨"]);
+    expect(container.querySelectorAll(".option-preview-image")).toHaveLength(4);
   });
 
   it("advances the question flow after clicking 国画", async () => {
@@ -297,6 +499,87 @@ describe("App", () => {
     await user.click(await screen.findByRole("button", { name: "国画" }));
 
     expect(screen.getByText("想画什么主题？")).toBeInTheDocument();
+  });
+
+  it("collects calligraphy text before generating", async () => {
+    configResponse = {
+      ...publicConfig,
+      questions: {
+        ...publicConfig.questions,
+        calligraphy: [calligraphyTextQuestion, ...publicConfig.questions.calligraphy]
+      }
+    };
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole("button", { name: "书法" }));
+
+    expect(screen.getByRole("heading", { name: "想写什么正文？" })).toBeInTheDocument();
+    await user.type(screen.getByPlaceholderText("例如：年年有余、平安喜乐，或一两句祝福语"), "年年有余");
+    await user.click(screen.getByRole("button", { name: "继续定书体" }));
+    await user.click(screen.getByRole("button", { name: "行书" }));
+    await user.click(screen.getByRole("button", { name: "生成" }));
+
+    await waitFor(() => {
+      expect(fetch).toHaveBeenCalledWith("/api/generations", expect.objectContaining({
+        method: "POST",
+        body: expect.stringContaining("\"text\":\"年年有余\"")
+      }));
+    });
+  });
+
+  it("persists answered questions across remounts", async () => {
+    const user = userEvent.setup();
+    const view = render(<App />);
+
+    await user.click(await screen.findByRole("button", { name: "国画" }));
+    expect(screen.getByText("想画什么主题？")).toBeInTheDocument();
+
+    view.unmount();
+    render(<App />);
+
+    expect(await screen.findByText("想画什么主题？")).toBeInTheDocument();
+    expect(screen.queryByText("先定作品类型")).not.toBeInTheDocument();
+  });
+
+  it("keeps the restored library tab when a current record is restored", async () => {
+    libraryRecords = [{
+      id: "record-1",
+      type: "painting",
+      title: "藏卷山水",
+      thumbnail_path: "records/record-1/artwork.webp",
+      artwork_path: "records/record-1/artwork.webp",
+      status: "succeeded",
+      favorite: true
+    }];
+    window.localStorage.setItem("inkspire.activeTab", "library");
+    window.localStorage.setItem("inkspire.currentRecordId", "record-1");
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(fetch).toHaveBeenCalledWith("/api/records/record-1", undefined);
+    });
+
+    expect(await screen.findByRole("button", { name: "藏卷" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("img", { name: "藏卷山水" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "制作作品" })).not.toBeInTheDocument();
+  });
+
+  it("shows question progress and can go back without losing the uploaded photo", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.upload(await screen.findByLabelText("相册"), new File(["sample"], "sample.png", { type: "image/png" }));
+    expect(await screen.findByText("照片已准备，将生成融合图")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "国画" }));
+
+    expect(screen.getByText("第 2 / 2 步")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "上一步" }));
+
+    expect(screen.getByText("先定作品类型")).toBeInTheDocument();
+    expect(screen.getByText("照片已准备，将生成融合图")).toBeInTheDocument();
   });
 
   it("shows the default generation suggestion after questions complete", async () => {
@@ -309,6 +592,50 @@ describe("App", () => {
     expect(screen.getByRole("button", { name: "可以开始生成" })).toBeInTheDocument();
   });
 
+  it("generates from the default suggestion without sending it as conversation notes", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole("button", { name: "国画" }));
+    await user.click(screen.getByRole("button", { name: "山水" }));
+    await user.click(screen.getByRole("button", { name: "可以开始生成" }));
+
+    await waitFor(() => {
+      expect(generationRequestBodies()).toHaveLength(1);
+    });
+    expect(generationRequestBodies()[0].conversationNotes).toBe("");
+  });
+
+  it("passes refinement suggestions as conversation notes", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole("button", { name: "国画" }));
+    await user.click(screen.getByRole("button", { name: "山水" }));
+    await user.click(screen.getByRole("button", { name: "更清雅一点" }));
+
+    await waitFor(() => {
+      expect(generationRequestBodies()).toHaveLength(1);
+    });
+    expect(generationRequestBodies()[0].conversationNotes).toBe("更清雅一点");
+  });
+
+  it("persists notes and uploaded photo path across remounts", async () => {
+    const user = userEvent.setup();
+    const view = render(<App />);
+
+    await user.upload(await screen.findByLabelText("相册"), new File(["sample"], "sample.png", { type: "image/png" }));
+    await user.click(await screen.findByRole("button", { name: "国画" }));
+    await user.click(screen.getByRole("button", { name: "山水" }));
+    await user.type(screen.getByPlaceholderText("也可以补一句想法"), "更像家里玄关");
+
+    view.unmount();
+    render(<App />);
+
+    expect(await screen.findByDisplayValue("更像家里玄关")).toBeInTheDocument();
+    expect(screen.getByText("照片已准备，将生成融合图")).toBeInTheDocument();
+  });
+
   it("shows when an optional photo is ready for fusion", async () => {
     const user = userEvent.setup();
     render(<App />);
@@ -316,18 +643,39 @@ describe("App", () => {
     await user.upload(await screen.findByLabelText("相册"), new File(["sample"], "sample.png", { type: "image/png" }));
 
     expect(await screen.findByText("照片已准备，将生成融合图")).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "已选照片预览" })).toHaveAttribute("src", "blob:photo-preview");
+    expect(screen.getByText("sample.png")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "移除照片" })).toBeInTheDocument();
+    expect(screen.queryByLabelText("相册")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "先不放照片" })).not.toBeInTheDocument();
   });
 
-  it("clears the optional photo ready state when skipping the photo", async () => {
+  it("uses a clean placeholder when the selected photo preview cannot load", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.upload(await screen.findByLabelText("相册"), new File(["sample"], "sample.png", { type: "image/png" }));
+    const preview = await screen.findByRole("img", { name: "已选照片预览" });
+    preview.dispatchEvent(new Event("error"));
+
+    await waitFor(() => {
+      expect(screen.queryByRole("img", { name: "已选照片预览" })).not.toBeInTheDocument();
+    });
+    expect(screen.getByText("sample.png")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "移除照片" })).toBeInTheDocument();
+  });
+
+  it("clears the optional photo ready state when removing the photo", async () => {
     const user = userEvent.setup();
     render(<App />);
 
     await user.upload(await screen.findByLabelText("相册"), new File(["sample"], "sample.png", { type: "image/png" }));
     expect(await screen.findByText("照片已准备，将生成融合图")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "先不放照片" }));
+    await user.click(screen.getByRole("button", { name: "移除照片" }));
 
     expect(screen.queryByText("照片已准备，将生成融合图")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("相册")).toBeInTheDocument();
   });
 
   it("creates a fusion render after generating from an uploaded photo", async () => {
@@ -346,6 +694,120 @@ describe("App", () => {
     expect(await screen.findByRole("img", { name: "作品图" })).toBeInTheDocument();
     expect(await screen.findByRole("img", { name: "融合图" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "继续生成" })).toBeInTheDocument();
+  });
+
+  it("puts result actions before the fusion image on narrow screens", async () => {
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 390 });
+    const user = userEvent.setup();
+    const { container } = render(<App />);
+
+    await user.upload(await screen.findByLabelText("相册"), new File(["sample"], "sample.png", { type: "image/png" }));
+    await user.click(await screen.findByRole("button", { name: "国画" }));
+    await user.click(screen.getByRole("button", { name: "山水" }));
+    await user.click(screen.getByRole("button", { name: "可以开始生成" }));
+
+    expect(await screen.findByRole("img", { name: "融合图" })).toBeInTheDocument();
+    const actions = container.querySelector(".result-actions");
+    const fusionFigure = screen.getByRole("img", { name: "融合图" }).closest("figure");
+
+    expect(actions).toBeTruthy();
+    expect(fusionFigure).toBeTruthy();
+    expect(actions!.compareDocumentPosition(fusionFigure!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("uses compact square result media on narrow screens only", async () => {
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 390 });
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole("button", { name: "国画" }));
+    await user.click(screen.getByRole("button", { name: "山水" }));
+    await user.click(screen.getByRole("button", { name: "生成" }));
+
+    expect(await screen.findByRole("img", { name: "作品图" })).toHaveClass("compact-result-media");
+  });
+
+  it("keeps the taller result media treatment on wide screens", async () => {
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 900 });
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole("button", { name: "国画" }));
+    await user.click(screen.getByRole("button", { name: "山水" }));
+    await user.click(screen.getByRole("button", { name: "生成" }));
+
+    expect(await screen.findByRole("img", { name: "作品图" })).not.toHaveClass("compact-result-media");
+  });
+
+  it("restores the current record after remounting", async () => {
+    const user = userEvent.setup();
+    const view = render(<App />);
+
+    await user.click(await screen.findByRole("button", { name: "国画" }));
+    await user.click(screen.getByRole("button", { name: "山水" }));
+    await user.click(screen.getByRole("button", { name: "生成" }));
+    expect(await screen.findByRole("img", { name: "作品图" })).toBeInTheDocument();
+
+    view.unmount();
+    render(<App />);
+
+    expect(await screen.findByRole("img", { name: "作品图" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "制作作品" })).toBeInTheDocument();
+  });
+
+  it("focuses the generated result by hiding pre-generation controls until notes are requested", async () => {
+    const user = userEvent.setup();
+    const { container } = render(<App />);
+
+    await user.click(await screen.findByRole("button", { name: "国画" }));
+    await user.click(screen.getByRole("button", { name: "山水" }));
+    await user.click(screen.getByRole("button", { name: "生成" }));
+
+    expect(await screen.findByRole("img", { name: "作品图" })).toBeInTheDocument();
+    expect(screen.queryByPlaceholderText("也可以补一句想法")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("相册")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "制作作品" })).toBeInTheDocument();
+    expect(screen.getByText("可先看尺寸和估价，确认意向后再联系制作。")).toBeInTheDocument();
+    expect(container.querySelector(".result-actions")?.firstElementChild).toHaveTextContent("制作作品");
+
+    await user.click(screen.getByRole("button", { name: "补充要求" }));
+
+    expect(screen.getByRole("img", { name: "作品图" })).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("也可以补一句想法")).toHaveFocus();
+  });
+
+  it("uses a polished failure state when the artwork image cannot load", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole("button", { name: "国画" }));
+    await user.click(screen.getByRole("button", { name: "山水" }));
+    await user.click(screen.getByRole("button", { name: "生成" }));
+
+    const image = await screen.findByRole("img", { name: "作品图" });
+    image.dispatchEvent(new Event("error"));
+
+    expect(await screen.findByText("作品图暂时无法显示")).toBeInTheDocument();
+    expect(screen.getByText("可以补充要求后再生成，或稍后从藏卷重新打开。")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "制作作品" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "继续生成" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "补充要求" })).toBeInTheDocument();
+  });
+
+  it("scrolls the generated result into view", async () => {
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole("button", { name: "国画" }));
+    await user.click(screen.getByRole("button", { name: "山水" }));
+    await user.click(screen.getByRole("button", { name: "生成" }));
+
+    expect(await screen.findByRole("img", { name: "作品图" })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(scrollIntoView).toHaveBeenCalledWith({ behavior: "smooth", block: "start" });
+    });
   });
 
   it("can attach a photo after artwork generation and then create a fusion render", async () => {
@@ -419,8 +881,46 @@ describe("App", () => {
     await waitFor(() => {
       expect(screen.getByRole("dialog", { name: "制作作品" })).toBeInTheDocument();
     });
+    expect(screen.getByText("先调整规格、选择服务和参考程度；估价仅作参考，确认后生成单号和联系方式。")).toBeInTheDocument();
     expect(screen.getByText("专家定制")).toBeInTheDocument();
     expect(screen.getByText("专家指导")).toBeInTheDocument();
+  });
+
+  it("shows only the selected artist reference hint in the production dialog", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole("button", { name: "国画" }));
+    await user.click(screen.getByRole("button", { name: "山水" }));
+    await user.click(screen.getByRole("button", { name: "可以开始生成" }));
+    await user.click(await screen.findByRole("button", { name: "制作作品" }));
+
+    expect(await screen.findByRole("radio", { name: /第3级/ })).toHaveAttribute("aria-checked", "true");
+    expect(screen.getByText("参考总体布局，细节可自由发挥，提升艺术性。")).toBeInTheDocument();
+    expect(screen.queryByText("尽量贴近 AI 图的构图、色调和细节。")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("radio", { name: /第5级/ }));
+
+    expect(screen.getByText("AI 图只作灵感，主要交给艺术家判断。")).toBeInTheDocument();
+    expect(screen.queryByText("参考总体布局，细节可自由发挥，提升艺术性。")).not.toBeInTheDocument();
+  });
+
+  it("uses short visible labels for artist reference choices on mobile", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole("button", { name: "国画" }));
+    await user.click(screen.getByRole("button", { name: "山水" }));
+    await user.click(screen.getByRole("button", { name: "可以开始生成" }));
+    await user.click(await screen.findByRole("button", { name: "制作作品" }));
+
+    expect(await screen.findByRole("radio", { name: /第1级 严格参考/ })).toBeInTheDocument();
+    expect(screen.getByText("严格")).toBeInTheDocument();
+    expect(screen.getByText("主要")).toBeInTheDocument();
+    expect(screen.getByText("布局")).toBeInTheDocument();
+    expect(screen.getByText("气质")).toBeInTheDocument();
+    expect(screen.getByText("自由")).toBeInTheDocument();
+    expect(screen.queryByText("第1级 严格参考")).not.toBeInTheDocument();
   });
 
   it("updates production estimates when selecting a larger size", async () => {
@@ -432,8 +932,9 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: "可以开始生成" }));
     await user.click(await screen.findByRole("button", { name: "制作作品" }));
 
-    expect(await screen.findByRole("radio", { name: /中幅/ })).toHaveAttribute("aria-checked", "true");
-    await user.click(screen.getByRole("radio", { name: /大幅/ }));
+    await user.click(await screen.findByRole("button", { name: "调整尺寸" }));
+    await user.click(screen.getByRole("radio", { name: /厅堂主景/ }));
+    await user.click(screen.getByRole("button", { name: "用这个尺寸" }));
 
     await waitFor(() => {
       expect(fetch).toHaveBeenCalledWith(
@@ -449,6 +950,8 @@ describe("App", () => {
 
   it("reveals contact details only after confirming production intent", async () => {
     const user = userEvent.setup();
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
     render(<App />);
 
     await user.click(await screen.findByRole("button", { name: "国画" }));
@@ -462,8 +965,58 @@ describe("App", () => {
 
     await user.click(screen.getByRole("button", { name: "确认制作意向" }));
 
+    expect(screen.getByText("已记录制作意向")).toBeInTheDocument();
     expect(screen.getByText(/电话：020-12345678/)).toBeInTheDocument();
     expect(screen.getByText(/微信：InkspireArt/)).toBeInTheDocument();
+    expect(screen.getByText(/单号：order-20260624-0001/)).toBeInTheDocument();
+    expect(scrollIntoView).toHaveBeenCalledWith({ behavior: "smooth", block: "start" });
+  });
+
+  it("prefills inferred artwork size, supports friendly size adjustment, and submits reference level", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole("button", { name: "国画" }));
+    await user.click(screen.getByRole("button", { name: "山水" }));
+    await user.click(screen.getByRole("button", { name: "可以开始生成" }));
+    await user.click(await screen.findByRole("button", { name: "制作作品" }));
+
+    expect(await screen.findByText("方形点景 · 约 50 × 50 cm")).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: /第3级/ })).toHaveAttribute("aria-checked", "true");
+
+    await user.click(screen.getByRole("button", { name: "调整尺寸" }));
+    expect(screen.getByRole("heading", { name: "调整作品尺寸" })).toBeInTheDocument();
+    await user.click(screen.getByRole("radio", { name: /自定义尺寸/ }));
+    await user.clear(screen.getByLabelText("宽度 cm"));
+    await user.type(screen.getByLabelText("宽度 cm"), "42");
+    await user.clear(screen.getByLabelText("高度 cm"));
+    await user.type(screen.getByLabelText("高度 cm"), "66");
+    await user.click(screen.getByRole("button", { name: "用这个尺寸" }));
+
+    expect(screen.getByText(/自定义尺寸/)).toBeInTheDocument();
+    expect(screen.getByText(/约 42 × 66 cm/)).toBeInTheDocument();
+    await user.click(screen.getByRole("radio", { name: /第5级/ }));
+    await user.click(screen.getByRole("button", { name: "确认制作意向" }));
+
+    await waitFor(() => {
+      expect(fetch).toHaveBeenCalledWith(
+        "/api/records/record-1/production-orders",
+        expect.objectContaining({
+          method: "POST",
+          body: JSON.stringify({
+            expertId: "wu_jiayin",
+            serviceId: "expert_custom",
+            size: {
+              preset_id: "custom",
+              label: "自定义尺寸",
+              width_cm: 42,
+              height_cm: 66
+            },
+            referenceLevel: 5
+          })
+        })
+      );
+    });
   });
 
   it("localizes production contact labels in English", async () => {
@@ -493,7 +1046,23 @@ describe("App", () => {
     await user.click(await screen.findByRole("button", { name: "继续生成" }));
 
     expect(screen.queryByRole("img", { name: "作品图" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "生成" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "基于上次生成" })).toBeInTheDocument();
+  });
+
+  it("explains continued generation and lets users start a fresh studio flow", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole("button", { name: "国画" }));
+    await user.click(screen.getByRole("button", { name: "山水" }));
+    await user.click(screen.getByRole("button", { name: "可以开始生成" }));
+    await user.click(await screen.findByRole("button", { name: "继续生成" }));
+
+    expect(screen.getByText("将基于上次的主题、风格和选择继续生成，可补一句新想法。")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "重开画案" }));
+
+    expect(screen.getByText("先定作品类型")).toBeInTheDocument();
+    expect(screen.queryByText("将基于上次的主题、风格和选择继续生成，可补一句新想法。")).not.toBeInTheDocument();
   });
 
   it("focuses the notes box from the result add-notes action without hiding the result", async () => {
@@ -524,6 +1093,75 @@ describe("App", () => {
       "src",
       "/api/records/record-1/images/artwork"
     );
+  });
+
+  it("shows a guided empty library state for first-time users", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole("button", { name: "藏卷" }));
+
+    expect(screen.getByRole("heading", { name: "藏卷还空着" })).toBeInTheDocument();
+    expect(screen.getByText("喜欢的画案或生成作品会收在这里。")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "移出藏卷" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "去画案看看" }));
+
+    expect(screen.getByText("先定作品类型")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "画案" })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("presents artisans as a service entry instead of a static contact card", async () => {
+    const user = userEvent.setup();
+    const { container } = render(<App />);
+
+    await user.click(await screen.findByRole("button", { name: "雅匠" }));
+
+    expect(screen.getByText("可咨询方向")).toBeInTheDocument();
+    expect(screen.getByText("专家定制")).toBeInTheDocument();
+    expect(screen.getByText("专家指导")).toBeInTheDocument();
+    expect(screen.getByText("装裱与落地咨询")).toBeInTheDocument();
+    expect(screen.getByText("价格按需求评估")).toBeInTheDocument();
+    expect(screen.getByText("中国书法家协会会员")).toBeInTheDocument();
+    expect(screen.getByText("中山大学中国美学博士")).toBeInTheDocument();
+    expect(screen.getByText("风格样张")).toBeInTheDocument();
+    expect(screen.getAllByRole("img", { name: /风格样张/ })).toHaveLength(2);
+    expect([...container.querySelectorAll(".expert-sample-fallback")].map((item) => item.textContent?.trim())).toEqual([
+      "书",
+      "画"
+    ]);
+    expect(screen.queryByText("联系方式待确认")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "提交创作需求" }));
+
+    expect(screen.getByText("先定作品类型")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "画案" })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("lets users consult artisans with the current generated artwork", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole("button", { name: "国画" }));
+    await user.click(screen.getByRole("button", { name: "山水" }));
+    await user.click(screen.getByRole("button", { name: "生成" }));
+    expect(await screen.findByRole("img", { name: "作品图" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "雅匠" }));
+    const currentWork = screen.getByText("当前作品");
+    expect(currentWork).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "当前作品预览" })).toHaveAttribute(
+      "src",
+      "/api/records/record-1/images/artwork"
+    );
+    expect(
+      currentWork.compareDocumentPosition(screen.getByText("可咨询方向")) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "用当前作品咨询雅匠" }));
+
+    expect(screen.getByRole("img", { name: "作品图" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "制作作品" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "画案" })).toHaveAttribute("aria-pressed", "true");
   });
 
   it("opens a saved library item as the current result", async () => {
@@ -571,7 +1209,7 @@ describe("App", () => {
       );
     });
     expect(screen.queryByRole("img", { name: "record-1" })).not.toBeInTheDocument();
-    expect(screen.getByText("还没有收藏作品")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "藏卷还空着" })).toBeInTheDocument();
   });
 
   it("shows a failed-result state without production actions when generation fails", async () => {

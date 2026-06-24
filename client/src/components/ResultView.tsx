@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ImagePlus, MessageSquareText } from "lucide-react";
 import type { GenerationRecord } from "../api";
 import { resultLayoutForWidth } from "../domain";
@@ -8,12 +8,17 @@ interface ResultViewProps {
   artworkLabel: string;
   fusionLabel: string;
   makeLabel: string;
+  makeHint: string;
   continueLabel: string;
   addNotesLabel: string;
   attachPhotoLabel: string;
   busyLabel: string;
   failedTitle: string;
   failedHint: string;
+  imageUnavailableTitle: string;
+  imageUnavailableHint: string;
+  fusionUnavailableTitle: string;
+  fusionUnavailableHint: string;
   actionError?: string;
   isAttachingPhoto?: boolean;
   onMake: () => void;
@@ -35,12 +40,17 @@ export default function ResultView({
   artworkLabel,
   fusionLabel,
   makeLabel,
+  makeHint,
   continueLabel,
   addNotesLabel,
   attachPhotoLabel,
   busyLabel,
   failedTitle,
   failedHint,
+  imageUnavailableTitle,
+  imageUnavailableHint,
+  fusionUnavailableTitle,
+  fusionUnavailableHint,
   actionError = "",
   isAttachingPhoto = false,
   onMake,
@@ -49,6 +59,8 @@ export default function ResultView({
   onAttachPhoto
 }: ResultViewProps) {
   const [layout, setLayout] = useState(resultLayoutForWidth(window.innerWidth));
+  const [failedImages, setFailedImages] = useState<Record<string, boolean>>({});
+  const resultRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     const onResize = () => setLayout(resultLayoutForWidth(window.innerWidth));
@@ -56,32 +68,64 @@ export default function ResultView({
     return () => window.removeEventListener("resize", onResize);
   }, []);
 
+  useEffect(() => {
+    if (typeof resultRef.current?.scrollIntoView === "function") {
+      resultRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+    setFailedImages({});
+  }, [record.id]);
+
   const artwork = recordImage(record, "artwork");
   const fusion = recordImage(record, "fusion");
   const failed = record.status === "failed";
-
-  return (
-    <section className="result-view">
-      {failed ? (
-        <div className="result-failed" role="status">
-          <strong>{failedTitle}</strong>
-          <span>{failedHint}</span>
-        </div>
+  const artworkFailed = Boolean(artwork && failedImages.artwork);
+  const fusionFailed = Boolean(fusion && failedImages.fusion);
+  const mediaClassName = layout === "stacked" ? "compact-result-media" : undefined;
+  const artworkFigure = (
+    <figure>
+      {artwork && !artworkFailed ? (
+        <img
+          className={mediaClassName}
+          src={artwork}
+          alt={artworkLabel}
+          onError={() => setFailedImages((current) => ({ ...current, artwork: true }))}
+        />
       ) : (
-        <div className={`result-grid ${layout}`}>
-          <figure>
-            {artwork ? <img src={artwork} alt={artworkLabel} /> : <div className="image-placeholder">{artworkLabel}</div>}
-            <figcaption>{artworkLabel}</figcaption>
-          </figure>
-          {fusion ? (
-            <figure>
-              <img src={fusion} alt={fusionLabel} />
-              <figcaption>{fusionLabel}</figcaption>
-            </figure>
-          ) : null}
+        <div className={`image-placeholder image-error ${mediaClassName ?? ""}`.trim()} role="status">
+          <strong>{imageUnavailableTitle}</strong>
+          <span>{imageUnavailableHint}</span>
         </div>
       )}
+      <figcaption>{artworkLabel}</figcaption>
+    </figure>
+  );
+  const fusionFigure = fusion ? (
+    <figure>
+      {!fusionFailed ? (
+        <img
+          className={mediaClassName}
+          src={fusion}
+          alt={fusionLabel}
+          onError={() => setFailedImages((current) => ({ ...current, fusion: true }))}
+        />
+      ) : (
+        <div className={`image-placeholder image-error ${mediaClassName ?? ""}`.trim()} role="status">
+          <strong>{fusionUnavailableTitle}</strong>
+          <span>{fusionUnavailableHint}</span>
+        </div>
+      )}
+      <figcaption>{fusionLabel}</figcaption>
+    </figure>
+  ) : null;
+  const resultActions = (
+    <>
+      {!failed && !artworkFailed ? <p className="result-conversion-hint">{makeHint}</p> : null}
       <div className="result-actions">
+        {!failed && !artworkFailed ? (
+          <button className="primary-action result-action-button" type="button" onClick={onMake}>
+            {makeLabel}
+          </button>
+        ) : null}
         <button className="secondary-action result-action-button" type="button" onClick={onContinue}>
           {continueLabel}
         </button>
@@ -108,12 +152,32 @@ export default function ResultView({
             />
           </label>
         ) : null}
-        {!failed ? (
-          <button className="primary-action result-action-button" type="button" onClick={onMake}>
-            {makeLabel}
-          </button>
-        ) : null}
       </div>
+    </>
+  );
+
+  return (
+    <section className="result-view" ref={resultRef}>
+      {failed ? (
+        <div className="result-failed" role="status">
+          <strong>{failedTitle}</strong>
+          <span>{failedHint}</span>
+        </div>
+      ) : (
+        <>
+          <div className={`result-grid ${layout}`}>
+            {artworkFigure}
+            {layout === "split" ? fusionFigure : null}
+          </div>
+          {layout === "stacked" ? resultActions : null}
+          {layout === "stacked" && fusionFigure ? (
+            <div className="result-grid stacked result-fusion-followup">
+              {fusionFigure}
+            </div>
+          ) : null}
+        </>
+      )}
+      {failed || layout === "split" ? resultActions : null}
       {actionError ? <p className="error-line" role="status">{actionError}</p> : null}
     </section>
   );

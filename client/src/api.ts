@@ -25,12 +25,22 @@ export interface Expert {
   bio: string;
   phone?: string;
   wechat?: string;
+  credentials?: string[];
+  sampleImages?: string[];
   services: ExpertService[];
 }
 
 export interface ProductionContact {
   phone?: string;
   wechat?: string;
+}
+
+export interface ArtworkSize {
+  preset_id: string;
+  label: string;
+  width_cm: number;
+  height_cm: number;
+  reason?: string;
 }
 
 export interface PublicConfig extends QuestionConfig {
@@ -45,10 +55,12 @@ export interface LibraryRecord {
   id: string;
   type: WorkType;
   title?: string;
+  created_at?: string | null;
   thumbnail_path?: string | null;
   artwork_path?: string;
   fusion_path?: string;
   source_photo_path?: string;
+  recommended_artwork_size?: ArtworkSize | null;
   has_fusion?: boolean;
   favorite?: boolean;
   status?: string;
@@ -63,6 +75,16 @@ export interface ProductionEstimate {
   expert_id: string;
   size?: string;
   estimates: Record<string, { amount: number; currency: string; rule: string }>;
+}
+
+export interface ProductionOrder {
+  id: string;
+  record_id: string;
+  expert_id: string;
+  service_id: string;
+  size: ArtworkSize;
+  reference_level: number;
+  created_at: string;
 }
 
 export const fallbackConfig: PublicConfig = {
@@ -107,7 +129,12 @@ export async function getRecord(recordId: string): Promise<GenerationRecord> {
   return requestJson(`/api/records/${recordId}`);
 }
 
-export async function uploadPhoto(file: File): Promise<{ record_id: string; source_photo_path: string }> {
+export async function uploadPhoto(file: File): Promise<{
+  record_id: string;
+  source_photo_path: string;
+  scene?: { width: number; height: number; orientation: string };
+  recommended_artwork_size?: ArtworkSize;
+}> {
   const formData = new FormData();
   formData.append("photo", file);
   return requestJson("/api/uploads/photo", { method: "POST", body: formData });
@@ -118,6 +145,7 @@ export async function createGeneration(payload: {
   answers: Answers;
   conversationNotes: string;
   source_photo_path?: string;
+  recommended_artwork_size?: ArtworkSize | null;
 }): Promise<{ record?: GenerationRecord } & GenerationRecord> {
   return requestJson("/api/generations", {
     method: "POST",
@@ -126,7 +154,8 @@ export async function createGeneration(payload: {
       type: payload.type,
       answers: payload.answers,
       conversationNotes: payload.conversationNotes,
-      source_photo_path: payload.source_photo_path ?? ""
+      source_photo_path: payload.source_photo_path ?? "",
+      recommended_artwork_size: payload.recommended_artwork_size ?? null
     })
   });
 }
@@ -149,6 +178,31 @@ export async function getProductionEstimate(recordId: string, expertId: string, 
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ expertId, size })
   });
+}
+
+export async function createProductionOrder(payload: {
+  recordId: string;
+  expertId: string;
+  serviceId: string;
+  size: ArtworkSize;
+  referenceLevel: number;
+}): Promise<ProductionOrder> {
+  const response = await requestJson<{ order: ProductionOrder }>(`/api/records/${payload.recordId}/production-orders`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      expertId: payload.expertId,
+      serviceId: payload.serviceId,
+      size: payload.size,
+      referenceLevel: payload.referenceLevel
+    })
+  });
+  return response.order;
+}
+
+export async function getProductionOrder(orderId: string): Promise<ProductionOrder> {
+  const response = await requestJson<{ order: ProductionOrder }>(`/api/production-orders/${orderId}`);
+  return response.order;
 }
 
 export async function updateFavorite(recordId: string, favorite: boolean): Promise<GenerationRecord> {

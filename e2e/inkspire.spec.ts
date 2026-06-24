@@ -72,7 +72,7 @@ test("mobile user can complete Inkspire creation flow with mocked generation", a
   const horizontalOverflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
   expect(horizontalOverflow).toBe(false);
 
-  const resultColumns = await page.locator(".result-grid").evaluate((element) => {
+  const resultColumns = await page.locator(".result-grid").first().evaluate((element) => {
     return window.getComputedStyle(element).gridTemplateColumns.split(" ").length;
   });
   expect(resultColumns).toBe(1);
@@ -88,7 +88,7 @@ test("wide viewport shows artwork and fusion side by side", async ({ page }) => 
 
   await expect(page.getByRole("img", { name: "作品图" })).toBeVisible({ timeout: 30_000 });
   await expect(page.getByRole("img", { name: "融合图" })).toBeVisible();
-  const resultColumns = await page.locator(".result-grid").evaluate((element) => {
+  const resultColumns = await page.locator(".result-grid").first().evaluate((element) => {
     return window.getComputedStyle(element).gridTemplateColumns.split(" ").length;
   });
   expect(resultColumns).toBeGreaterThan(1);

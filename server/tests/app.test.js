@@ -88,7 +88,7 @@ test("POST /api/generations creates a job and eventually a record with artwork",
   });
 });
 
-test("POST /api/uploads/photo returns source_photo_path under upload record", async () => {
+test("POST /api/uploads/photo returns source_photo_path and inferred artwork size", async () => {
   await withTempApp(async ({ app, temp }) => {
     const response = await request(app)
       .post("/api/uploads/photo")
@@ -98,6 +98,15 @@ test("POST /api/uploads/photo returns source_photo_path under upload record", as
     assert.match(response.body.record_id, /^upload-/);
     assert.equal(response.body.source_photo_path, `records/${response.body.record_id}/source-photo.webp`);
     assert.equal(Object.hasOwn(response.body, "original_photo_path"), false);
+    assert.equal(response.body.scene.width, 2);
+    assert.equal(response.body.scene.height, 2);
+    assert.deepEqual(response.body.recommended_artwork_size, {
+      preset_id: "square_scene",
+      label: "方形点景",
+      width_cm: 50,
+      height_cm: 50,
+      reason: "根据场景图比例推算，适合作为方形点景作品。"
+    });
     assert.equal((await fs.readFile(path.join(temp, response.body.source_photo_path))).subarray(8, 12).toString("ascii"), "WEBP");
   });
 });
@@ -198,5 +207,51 @@ test("POST /api/records/:id/production-estimate scales estimates by selected siz
     assert.equal(response.body.size, "large");
     assert.equal(response.body.estimates.expert_custom.amount, 2700);
     assert.equal(response.body.estimates.expert_guided.amount, 900);
+  });
+});
+
+test("POST /api/records/:id/production-orders creates retrievable order with size and reference level", async () => {
+  await withTempApp(async ({ app }) => {
+    const upload = await request(app)
+      .post("/api/uploads/photo")
+      .attach("photo", pngBuffer(), { filename: "source.png", contentType: "image/png" })
+      .expect(201);
+    const created = await request(app)
+      .post("/api/generations")
+      .send({
+        type: "painting",
+        answers: { painting_subject: "山水" },
+        source_photo_path: upload.body.source_photo_path,
+        recommended_artwork_size: upload.body.recommended_artwork_size
+      })
+      .expect(201);
+
+    const response = await request(app)
+      .post(`/api/records/${created.body.record.id}/production-orders`)
+      .send({
+        expertId: "wu_jiayin",
+        serviceId: "expert_custom",
+        size: { preset_id: "custom", label: "自定义尺寸", width_cm: 42, height_cm: 66 },
+        referenceLevel: 3
+      })
+      .expect(201);
+
+    assert.match(response.body.order.id, /^order-/);
+    assert.equal(response.body.order.record_id, created.body.record.id);
+    assert.equal(response.body.order.service_id, "expert_custom");
+    assert.equal(response.body.order.reference_level, 3);
+    assert.deepEqual(response.body.order.size, {
+      preset_id: "custom",
+      label: "自定义尺寸",
+      width_cm: 42,
+      height_cm: 66
+    });
+    assert.equal(response.body.order.record_snapshot.artwork_path, created.body.record.artwork_path);
+
+    const lookup = await request(app)
+      .get(`/api/production-orders/${response.body.order.id}`)
+      .expect(200);
+
+    assert.deepEqual(lookup.body.order, response.body.order);
   });
 });

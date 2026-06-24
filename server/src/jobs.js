@@ -71,7 +71,7 @@ function createJobManager({ config, storage, runner }) {
     throw lastError;
   }
 
-  async function createArtwork({ type, answers = {}, conversationNotes = "", sourcePhotoPath = "" }) {
+  async function createArtwork({ type, answers = {}, conversationNotes = "", sourcePhotoPath = "", recommendedArtworkSize = null }) {
     return runLocked("artwork", async () => {
       const recordId = newId("record");
       const job = createJob("artwork", recordId);
@@ -85,6 +85,7 @@ function createJobManager({ config, storage, runner }) {
         answers,
         conversation_notes: conversationNotes,
         source_photo_path: sourcePhotoPath,
+        recommended_artwork_size: recommendedArtworkSize,
         artwork_path: artworkPath,
         favorite: true,
         status: "running",

@@ -6,6 +6,11 @@
     "bio": "广东岭南书画领域青年艺术家，中国书法家协会会员，中山大学中国美学博士，长期关注书法理论与创作。",
     "phone": "",
     "wechat": "",
+    "credentials": ["中国书法家协会会员", "中山大学中国美学博士"],
+    "sampleImages": [
+      "/previews/options/calligraphy-script-1-running.webp",
+      "/previews/options/painting-subject-0-landscape.webp"
+    ],
     "services": [
       {
         "id": "expert_custom",

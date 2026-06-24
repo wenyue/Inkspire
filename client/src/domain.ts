@@ -7,9 +7,15 @@ export type LocalizedText = Record<string, string>;
 export interface Question {
   id: string;
   applies_to?: string[];
+  input_type?: "choice" | "textarea";
+  preview_image?: string | LocalizedText;
+  option_preview_images?: string[];
   preview_prompt?: string | LocalizedText;
   title: LocalizedText;
-  options: Record<string, string[]>;
+  placeholder?: LocalizedText;
+  helper_text?: LocalizedText;
+  submit_label?: LocalizedText;
+  options?: Record<string, string[]>;
   default_option?: string;
 }
 
@@ -24,6 +30,11 @@ export type Answers = Record<string, string>;
 
 export const WORK_TYPE_QUESTION: Question = {
   id: "work_type",
+  preview_image: "/previews/questions/work-type.webp",
+  option_preview_images: [
+    "/previews/options/work-type-0-painting.webp",
+    "/previews/options/work-type-1-calligraphy.webp"
+  ],
   preview_prompt: {
     "zh-Hans": "选择国画或书法创作方向",
     "zh-Hant": "選擇國畫或書法創作方向",

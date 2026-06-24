@@ -1,5 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
 const path = require("node:path");
 const { loadConfig, publicConfig } = require("../src/config");
 
@@ -28,6 +29,23 @@ test("loads required Inkspire configuration", () => {
   ]);
   assert.ok(config.questions.painting.length >= 5);
   assert.ok(config.questions.calligraphy.length >= 5);
+  assert.equal(config.questions.calligraphy[0].id, "text");
+  assert.equal(config.questions.calligraphy[0].input_type, "textarea");
+  assert.match(config.questions.calligraphy[0].placeholder["zh-Hans"], /祝福语|诗句|词句/);
+  for (const question of [...config.questions.painting, ...config.questions.calligraphy]) {
+    assert.match(question.preview_image, /^\/previews\/questions\/.+\.webp$/);
+    assert.ok(fs.existsSync(path.join(root, "client/public", question.preview_image)));
+    if (question.input_type === "textarea") {
+      assert.equal(question.options, undefined);
+      assert.equal(question.option_preview_images, undefined);
+      continue;
+    }
+    assert.equal(question.option_preview_images.length, question.options["zh-Hans"].length);
+    for (const optionPreview of question.option_preview_images) {
+      assert.match(optionPreview, /^\/previews\/options\/.+-\d+-.+\.webp$/);
+      assert.ok(fs.existsSync(path.join(root, "client/public", optionPreview)));
+    }
+  }
   assert.equal(config.i18n["zh-Hans"].tabs.studio, "画案");
   assert.equal(config.i18n["zh-Hant"].tabs.library, "藏卷");
   assert.equal(config.i18n.en.tabs.experts, "Artisans");

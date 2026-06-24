@@ -40,9 +40,11 @@ function compareNewestFirst(a, b) {
 function createStorage(dataDir) {
   const libraryPath = path.join(dataDir, "library.json");
   const recordsDir = path.join(dataDir, "records");
+  const ordersDir = path.join(dataDir, "orders");
 
   async function ensureStore() {
     await fs.mkdir(recordsDir, { recursive: true });
+    await fs.mkdir(ordersDir, { recursive: true });
     try {
       await fs.access(libraryPath);
     } catch (error) {
@@ -84,7 +86,18 @@ function createStorage(dataDir) {
       .sort(compareNewestFirst);
   }
 
-  return { dataDir, ensureStore, saveRecord, getRecord, listLibrary };
+  async function saveProductionOrder(order) {
+    validateRecordId(order && order.id);
+    await ensureStore();
+    await writeJsonAtomic(path.join(ordersDir, `${order.id}.json`), order);
+  }
+
+  async function getProductionOrder(id) {
+    validateRecordId(id);
+    return JSON.parse(await fs.readFile(path.join(ordersDir, `${id}.json`), "utf8"));
+  }
+
+  return { dataDir, ensureStore, saveRecord, getRecord, listLibrary, saveProductionOrder, getProductionOrder };
 }
 
 module.exports = { createStorage };

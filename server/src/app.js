@@ -1,5 +1,6 @@
 const express = require("express");
 const multer = require("multer");
+const crypto = require("node:crypto");
 const { spawn } = require("node:child_process");
 const fs = require("node:fs");
 const path = require("node:path");
@@ -35,8 +36,52 @@ const PRODUCTION_SIZE_MULTIPLIERS = {
   large: 1.5
 };
 
+function newId(prefix) {
+  return `${prefix}-${Date.now().toString(36)}-${crypto.randomBytes(4).toString("hex")}`;
+}
+
 function productionSize(value) {
   return Object.hasOwn(PRODUCTION_SIZE_MULTIPLIERS, value) ? value : "medium";
+}
+
+function inferArtworkSizeFromScene(metadata = {}) {
+  const width = Number(metadata.width || 0);
+  const height = Number(metadata.height || 0);
+  if (!width || !height) {
+    return {
+      preset_id: "medium",
+      label: "中幅雅作",
+      width_cm: 45,
+      height_cm: 68,
+      reason: "未检测到场景比例，先按常用中幅预填。"
+    };
+  }
+  const ratio = width / height;
+  if (ratio > 1.18) {
+    return {
+      preset_id: "landscape_scene",
+      label: "横向点景",
+      width_cm: 68,
+      height_cm: 45,
+      reason: "根据场景图比例推算，适合横向陈设。"
+    };
+  }
+  if (ratio < 0.85) {
+    return {
+      preset_id: "portrait_scene",
+      label: "竖向挂画",
+      width_cm: 45,
+      height_cm: 68,
+      reason: "根据场景图比例推算，适合竖向挂画。"
+    };
+  }
+  return {
+    preset_id: "square_scene",
+    label: "方形点景",
+    width_cm: 50,
+    height_cm: 50,
+    reason: "根据场景图比例推算，适合作为方形点景作品。"
+  };
 }
 
 function checkCommandAvailable(command) {
@@ -178,10 +223,20 @@ function createApp(options = {}) {
     }
     const recordId = req.body.recordId || `upload-${Date.now().toString(36)}`;
     const outputPath = path.join(dataDir, "records", recordId, "source-photo.webp");
+    const metadata = await sharp(req.file.path).metadata();
+    const scene = {
+      width: metadata.width || 0,
+      height: metadata.height || 0,
+      orientation: metadata.width && metadata.height
+        ? metadata.width > metadata.height ? "landscape" : metadata.width < metadata.height ? "portrait" : "square"
+        : "unknown"
+    };
     await archiveSourcePhoto(req.file.path, outputPath, config.app.image.webpQuality);
     res.status(201).json({
       record_id: recordId,
-      source_photo_path: path.relative(dataDir, outputPath).replace(/\\/g, "/")
+      source_photo_path: path.relative(dataDir, outputPath).replace(/\\/g, "/"),
+      scene,
+      recommended_artwork_size: inferArtworkSizeFromScene(metadata)
     });
   }));
 
@@ -190,7 +245,8 @@ function createApp(options = {}) {
       type: req.body.type,
       answers: req.body.answers || {},
       conversationNotes: req.body.conversationNotes || req.body.conversation_notes || "",
-      sourcePhotoPath: req.body.source_photo_path || ""
+      sourcePhotoPath: req.body.source_photo_path || "",
+      recommendedArtworkSize: req.body.recommended_artwork_size || null
     });
     res.status(result.busy ? 423 : 201).json(result);
   }));
@@ -243,6 +299,38 @@ function createApp(options = {}) {
       };
     }
     res.json({ expert_id: expert.id, size, estimates });
+  }));
+
+  app.post("/api/records/:id/production-orders", asyncHandler(async (req, res) => {
+    const record = await storage.getRecord(req.params.id);
+    const expert = config.experts.find((entry) => entry.id === req.body.expertId) || config.experts[0];
+    const service = (expert.services || []).find((entry) => entry.id === req.body.serviceId) || expert.services?.[0];
+    const size = req.body.size || record.recommended_artwork_size || inferArtworkSizeFromScene();
+    const referenceLevel = Math.max(1, Math.min(5, Number(req.body.referenceLevel || 3)));
+    const order = {
+      id: newId("order"),
+      created_at: new Date().toISOString(),
+      record_id: record.id,
+      expert_id: expert.id,
+      service_id: service?.id || "",
+      size,
+      reference_level: referenceLevel,
+      record_snapshot: {
+        id: record.id,
+        type: record.type,
+        title: record.title || "",
+        artwork_path: record.artwork_path || "",
+        fusion_path: record.fusion_path || "",
+        source_photo_path: record.source_photo_path || "",
+        recommended_artwork_size: record.recommended_artwork_size || null
+      }
+    };
+    await storage.saveProductionOrder(order);
+    res.status(201).json({ order });
+  }));
+
+  app.get("/api/production-orders/:id", asyncHandler(async (req, res) => {
+    res.json({ order: await storage.getProductionOrder(req.params.id) });
   }));
 
   if (fs.existsSync(path.join(clientDist, "index.html"))) {

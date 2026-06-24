@@ -1,29 +1,97 @@
-import { useEffect, useState } from "react";
-import { X } from "lucide-react";
-import { getProductionEstimate, type Expert, type ProductionContact, type ProductionEstimate } from "../api";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { ArrowLeft, Ruler, X } from "lucide-react";
+import {
+  createProductionOrder,
+  getProductionEstimate,
+  type ArtworkSize,
+  type Expert,
+  type GenerationRecord,
+  type ProductionContact,
+  type ProductionEstimate,
+  type ProductionOrder
+} from "../api";
 import type { Locale } from "../domain";
 
-type ProductionSize = "small" | "medium" | "large";
-
-const SIZE_OPTIONS: Array<{
-  id: ProductionSize;
-  label: Record<Locale, string>;
+type ProductionSize = ArtworkSize & {
   hint: Record<Locale, string>;
-}> = [
+};
+
+const DEFAULT_SIZE: ArtworkSize = {
+  preset_id: "medium",
+  label: "中幅雅作",
+  width_cm: 45,
+  height_cm: 68,
+  reason: "常用客厅、书房尺寸，先按中幅预填。"
+};
+
+const SIZE_OPTIONS: ProductionSize[] = [
   {
-    id: "small",
-    label: { "zh-Hans": "小幅", "zh-Hant": "小幅", en: "Small" },
-    hint: { "zh-Hans": "题签、团扇、小装饰", "zh-Hant": "題簽、團扇、小裝飾", en: "Inscription, fan, small accent" }
+    preset_id: "small",
+    label: "小幅点景",
+    width_cm: 30,
+    height_cm: 45,
+    hint: { "zh-Hans": "约一张海报大小，适合玄关、书桌旁。", "zh-Hant": "約一張海報大小，適合玄關、書桌旁。", en: "Poster-like, good for entryways and desks." }
   },
   {
-    id: "medium",
-    label: { "zh-Hans": "中幅", "zh-Hant": "中幅", en: "Medium" },
-    hint: { "zh-Hans": "书房、客厅、礼赠", "zh-Hant": "書房、客廳、禮贈", en: "Study, living room, gift" }
+    preset_id: "medium",
+    label: "中幅雅作",
+    width_cm: 45,
+    height_cm: 68,
+    hint: { "zh-Hans": "最常用，适合书房、客厅边柜、礼赠。", "zh-Hant": "最常用，適合書房、客廳邊櫃、禮贈。", en: "Most common, good for studies, sideboards, and gifts." }
   },
   {
-    id: "large",
-    label: { "zh-Hans": "大幅", "zh-Hant": "大幅", en: "Large" },
-    hint: { "zh-Hans": "厅堂主景、重点陈设", "zh-Hant": "廳堂主景、重點陳設", en: "Feature wall, main display" }
+    preset_id: "large",
+    label: "厅堂主景",
+    width_cm: 60,
+    height_cm: 90,
+    hint: { "zh-Hans": "更有存在感，适合沙发墙或厅堂主位。", "zh-Hant": "更有存在感，適合沙發牆或廳堂主位。", en: "More prominent, good for feature walls." }
+  },
+  {
+    preset_id: "square_scene",
+    label: "方形点景",
+    width_cm: 50,
+    height_cm: 50,
+    hint: { "zh-Hans": "接近抱枕宽度，适合方形留白或组合陈设。", "zh-Hant": "接近抱枕寬度，適合方形留白或組合陳設。", en: "Square accent size for balanced displays." }
+  },
+  {
+    preset_id: "landscape_scene",
+    label: "横向陈设",
+    width_cm: 68,
+    height_cm: 45,
+    hint: { "zh-Hans": "适合横向墙面、边柜上方或长桌背景。", "zh-Hant": "適合橫向牆面、邊櫃上方或長桌背景。", en: "Wide format for horizontal walls." }
+  }
+];
+
+const REFERENCE_LEVELS = [
+  {
+    value: 1,
+    title: { "zh-Hans": "第1级 严格参考", "zh-Hant": "第1級 嚴格參考", en: "Level 1 Strict" },
+    shortTitle: { "zh-Hans": "严格", "zh-Hant": "嚴格", en: "Strict" },
+    hint: { "zh-Hans": "尽量贴近 AI 图的构图、色调和细节。", "zh-Hant": "盡量貼近 AI 圖的構圖、色調和細節。", en: "Stay close to the AI layout, palette, and detail." }
+  },
+  {
+    value: 2,
+    title: { "zh-Hans": "第2级 主要参考", "zh-Hant": "第2級 主要參考", en: "Level 2 Close" },
+    shortTitle: { "zh-Hans": "主要", "zh-Hant": "主要", en: "Close" },
+    hint: { "zh-Hans": "整体接近 AI 图，局部允许艺术处理。", "zh-Hant": "整體接近 AI 圖，局部允許藝術處理。", en: "Mostly follow the AI work, with local artistic changes." }
+  },
+  {
+    value: 3,
+    title: { "zh-Hans": "第3级 布局参考", "zh-Hant": "第3級 章法參考", en: "Level 3 Layout" },
+    shortTitle: { "zh-Hans": "布局", "zh-Hant": "章法", en: "Layout" },
+    hint: { "zh-Hans": "参考总体布局，细节可自由发挥，提升艺术性。", "zh-Hant": "參考總體布局，細節可自由發揮，提升藝術性。", en: "Use the overall layout, while improving details freely." }
+  },
+  {
+    value: 4,
+    title: { "zh-Hans": "第4级 气质参考", "zh-Hant": "第4級 氣質參考", en: "Level 4 Mood" },
+    shortTitle: { "zh-Hans": "气质", "zh-Hant": "氣質", en: "Mood" },
+    hint: { "zh-Hans": "只参考气质和主题，画面可明显重构。", "zh-Hant": "只參考氣質和主題，畫面可明顯重構。", en: "Only preserve mood and theme; composition can change." }
+  },
+  {
+    value: 5,
+    title: { "zh-Hans": "第5级 自由创作", "zh-Hant": "第5級 自由創作", en: "Level 5 Free" },
+    shortTitle: { "zh-Hans": "自由", "zh-Hant": "自由", en: "Free" },
+    hint: { "zh-Hans": "AI 图只作灵感，主要交给艺术家判断。", "zh-Hant": "AI 圖只作靈感，主要交給藝術家判斷。", en: "Treat the AI work as inspiration only." }
   }
 ];
 
@@ -31,8 +99,9 @@ interface ProductionDialogProps {
   expert: Expert;
   supportContact?: ProductionContact;
   locale: Locale;
-  recordId: string;
+  record: GenerationRecord;
   title: string;
+  introLabel: string;
   closeLabel: string;
   sizeLabel: string;
   estimateLabel: string;
@@ -44,14 +113,27 @@ interface ProductionDialogProps {
   onClose: () => void;
 }
 
+function text(value: Record<Locale, string>, locale: Locale): string {
+  return value[locale] ?? value["zh-Hans"] ?? Object.values(value)[0] ?? "";
+}
+
+function sizeLabel(size: ArtworkSize): string {
+  return `${size.label} · 约 ${size.width_cm} × ${size.height_cm} cm`;
+}
+
+function estimateSizeKey(size: ArtworkSize): string {
+  return ["small", "medium", "large"].includes(size.preset_id) ? size.preset_id : "medium";
+}
+
 export default function ProductionDialog({
   expert,
   supportContact,
   locale,
-  recordId,
+  record,
   title,
+  introLabel,
   closeLabel,
-  sizeLabel,
+  sizeLabel: sizeSectionLabel,
   estimateLabel,
   contactLabel,
   phoneLabel,
@@ -60,20 +142,79 @@ export default function ProductionDialog({
   contactPendingLabel,
   onClose
 }: ProductionDialogProps) {
+  const inferredSize = record.recommended_artwork_size ?? DEFAULT_SIZE;
   const [selectedService, setSelectedService] = useState(expert.services[0]?.id ?? "");
-  const [selectedSize, setSelectedSize] = useState<ProductionSize>("medium");
+  const [selectedSize, setSelectedSize] = useState<ArtworkSize>(inferredSize);
+  const [draftSize, setDraftSize] = useState<ArtworkSize>(inferredSize);
+  const [customWidth, setCustomWidth] = useState(String(inferredSize.width_cm));
+  const [customHeight, setCustomHeight] = useState(String(inferredSize.height_cm));
+  const [referenceLevel, setReferenceLevel] = useState(3);
   const [estimate, setEstimate] = useState<ProductionEstimate | null>(null);
-  const [confirmed, setConfirmed] = useState(false);
+  const [order, setOrder] = useState<ProductionOrder | null>(null);
+  const [page, setPage] = useState<"main" | "size">("main");
+  const [error, setError] = useState("");
+  const contactPanelRef = useRef<HTMLDivElement | null>(null);
+  const selectedReference = REFERENCE_LEVELS.find((level) => level.value === referenceLevel) ?? REFERENCE_LEVELS[2];
   const contact = {
     phone: expert.phone || supportContact?.phone || "",
     wechat: expert.wechat || supportContact?.wechat || ""
   };
+  const presetOptions = useMemo(() => {
+    const hasInferred = SIZE_OPTIONS.some((option) => option.preset_id === inferredSize.preset_id);
+    return hasInferred ? SIZE_OPTIONS : [inferredSize as ProductionSize, ...SIZE_OPTIONS];
+  }, [inferredSize]);
 
   useEffect(() => {
-    getProductionEstimate(recordId, expert.id, selectedSize)
+    getProductionEstimate(record.id, expert.id, estimateSizeKey(selectedSize))
       .then(setEstimate)
       .catch(() => setEstimate(null));
-  }, [expert.id, recordId, selectedSize]);
+  }, [expert.id, record.id, selectedSize]);
+
+  useEffect(() => {
+    if (!order) {
+      return;
+    }
+    contactPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [order]);
+
+  const chooseSize = (size: ArtworkSize) => {
+    setDraftSize(size);
+    setCustomWidth(String(size.width_cm));
+    setCustomHeight(String(size.height_cm));
+  };
+
+  const applySize = () => {
+    const custom = draftSize.preset_id === "custom";
+    const nextSize = custom
+      ? {
+        preset_id: "custom",
+        label: locale === "en" ? "Custom size" : "自定义尺寸",
+        width_cm: Math.max(1, Number(customWidth) || selectedSize.width_cm),
+        height_cm: Math.max(1, Number(customHeight) || selectedSize.height_cm)
+      }
+      : draftSize;
+    setSelectedSize(nextSize);
+    setOrder(null);
+    setPage("main");
+  };
+
+  const confirm = async () => {
+    if (!selectedService) {
+      return;
+    }
+    setError("");
+    try {
+      setOrder(await createProductionOrder({
+        recordId: record.id,
+        expertId: expert.id,
+        serviceId: selectedService,
+        size: selectedSize,
+        referenceLevel
+      }));
+    } catch {
+      setError(locale === "en" ? "Unable to create the order. Please try again." : "暂时无法生成单号，请稍后再试。");
+    }
+  };
 
   return (
     <div className="dialog-layer">
@@ -81,72 +222,150 @@ export default function ProductionDialog({
         <div className="dialog-heading">
           <div>
             <p>{expert.name}</p>
-            <h2>{title}</h2>
+            <h2>{page === "size" ? (locale === "en" ? "Adjust Artwork Size" : "调整作品尺寸") : title}</h2>
           </div>
           <button className="icon-button" type="button" onClick={onClose} aria-label={closeLabel}>
             <X aria-hidden="true" size={18} />
           </button>
         </div>
 
-        <div className="size-section">
-          <p>{sizeLabel}</p>
-          <div className="size-list" role="radiogroup" aria-label={sizeLabel}>
-            {SIZE_OPTIONS.map((option) => (
+        {page === "size" ? (
+          <div className="size-adjust-panel">
+            <button className="secondary-action compact-action" type="button" onClick={() => setPage("main")}>
+              <ArrowLeft aria-hidden="true" size={16} />
+              {locale === "en" ? "Back" : "返回"}
+            </button>
+            <div className="size-list" role="radiogroup" aria-label={locale === "en" ? "Artwork size presets" : "作品尺寸预设"}>
+              {presetOptions.map((option) => (
+                <button
+                  key={option.preset_id}
+                  type="button"
+                  role="radio"
+                  aria-checked={draftSize.preset_id === option.preset_id}
+                  className={draftSize.preset_id === option.preset_id ? "size-chip selected" : "size-chip"}
+                  onClick={() => chooseSize(option)}
+                >
+                  <strong>{sizeLabel(option)}</strong>
+                  <span>{option.hint ? text(option.hint, locale) : option.reason}</span>
+                </button>
+              ))}
               <button
-                key={option.id}
                 type="button"
                 role="radio"
-                aria-checked={selectedSize === option.id}
-                className={selectedSize === option.id ? "size-chip selected" : "size-chip"}
-                onClick={() => {
-                  setSelectedSize(option.id);
-                  setConfirmed(false);
-                }}
+                aria-checked={draftSize.preset_id === "custom"}
+                className={draftSize.preset_id === "custom" ? "size-chip selected" : "size-chip"}
+                onClick={() => chooseSize({ preset_id: "custom", label: locale === "en" ? "Custom size" : "自定义尺寸", width_cm: Number(customWidth), height_cm: Number(customHeight) })}
               >
-                <strong>{option.label[locale] ?? option.label["zh-Hans"]}</strong>
-                <span>{option.hint[locale] ?? option.hint["zh-Hans"]}</span>
+                <strong>{locale === "en" ? "Custom size" : "自定义尺寸"}</strong>
+                <span>{locale === "en" ? "Enter width and height in centimeters." : "自己输入宽和高，单位是厘米。"}</span>
               </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="service-list" role="radiogroup" aria-label={title}>
-          {expert.services.map((service) => {
-            const serviceEstimate = estimate?.estimates[service.id];
-            return (
-              <button
-                key={service.id}
-                type="button"
-                role="radio"
-                aria-checked={selectedService === service.id}
-                className={selectedService === service.id ? "service-card selected" : "service-card"}
-                onClick={() => {
-                  setSelectedService(service.id);
-                  setConfirmed(false);
-                }}
-              >
-                <strong>{service.name[locale] ?? service.name["zh-Hans"]}</strong>
-                <span>{service.description[locale] ?? service.description["zh-Hans"]}</span>
-                <em>
-                  {estimateLabel}: {serviceEstimate?.amount ?? service.priceEstimate.base}{" "}
-                  {serviceEstimate?.currency ?? service.priceEstimate.currency}
-                </em>
-              </button>
-            );
-          })}
-        </div>
-
-        {confirmed ? (
-          <div className="contact-panel">
-            <strong>{contactLabel}</strong>
-            {contact.phone ? <span>{phoneLabel}{contact.phone}</span> : null}
-            {contact.wechat ? <span>{wechatLabel}{contact.wechat}</span> : null}
-            {!contact.phone && !contact.wechat ? <span>{contactPendingLabel}</span> : null}
+            </div>
+            {draftSize.preset_id === "custom" ? (
+              <div className="custom-size-grid">
+                <label>
+                  宽度 cm
+                  <input aria-label="宽度 cm" inputMode="numeric" value={customWidth} onChange={(event) => setCustomWidth(event.target.value)} />
+                </label>
+                <label>
+                  高度 cm
+                  <input aria-label="高度 cm" inputMode="numeric" value={customHeight} onChange={(event) => setCustomHeight(event.target.value)} />
+                </label>
+              </div>
+            ) : null}
+            <button className="primary-action" type="button" onClick={applySize}>
+              {locale === "en" ? "Use this size" : "用这个尺寸"}
+            </button>
           </div>
         ) : (
-          <button className="primary-action" type="button" onClick={() => setConfirmed(Boolean(selectedService))}>
-            {confirmLabel}
-          </button>
+          <>
+            <p className="production-intro">{introLabel}</p>
+            <div className="size-section">
+              <p>{sizeSectionLabel}</p>
+              <div className="selected-size-panel">
+                <Ruler aria-hidden="true" size={18} />
+                <div>
+                  <strong>{sizeLabel(selectedSize)}</strong>
+                  {selectedSize.reason ? <span>{selectedSize.reason}</span> : null}
+                </div>
+                <button className="secondary-action compact-action" type="button" onClick={() => {
+                  setDraftSize(selectedSize);
+                  setCustomWidth(String(selectedSize.width_cm));
+                  setCustomHeight(String(selectedSize.height_cm));
+                  setPage("size");
+                }}>
+                  {locale === "en" ? "Adjust" : "调整尺寸"}
+                </button>
+              </div>
+            </div>
+
+            <div className="service-list" role="radiogroup" aria-label={title}>
+              {expert.services.map((service) => {
+                const serviceEstimate = estimate?.estimates[service.id];
+                return (
+                  <button
+                    key={service.id}
+                    type="button"
+                    role="radio"
+                    aria-checked={selectedService === service.id}
+                    className={selectedService === service.id ? "service-card selected" : "service-card"}
+                    onClick={() => {
+                      setSelectedService(service.id);
+                      setOrder(null);
+                    }}
+                  >
+                    <strong>{service.name[locale] ?? service.name["zh-Hans"]}</strong>
+                    <span>{service.description[locale] ?? service.description["zh-Hans"]}</span>
+                    <em>
+                      {estimateLabel}: {serviceEstimate?.amount ?? service.priceEstimate.base}{" "}
+                      {serviceEstimate?.currency ?? service.priceEstimate.currency}
+                    </em>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="reference-section">
+              <p>{locale === "en" ? "How closely should the artist follow the AI work?" : "艺术家参考 AI 作品的程度"}</p>
+              <div className="reference-list" role="radiogroup" aria-label={locale === "en" ? "Artist reference level" : "艺术家参考 AI 作品的程度"}>
+                {REFERENCE_LEVELS.map((level) => (
+                  <button
+                    key={level.value}
+                    type="button"
+                  role="radio"
+                  aria-checked={referenceLevel === level.value}
+                  aria-label={text(level.title, locale)}
+                  className={referenceLevel === level.value ? "reference-card selected" : "reference-card"}
+                  onClick={() => {
+                    setReferenceLevel(level.value);
+                    setOrder(null);
+                  }}
+                >
+                    <strong>{text(level.shortTitle, locale)}</strong>
+                  </button>
+                ))}
+              </div>
+              <div className="reference-hint">
+                <strong>{text(selectedReference.title, locale)}</strong>
+                <span>{text(selectedReference.hint, locale)}</span>
+              </div>
+            </div>
+
+            {order ? (
+              <div className="contact-panel" ref={contactPanelRef}>
+                <strong>{locale === "en" ? "Production intent recorded" : "已记录制作意向"}</strong>
+                <strong>{contactLabel}</strong>
+                <span>{locale === "en" ? `Order: ${order.id}` : `单号：${order.id}`}</span>
+                {contact.phone ? <span>{phoneLabel}{contact.phone}</span> : null}
+                {contact.wechat ? <span>{wechatLabel}{contact.wechat}</span> : null}
+                {!contact.phone && !contact.wechat ? <span>{contactPendingLabel}</span> : null}
+              </div>
+            ) : (
+              <button className="primary-action" type="button" onClick={confirm}>
+                {confirmLabel}
+              </button>
+            )}
+            {error ? <p className="error-line" role="status">{error}</p> : null}
+          </>
         )}
       </section>
     </div>

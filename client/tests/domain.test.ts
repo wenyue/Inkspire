@@ -29,8 +29,15 @@ describe("domain question flow", () => {
     const answers = { work_type: "calligraphy" };
     const question = nextQuestion(config, answers);
 
-    expect(question?.id).toBe("calligraphy_script");
+    expect(question?.id).toBe("text");
     expect(question?.id.startsWith("painting")).toBe(false);
+  });
+
+  it("asks for the calligraphy text before style choices", () => {
+    const answers = { work_type: "calligraphy", text: "年年有余" };
+    const question = nextQuestion(config, answers);
+
+    expect(question?.id).toBe("calligraphy_script");
   });
 
   it("reports completion after all branched questions are answered", () => {
@@ -45,6 +52,20 @@ describe("domain question flow", () => {
 
     expect(isQuestionFlowComplete(config, answers)).toBe(true);
     expect(nextQuestion(config, answers)).toBeNull();
+  });
+
+  it("does not complete the calligraphy branch until the text is answered", () => {
+    const answers = {
+      work_type: "calligraphy",
+      calligraphy_script: "行书",
+      calligraphy_energy: "灵动",
+      calligraphy_layout: "竖排",
+      calligraphy_paper: "素宣",
+      calligraphy_ink: "浓墨"
+    };
+
+    expect(isQuestionFlowComplete(config, answers)).toBe(false);
+    expect(nextQuestion(config, answers)?.id).toBe("text");
   });
 
   it("uses stacked result layout below 700px and split layout at 700px or wider", () => {

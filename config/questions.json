@@ -3,6 +3,13 @@
     {
       "id": "painting_subject",
       "applies_to": ["painting", "fusion"],
+      "preview_image": "/previews/questions/painting-subject.webp",
+      "option_preview_images": [
+        "/previews/options/painting-subject-0-landscape.webp",
+        "/previews/options/painting-subject-1-birds-flowers.webp",
+        "/previews/options/painting-subject-2-figures.webp",
+        "/previews/options/painting-subject-3-inkspire-decide.webp"
+      ],
       "preview_prompt": "中国画主题选择，留白构图",
       "title": {
         "zh-Hans": "想画什么主题？",
@@ -19,6 +26,13 @@
     {
       "id": "painting_palette",
       "applies_to": ["painting", "fusion"],
+      "preview_image": "/previews/questions/painting-palette.webp",
+      "option_preview_images": [
+        "/previews/options/painting-palette-0-ink-wash.webp",
+        "/previews/options/painting-palette-1-blue-green.webp",
+        "/previews/options/painting-palette-2-light-umber.webp",
+        "/previews/options/painting-palette-3-inkspire-decide.webp"
+      ],
       "preview_prompt": "中国画设色，水墨与青绿",
       "title": {
         "zh-Hans": "偏好哪种设色？",
@@ -35,6 +49,13 @@
     {
       "id": "painting_mood",
       "applies_to": ["painting", "fusion"],
+      "preview_image": "/previews/questions/painting-mood.webp",
+      "option_preview_images": [
+        "/previews/options/painting-mood-0-refined.webp",
+        "/previews/options/painting-mood-1-grand.webp",
+        "/previews/options/painting-mood-2-gentle.webp",
+        "/previews/options/painting-mood-3-inkspire-decide.webp"
+      ],
       "preview_prompt": "中国画意境，清雅静远",
       "title": {
         "zh-Hans": "希望作品是什么气质？",
@@ -51,6 +72,13 @@
     {
       "id": "painting_composition",
       "applies_to": ["painting", "fusion"],
+      "preview_image": "/previews/questions/painting-composition.webp",
+      "option_preview_images": [
+        "/previews/options/painting-composition-0-horizontal.webp",
+        "/previews/options/painting-composition-1-vertical.webp",
+        "/previews/options/painting-composition-2-square.webp",
+        "/previews/options/painting-composition-3-inkspire-decide.webp"
+      ],
       "preview_prompt": "中国画构图，留白与远近",
       "title": {
         "zh-Hans": "喜欢哪种构图？",
@@ -67,6 +95,13 @@
     {
       "id": "painting_detail",
       "applies_to": ["painting", "fusion"],
+      "preview_image": "/previews/questions/painting-detail.webp",
+      "option_preview_images": [
+        "/previews/options/painting-detail-0-sparse.webp",
+        "/previews/options/painting-detail-1-balanced.webp",
+        "/previews/options/painting-detail-2-dense.webp",
+        "/previews/options/painting-detail-3-inkspire-decide.webp"
+      ],
       "preview_prompt": "中国画细节密度，疏密有致",
       "title": {
         "zh-Hans": "细节希望多还是少？",
@@ -83,8 +118,42 @@
   ],
   "calligraphy": [
     {
+      "id": "text",
+      "applies_to": ["calligraphy", "fusion"],
+      "input_type": "textarea",
+      "preview_image": "/previews/questions/calligraphy-script.webp",
+      "preview_prompt": "书法正文，祝福语或诗句",
+      "title": {
+        "zh-Hans": "想写什么正文？",
+        "zh-Hant": "想寫什麼正文？",
+        "en": "What text should the calligraphy write?"
+      },
+      "placeholder": {
+        "zh-Hans": "例如：年年有余、平安喜乐，或一两句祝福语",
+        "zh-Hant": "例如：年年有餘、平安喜樂，或一兩句祝福語",
+        "en": "For example: Peace and joy, or a short blessing"
+      },
+      "helper_text": {
+        "zh-Hans": "这会作为书法正文进入生成；后面再选择书体、章法和墨色。",
+        "zh-Hant": "這會作為書法正文進入生成；後面再選擇書體、章法和墨色。",
+        "en": "This becomes the calligraphy wording; script, layout, and ink come next."
+      },
+      "submit_label": {
+        "zh-Hans": "继续定书体",
+        "zh-Hant": "繼續定書體",
+        "en": "Continue to script"
+      }
+    },
+    {
       "id": "calligraphy_script",
       "applies_to": ["calligraphy", "fusion"],
+      "preview_image": "/previews/questions/calligraphy-script.webp",
+      "option_preview_images": [
+        "/previews/options/calligraphy-script-0-regular.webp",
+        "/previews/options/calligraphy-script-1-running.webp",
+        "/previews/options/calligraphy-script-2-cursive.webp",
+        "/previews/options/calligraphy-script-3-inkspire-decide.webp"
+      ],
       "preview_prompt": "书法字体选择，行草楷隶",
       "title": {
         "zh-Hans": "偏好哪种书体？",
@@ -101,6 +170,13 @@
     {
       "id": "calligraphy_energy",
       "applies_to": ["calligraphy", "fusion"],
+      "preview_image": "/previews/questions/calligraphy-energy.webp",
+      "option_preview_images": [
+        "/previews/options/calligraphy-energy-0-steady.webp",
+        "/previews/options/calligraphy-energy-1-lively.webp",
+        "/previews/options/calligraphy-energy-2-forceful.webp",
+        "/previews/options/calligraphy-energy-3-inkspire-decide.webp"
+      ],
       "preview_prompt": "书法笔势，飞白与墨韵",
       "title": {
         "zh-Hans": "笔势希望如何？",
@@ -117,6 +193,13 @@
     {
       "id": "calligraphy_layout",
       "applies_to": ["calligraphy", "fusion"],
+      "preview_image": "/previews/questions/calligraphy-layout.webp",
+      "option_preview_images": [
+        "/previews/options/calligraphy-layout-0-vertical.webp",
+        "/previews/options/calligraphy-layout-1-horizontal.webp",
+        "/previews/options/calligraphy-layout-2-plaque.webp",
+        "/previews/options/calligraphy-layout-3-inkspire-decide.webp"
+      ],
       "preview_prompt": "书法章法，竖排横排与落款",
       "title": {
         "zh-Hans": "想要哪种章法？",
@@ -133,6 +216,13 @@
     {
       "id": "calligraphy_paper",
       "applies_to": ["calligraphy", "fusion"],
+      "preview_image": "/previews/questions/calligraphy-paper.webp",
+      "option_preview_images": [
+        "/previews/options/calligraphy-paper-0-plain-xuan.webp",
+        "/previews/options/calligraphy-paper-1-gold-flecked.webp",
+        "/previews/options/calligraphy-paper-2-antique.webp",
+        "/previews/options/calligraphy-paper-3-inkspire-decide.webp"
+      ],
       "preview_prompt": "书法纸色，宣纸质感",
       "title": {
         "zh-Hans": "纸张氛围偏好？",
@@ -149,6 +239,13 @@
     {
       "id": "calligraphy_ink",
       "applies_to": ["calligraphy", "fusion"],
+      "preview_image": "/previews/questions/calligraphy-ink.webp",
+      "option_preview_images": [
+        "/previews/options/calligraphy-ink-0-deep-ink.webp",
+        "/previews/options/calligraphy-ink-1-light-ink.webp",
+        "/previews/options/calligraphy-ink-2-dry-wet.webp",
+        "/previews/options/calligraphy-ink-3-inkspire-decide.webp"
+      ],
       "preview_prompt": "书法墨色，浓淡干湿",
       "title": {
         "zh-Hans": "墨色希望怎样？",

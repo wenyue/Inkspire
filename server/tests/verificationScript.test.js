@@ -14,4 +14,6 @@ test("root package exposes repeatable real Codex verification", () => {
   assert.match(script, /calligraphy/i);
   assert.match(script, /fusion/i);
   assert.match(script, /INKSPIRE_REAL_CODEX/);
+  assert.match(script, /minBytes/);
+  assert.match(script, /source photo["'][\s\S]*minBytes:\s*1/);
 });
