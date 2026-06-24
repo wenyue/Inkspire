@@ -126,13 +126,17 @@ test("API replaces malformed inkspire_user cookie values", async () => {
 test("POST /api/generations creates a job and eventually a record with artwork", async () => {
   await withTempApp(async ({ app, temp }) => {
     const agent = request.agent(app);
+    const upload = await agent
+      .post("/api/uploads/photo")
+      .attach("photo", pngBuffer(120), { filename: "source.png", contentType: "image/png" })
+      .expect(201);
     const response = await agent
       .post("/api/generations")
       .send({
         type: "painting",
         answers: { painting_subject: "山水" },
         conversationNotes: "请保留云气",
-        source_photo_path: "records/upload-before-generate/source-photo.webp"
+        source_photo_path: upload.body.source_photo_path
       })
       .expect(201);
 
@@ -143,7 +147,7 @@ test("POST /api/generations creates a job and eventually a record with artwork",
     assert.equal(record.status, "succeeded");
     assert.equal(response.body.record.type, "painting");
     assert.equal(response.body.record.favorite, true);
-    assert.equal(response.body.record.source_photo_path, "records/upload-before-generate/source-photo.webp");
+    assert.equal(response.body.record.source_photo_path, upload.body.source_photo_path);
     assert.match(response.body.record.artwork_path, /artwork\.webp$/);
     assert.equal((await fs.readFile(path.join(temp, response.body.record.artwork_path))).subarray(0, 4).toString("ascii"), "RIFF");
   });
@@ -243,6 +247,28 @@ test("GET /api/records/:id/images/source refuses source paths outside the data d
       .expect(400);
 
     assert.equal(created.body.error, "Invalid source photo path");
+  });
+});
+
+test("POST /api/generations rejects source photos uploaded by another user", async () => {
+  await withTempApp(async ({ app }) => {
+    const firstUser = request.agent(app);
+    const secondUser = request.agent(app);
+    const upload = await firstUser
+      .post("/api/uploads/photo")
+      .attach("photo", pngBuffer(120), { filename: "source.png", contentType: "image/png" })
+      .expect(201);
+
+    const response = await secondUser
+      .post("/api/generations")
+      .send({
+        type: "painting",
+        answers: { painting_subject: "山水" },
+        source_photo_path: upload.body.source_photo_path
+      })
+      .expect(400);
+
+    assert.equal(response.body.error, "Invalid source photo path");
   });
 });
 

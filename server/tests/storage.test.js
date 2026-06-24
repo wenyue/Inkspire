@@ -129,6 +129,49 @@ test("record ids must be safe path segments", async () => {
   });
 });
 
+test("ensureStore marks stale active records interrupted on startup", async () => {
+  await withTempStore(async (temp) => {
+    await fs.mkdir(path.join(temp, "records", "stale-artwork"), { recursive: true });
+    await fs.writeFile(path.join(temp, "records", "stale-artwork", "record.json"), `${JSON.stringify({
+      id: "stale-artwork",
+      user_id: "user-a",
+      created_at: "2026-06-25T10:00:00.000Z",
+      type: "painting",
+      artwork_path: "records/stale-artwork/artwork.webp",
+      favorite: true,
+      status: "running"
+    })}\n`);
+    await fs.mkdir(path.join(temp, "records", "stale-fusion"), { recursive: true });
+    await fs.writeFile(path.join(temp, "records", "stale-fusion", "artwork.webp"), "webp");
+    await fs.writeFile(path.join(temp, "records", "stale-fusion", "record.json"), `${JSON.stringify({
+      id: "stale-fusion",
+      user_id: "user-a",
+      created_at: "2026-06-25T10:01:00.000Z",
+      type: "painting",
+      artwork_path: "records/stale-fusion/artwork.webp",
+      favorite: true,
+      status: "queued",
+      fusion_status: "running"
+    })}\n`);
+
+    const storage = createStorage(temp);
+    await storage.ensureStore();
+
+    const staleArtwork = await storage.getRecord("stale-artwork");
+    assert.equal(staleArtwork.status, "failed");
+    assert.equal(staleArtwork.error, "generation interrupted");
+    assert.equal(staleArtwork.diagnostics.reason, "generation_interrupted");
+
+    const staleFusion = await storage.getRecord("stale-fusion");
+    assert.equal(staleFusion.status, "succeeded");
+    assert.equal(staleFusion.fusion_status, "failed");
+    assert.deepEqual((await storage.listLibrary("user-a")).map((record) => [record.id, record.status]), [
+      ["stale-fusion", "succeeded"],
+      ["stale-artwork", "failed"]
+    ]);
+  });
+});
+
 test("listLibrary filters records by user while keeping legacy records visible", async () => {
   await withTempStore(async (temp) => {
     const storage = createStorage(temp);

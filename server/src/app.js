@@ -10,7 +10,7 @@ const { loadConfig, publicConfig } = require("./config");
 const { runCodexImageGeneration } = require("./codexRunner");
 const { archiveSourcePhoto } = require("./imagePipeline");
 const { createJobManager } = require("./jobs");
-const { createStorage, resolveRecordAssetPath, validateRecordId } = require("./storage");
+const { createStorage, resolveRecordAssetPath, validateRecordAssetPath, validateRecordId } = require("./storage");
 const { userIdentityMiddleware } = require("./userIdentity");
 
 function asyncHandler(fn) {
@@ -52,6 +52,72 @@ function badRequest(message) {
   const error = new Error(message);
   error.status = 400;
   return error;
+}
+
+function sourcePhotoOwnerPath(dataDir, recordId) {
+  return path.join(dataDir, "records", recordId, "source-photo-owner.json");
+}
+
+async function readSourcePhotoOwner(dataDir, recordId) {
+  try {
+    return JSON.parse(await fs.promises.readFile(sourcePhotoOwnerPath(dataDir, recordId), "utf8"));
+  } catch (error) {
+    if (error && error.code === "ENOENT") {
+      return null;
+    }
+    throw error;
+  }
+}
+
+async function assertSourcePhotoWritable({ storage, dataDir, recordId, userId }) {
+  try {
+    const record = await storage.getRecord(recordId);
+    if (record.user_id && record.user_id !== userId) {
+      throw badRequest("Invalid source photo path");
+    }
+  } catch (error) {
+    if (!(error && error.code === "ENOENT")) {
+      throw error;
+    }
+  }
+
+  const owner = await readSourcePhotoOwner(dataDir, recordId);
+  if (owner && owner.user_id !== userId) {
+    throw badRequest("Invalid source photo path");
+  }
+}
+
+async function saveSourcePhotoOwner(dataDir, recordId, userId) {
+  await fs.promises.writeFile(
+    sourcePhotoOwnerPath(dataDir, recordId),
+    `${JSON.stringify({ user_id: userId, created_at: new Date().toISOString() }, null, 2)}\n`
+  );
+}
+
+async function validateSourcePhotoPathForUser({ storage, dataDir, userId, sourcePhotoPath }) {
+  if (!sourcePhotoPath) return "";
+  let normalized;
+  try {
+    normalized = validateRecordAssetPath(sourcePhotoPath, SOURCE_PHOTO_FILES);
+  } catch {
+    throw badRequest("Invalid source photo path");
+  }
+
+  const recordId = normalized.split("/")[1];
+  try {
+    await storage.getRecordForUser(recordId, userId);
+    return normalized;
+  } catch (error) {
+    if (!(error && error.status === 404)) {
+      throw error;
+    }
+  }
+
+  const owner = await readSourcePhotoOwner(dataDir, recordId);
+  if (!owner || owner.user_id !== userId) {
+    throw badRequest("Invalid source photo path");
+  }
+  return normalized;
 }
 
 function maxUploadBytes(config) {
@@ -258,6 +324,7 @@ function createApp(options = {}) {
     try {
       const recordId = req.body.recordId || `upload-${Date.now().toString(36)}`;
       validateRecordId(recordId);
+      await assertSourcePhotoWritable({ storage, dataDir, recordId, userId: req.userId });
       const sourcePhotoPath = `records/${recordId}/source-photo.webp`;
       const outputPath = resolveRecordAssetPath(dataDir, sourcePhotoPath, SOURCE_PHOTO_FILES);
       let metadata;
@@ -278,6 +345,7 @@ function createApp(options = {}) {
       } catch {
         throw badRequest("Invalid image");
       }
+      await saveSourcePhotoOwner(dataDir, recordId, req.userId);
       responseBody = {
         record_id: recordId,
         source_photo_path: sourcePhotoPath,
@@ -291,22 +359,34 @@ function createApp(options = {}) {
   }));
 
   app.post("/api/generations", asyncHandler(async (req, res) => {
+    const sourcePhotoPath = await validateSourcePhotoPathForUser({
+      storage,
+      dataDir,
+      userId: req.userId,
+      sourcePhotoPath: req.body.source_photo_path || ""
+    });
     const result = await jobs.createArtwork({
       userId: req.userId,
       type: req.body.type,
       answers: req.body.answers || {},
       conversationNotes: req.body.conversationNotes || req.body.conversation_notes || "",
-      sourcePhotoPath: req.body.source_photo_path || "",
+      sourcePhotoPath,
       recommendedArtworkSize: req.body.recommended_artwork_size || null
     });
     res.status(result.limitReached ? 429 : 201).json(result);
   }));
 
   app.post("/api/records/:id/fusion", asyncHandler(async (req, res) => {
+    const sourcePhotoPath = await validateSourcePhotoPathForUser({
+      storage,
+      dataDir,
+      userId: req.userId,
+      sourcePhotoPath: req.body.source_photo_path || req.body.sourcePhotoPath || ""
+    });
     const result = await jobs.createFusion({
       userId: req.userId,
       recordId: req.params.id,
-      sourcePhotoPath: req.body.source_photo_path || req.body.sourcePhotoPath || ""
+      sourcePhotoPath
     });
     res.status(result.limitReached ? 429 : 201).json(result);
   }));

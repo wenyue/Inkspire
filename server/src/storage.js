@@ -92,10 +92,27 @@ function compareNewestFirst(a, b) {
   return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
 }
 
+function isActiveStatus(status) {
+  return status === "queued" || status === "running";
+}
+
+async function fileExists(filePath) {
+  try {
+    await fs.access(filePath);
+    return true;
+  } catch (error) {
+    if (error && error.code === "ENOENT") {
+      return false;
+    }
+    throw error;
+  }
+}
+
 function createStorage(dataDir) {
   const libraryPath = path.join(dataDir, "library.json");
   const recordsDir = path.join(dataDir, "records");
   const ordersDir = path.join(dataDir, "orders");
+  let staleRecordsCleaned = false;
 
   async function ensureStore() {
     await fs.mkdir(recordsDir, { recursive: true });
@@ -107,6 +124,48 @@ function createStorage(dataDir) {
         throw error;
       }
       await writeJsonAtomic(libraryPath, []);
+    }
+    await cleanupStaleActiveRecords();
+  }
+
+  async function cleanupStaleActiveRecords() {
+    if (staleRecordsCleaned) return;
+    staleRecordsCleaned = true;
+
+    const entries = await fs.readdir(recordsDir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      let record;
+      try {
+        record = await getRecord(entry.name);
+      } catch (error) {
+        if (error && error.code === "ENOENT") {
+          continue;
+        }
+        throw error;
+      }
+
+      if (!isActiveStatus(record.status) && !isActiveStatus(record.fusion_status)) {
+        continue;
+      }
+
+      const artworkExists = record.artwork_path
+        ? await fileExists(path.join(dataDir, validateRecordAssetPath(record.artwork_path)))
+        : false;
+      const nextRecord = {
+        ...record,
+        diagnostics: record.diagnostics || { reason: "generation_interrupted" },
+        error: record.error || "generation interrupted"
+      };
+
+      if (isActiveStatus(nextRecord.status)) {
+        nextRecord.status = artworkExists ? "succeeded" : "failed";
+      }
+      if (isActiveStatus(nextRecord.fusion_status)) {
+        nextRecord.fusion_status = "failed";
+      }
+
+      await saveRecord(nextRecord, nextRecord.user_id || "");
     }
   }
 
