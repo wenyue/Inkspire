@@ -25,8 +25,24 @@ function localizedText(value: Record<string, string>, locale: Locale): string {
   return value[locale] ?? value["zh-Hans"] ?? Object.values(value)[0] ?? "";
 }
 
+function localizedPreviewText(question: Question, locale: Locale): string {
+  const preview = question.preview_prompt;
+  if (preview && typeof preview === "object") {
+    return localizedText(preview, locale);
+  }
+  if (locale === "zh-Hans" && preview) {
+    return preview;
+  }
+  return localizedText(question.title, locale);
+}
+
 function questionOptions(question: Question, locale: Locale): string[] {
   return question.options[locale] ?? question.options["zh-Hans"] ?? [];
+}
+
+function previewClassName(questionId: string, index: number): string {
+  const family = questionId.startsWith("calligraphy") ? "calligraphy" : "painting";
+  return `option-preview ${family}-preview preview-${index % 4}`;
 }
 
 export default function Studio({ config, locale, t, list, onResult, resultSlot }: StudioProps) {
@@ -136,13 +152,14 @@ export default function Studio({ config, locale, t, list, onResult, resultSlot }
         {question ? (
           <>
             <div className="preview-ink" aria-hidden="true">
-              <span>{question.preview_prompt}</span>
+              <span>{localizedPreviewText(question, locale)}</span>
             </div>
             <h2>{localizedText(question.title, locale)}</h2>
             <div className="option-grid">
-              {questionOptions(question, locale).map((option) => (
+              {questionOptions(question, locale).map((option, index) => (
                 <button key={option} type="button" onClick={() => answerQuestion(option)}>
-                  {option}
+                  <span className={previewClassName(question.id, index)} aria-hidden="true" />
+                  <span className="option-label">{option}</span>
                 </button>
               ))}
             </div>

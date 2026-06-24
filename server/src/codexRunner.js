@@ -146,6 +146,8 @@ function findNewestNewGeneratedPng(root, beforeSnapshot) {
 
 function eventText(event) {
   const payload = event?.payload || event;
+  const item = payload?.item;
+  const itemText = item?.type === "command_execution" ? "" : item?.aggregated_output || item?.text;
   return [
     payload?.message,
     payload?.text,
@@ -153,8 +155,7 @@ function eventText(event) {
     payload?.detail,
     payload?.status,
     payload?.revised_prompt,
-    payload?.item?.aggregated_output,
-    payload?.item?.text
+    itemText
   ].filter((value) => typeof value === "string" && value.length > 0).join("\n");
 }
 

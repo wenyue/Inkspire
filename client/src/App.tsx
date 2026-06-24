@@ -79,8 +79,12 @@ export default function App() {
         </div>
         <label className="language-select">
           <Languages aria-hidden="true" size={16} />
-          <span>语言</span>
-          <select aria-label="语言" value={locale} onChange={(event) => setLocale(event.target.value as Locale)}>
+          <span className="language-select-label">{t("language.label")}</span>
+          <select
+            aria-label={t("language.label")}
+            value={locale}
+            onChange={(event) => setLocale(event.target.value as Locale)}
+          >
             <option value="zh-Hans">简</option>
             <option value="zh-Hant">繁</option>
             <option value="en">EN</option>
@@ -92,7 +96,17 @@ export default function App() {
         {activeTab === "studio" ? (
           <Studio config={config} locale={locale} t={t} list={list} onResult={onResult} resultSlot={resultSlot} />
         ) : null}
-        {activeTab === "library" ? <Library records={library} emptyLabel={t("empty.library")} /> : null}
+        {activeTab === "library" ? (
+          <Library
+            records={library}
+            emptyLabel={t("empty.library")}
+            labels={{
+              artwork: t("library.artwork"),
+              fusion: t("library.fusion"),
+              failed: t("library.failed")
+            }}
+          />
+        ) : null}
         {activeTab === "experts" ? (
           <Experts experts={config.experts} title={t("experts.title")} contactPendingLabel={t("experts.contactPending")} />
         ) : null}

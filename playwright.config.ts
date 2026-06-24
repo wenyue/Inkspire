@@ -13,7 +13,7 @@ export default defineConfig({
   webServer: {
     command: "INKSPIRE_E2E=1 INKSPIRE_DATA_DIR=.e2e-data npm run dev",
     url: "http://127.0.0.1:5173",
-    reuseExistingServer: !process.env.CI,
+    reuseExistingServer: false,
     timeout: 120_000
   },
   projects: [

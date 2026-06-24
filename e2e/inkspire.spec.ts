@@ -14,7 +14,7 @@ test("mobile user can complete Inkspire creation flow with mocked generation", a
 
   await page.getByLabel("语言").selectOption("en");
   await expect(page.getByRole("button", { name: "Studio" })).toBeVisible();
-  await page.getByLabel("语言").selectOption("zh-Hans");
+  await page.getByLabel("Language").selectOption("zh-Hans");
   await expect(page.getByRole("button", { name: "画案" })).toBeVisible();
 
   await page.locator('input[type="file"]').first().setInputFiles({
@@ -29,8 +29,8 @@ test("mobile user can complete Inkspire creation flow with mocked generation", a
   for (const option of ["山水", "水墨", "清雅", "竖幅", "适中"]) {
     await page.getByRole("button", { name: option }).click();
   }
-  await page.getByText("可以开始生成").click();
-  await page.getByRole("button", { name: /生成/ }).click();
+  await expect(page.getByRole("button", { name: "可以开始生成" })).toBeVisible();
+  await page.getByRole("button", { name: "生成", exact: true }).click();
 
   await expect(page.getByRole("img", { name: "作品图" })).toBeVisible({ timeout: 30_000 });
   await expect(page.getByRole("img", { name: "融合图" })).toBeVisible();

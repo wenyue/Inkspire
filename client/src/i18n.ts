@@ -5,6 +5,7 @@ export type Dictionaries = Partial<Record<Locale, Dictionary>>;
 
 const CLIENT_OVERRIDES: Dictionaries = {
   "zh-Hans": {
+    language: { label: "语言" },
     tabs: { experts: "雅匠" },
     studio: {
       title: "墨起",
@@ -26,6 +27,11 @@ const CLIENT_OVERRIDES: Dictionaries = {
       failedTitle: "生成未完成",
       failedHint: "可以补充要求后再试一次，或稍后重新生成。"
     },
+    library: {
+      artwork: "作品",
+      fusion: "作品与融合图",
+      failed: "生成未完成"
+    },
     experts: { title: "雅匠", contactPending: "联系方式待确认" },
     production: {
       title: "制作作品",
@@ -37,6 +43,7 @@ const CLIENT_OVERRIDES: Dictionaries = {
     }
   },
   "zh-Hant": {
+    language: { label: "語言" },
     tabs: { experts: "雅匠" },
     studio: {
       title: "墨起",
@@ -58,6 +65,11 @@ const CLIENT_OVERRIDES: Dictionaries = {
       failedTitle: "生成未完成",
       failedHint: "可以補充要求後再試一次，或稍後重新生成。"
     },
+    library: {
+      artwork: "作品",
+      fusion: "作品與融合圖",
+      failed: "生成未完成"
+    },
     experts: { title: "雅匠", contactPending: "聯絡方式待確認" },
     production: {
       title: "製作作品",
@@ -69,6 +81,7 @@ const CLIENT_OVERRIDES: Dictionaries = {
     }
   },
   en: {
+    language: { label: "Language" },
     studio: {
       title: "Inkspire",
       subtitle: "Chinese painting and calligraphy in a garden scroll",
@@ -88,6 +101,11 @@ const CLIENT_OVERRIDES: Dictionaries = {
       addNotes: "Add notes",
       failedTitle: "Generation did not finish",
       failedHint: "Add a note and try again, or regenerate later."
+    },
+    library: {
+      artwork: "Artwork",
+      fusion: "Artwork and fusion",
+      failed: "Generation did not finish"
     },
     experts: { title: "Artisans", contactPending: "Contact details pending" },
     production: {

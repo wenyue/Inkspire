@@ -84,6 +84,7 @@ button {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  flex: 0 0 auto;
   min-height: 38px;
   padding: 0 10px;
   border: 1px solid rgba(57, 87, 75, 0.18);
@@ -91,7 +92,12 @@ button {
   background: rgba(255, 252, 243, 0.78);
 }
 
+.language-select-label {
+  white-space: nowrap;
+}
+
 .language-select select {
+  min-width: 48px;
   border: 0;
   background: transparent;
   color: #2f493f;
@@ -207,6 +213,101 @@ button {
   box-shadow: inset 0 0 0 1px rgba(46, 79, 67, 0.16);
   min-width: 0;
   overflow-wrap: anywhere;
+}
+
+.option-grid button {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  min-height: 76px;
+  padding: 8px;
+  text-align: left;
+}
+
+.option-label {
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.option-preview {
+  position: relative;
+  display: block;
+  width: 76px;
+  height: 60px;
+  overflow: hidden;
+  border-radius: 8px;
+  background:
+    radial-gradient(circle at 36% 35%, rgba(37, 62, 54, 0.42), transparent 17%),
+    radial-gradient(circle at 68% 58%, rgba(119, 155, 136, 0.34), transparent 26%),
+    linear-gradient(135deg, #f8f0df, #d9e8da);
+  box-shadow: inset 0 0 0 1px rgba(48, 78, 67, 0.12);
+}
+
+.option-preview::before,
+.option-preview::after {
+  position: absolute;
+  content: "";
+  inset: auto;
+}
+
+.painting-preview::before {
+  right: 8px;
+  bottom: 10px;
+  width: 36px;
+  height: 18px;
+  border-radius: 50% 50% 20% 20%;
+  background: rgba(38, 83, 70, 0.34);
+}
+
+.painting-preview::after {
+  left: 12px;
+  bottom: 9px;
+  width: 42px;
+  height: 2px;
+  background: rgba(95, 129, 113, 0.5);
+  box-shadow: 8px -10px 0 rgba(127, 155, 138, 0.2);
+}
+
+.calligraphy-preview {
+  background:
+    linear-gradient(90deg, transparent 18%, rgba(54, 66, 58, 0.12) 18% 20%, transparent 20% 48%, rgba(54, 66, 58, 0.08) 48% 50%, transparent 50%),
+    linear-gradient(135deg, #fbf3e4, #e3ecdf);
+}
+
+.calligraphy-preview::before {
+  top: 10px;
+  left: 18px;
+  width: 8px;
+  height: 38px;
+  border-radius: 999px;
+  background: rgba(28, 47, 41, 0.72);
+  transform: rotate(7deg);
+  box-shadow: 18px 2px 0 rgba(28, 47, 41, 0.6), 34px -3px 0 rgba(28, 47, 41, 0.44);
+}
+
+.calligraphy-preview::after {
+  right: 10px;
+  bottom: 9px;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background: rgba(140, 47, 40, 0.72);
+}
+
+.preview-1 {
+  filter: saturate(1.08);
+}
+
+.preview-2 {
+  background:
+    radial-gradient(circle at 68% 35%, rgba(92, 117, 76, 0.38), transparent 18%),
+    radial-gradient(circle at 42% 58%, rgba(87, 128, 141, 0.28), transparent 28%),
+    linear-gradient(135deg, #fbf1df, #dce8e0);
+}
+
+.preview-3 {
+  opacity: 0.88;
 }
 
 .conversation-panel textarea {
@@ -388,10 +489,17 @@ button {
   width: 62px;
   height: 62px;
   place-items: center;
+  overflow: hidden;
   border-radius: 8px;
   background: #d9e7dc;
   color: #8c2f28;
   font-weight: 700;
+}
+
+.library-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .library-item h3,

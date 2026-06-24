@@ -135,3 +135,20 @@ test("returns diagnostic possible_safety_block when stderr contains policy/refus
     assert.match(diagnostics.stderr_tail, /safety policy/);
   });
 });
+
+test("does not treat unrelated command output as a safety block", async () => {
+  await withTempDir(async (temp) => {
+    const eventsPath = path.join(temp, "codex-events.jsonl");
+    await fs.writeFile(eventsPath, JSON.stringify({
+      type: "item.completed",
+      item: {
+        type: "command_execution",
+        aggregated_output: "local skill docs mention safety policy as general guidance"
+      }
+    }));
+
+    const diagnostics = diagnoseCodexImageGeneration({ eventsPath });
+
+    assert.equal(diagnostics.possible_safety_block, false);
+  });
+});

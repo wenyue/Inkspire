@@ -199,6 +199,39 @@ describe("App", () => {
     expect(screen.getByRole("button", { name: "Artisans" })).toBeInTheDocument();
   });
 
+  it("localizes the language selector label itself", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await screen.findByLabelText("语言");
+    await user.selectOptions(screen.getByLabelText("语言"), "en");
+
+    expect(screen.getByLabelText("Language")).toBeInTheDocument();
+    expect(screen.getByText("Language")).toBeInTheDocument();
+
+    await user.selectOptions(screen.getByLabelText("Language"), "zh-Hant");
+
+    expect(screen.getByLabelText("語言")).toBeInTheDocument();
+    expect(screen.getByText("語言")).toBeInTheDocument();
+  });
+
+  it("renders visual previews for options without leaking Chinese preview text in English", async () => {
+    const user = userEvent.setup();
+    const { container } = render(<App />);
+
+    await screen.findByLabelText("语言");
+    await user.selectOptions(screen.getByLabelText("语言"), "en");
+
+    expect(screen.getByText("Choose the work type")).toBeInTheDocument();
+    expect(screen.queryByText("选择国画或书法创作方向")).not.toBeInTheDocument();
+    expect(container.querySelectorAll(".option-preview")).toHaveLength(2);
+
+    await user.click(screen.getByRole("button", { name: "Painting" }));
+
+    expect(screen.getByRole("heading", { name: "What subject should the painting show?" })).toBeInTheDocument();
+    expect(container.querySelectorAll(".option-preview")).toHaveLength(4);
+  });
+
   it("advances the question flow after clicking 国画", async () => {
     const user = userEvent.setup();
     render(<App />);
@@ -282,6 +315,21 @@ describe("App", () => {
 
     expect(screen.queryByRole("img", { name: "作品图" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "生成" })).toBeInTheDocument();
+  });
+
+  it("shows the generated artwork thumbnail in the library without reloading", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole("button", { name: "国画" }));
+    await user.click(screen.getByRole("button", { name: "山水" }));
+    await user.click(screen.getByRole("button", { name: "生成" }));
+    await user.click(await screen.findByRole("button", { name: "藏卷" }));
+
+    expect(screen.getByRole("img", { name: "record-1" })).toHaveAttribute(
+      "src",
+      "/api/records/record-1/images/artwork"
+    );
   });
 
   it("shows a failed-result state without production actions when generation fails", async () => {

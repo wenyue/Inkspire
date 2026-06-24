@@ -7,7 +7,7 @@ export type LocalizedText = Record<string, string>;
 export interface Question {
   id: string;
   applies_to?: string[];
-  preview_prompt?: string;
+  preview_prompt?: string | LocalizedText;
   title: LocalizedText;
   options: Record<string, string[]>;
   default_option?: string;
@@ -24,7 +24,11 @@ export type Answers = Record<string, string>;
 
 export const WORK_TYPE_QUESTION: Question = {
   id: "work_type",
-  preview_prompt: "选择国画或书法创作方向",
+  preview_prompt: {
+    "zh-Hans": "选择国画或书法创作方向",
+    "zh-Hant": "選擇國畫或書法創作方向",
+    en: "Preview the artwork direction"
+  },
   title: {
     "zh-Hans": "先定作品类型",
     "zh-Hant": "先定作品類型",
