@@ -10,7 +10,7 @@ const { createApp } = require("../src/app");
 
 const root = path.resolve(__dirname, "../..");
 
-async function withTempApp(fn) {
+async function withTempApp(fn, overrides = {}) {
   const temp = await fs.mkdtemp(path.join(os.tmpdir(), "inkspire-app-"));
   const config = loadConfig(root);
   config.app.runtime.codexCommand = process.execPath;
@@ -19,14 +19,15 @@ async function withTempApp(fn) {
       projectRoot: root,
       dataDir: temp,
       config,
-      runner: async ({ outputPngPath }) => {
+      runner: overrides.runner || (async ({ outputPngPath }) => {
         await fs.mkdir(path.dirname(outputPngPath), { recursive: true });
         await fs.writeFile(outputPngPath, pngBuffer());
         return { pngPath: outputPngPath, diagnostics: { reason: "fake_runner" } };
-      }
+      })
     });
     await fn({ app, temp, config });
   } finally {
+    await new Promise((resolve) => setTimeout(resolve, 25));
     await fs.rm(temp, { recursive: true, force: true });
   }
 }
@@ -40,6 +41,36 @@ function pngBuffer() {
     png.data[offset + 3] = 255;
   }
   return PNG.sync.write(png);
+}
+
+async function waitUntil(predicate, timeoutMs = 2000) {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    if (await predicate()) return;
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  throw new Error("Timed out waiting for condition");
+}
+
+async function waitForJob(agent, jobId, expectedStatus = "succeeded") {
+  let lastJob = null;
+  await waitUntil(async () => {
+    const response = await agent.get(`/api/jobs/${jobId}`).expect(200);
+    lastJob = response.body;
+    return response.body.status === expectedStatus || response.body.status === "failed";
+  });
+  assert.equal(lastJob.status, expectedStatus);
+  return lastJob;
+}
+
+async function waitForRecordStatus(agent, recordId, expectedStatus = "succeeded") {
+  let lastRecord = null;
+  await waitUntil(async () => {
+    const response = await agent.get(`/api/records/${recordId}`).expect(200);
+    lastRecord = response.body;
+    return response.body.status === expectedStatus;
+  });
+  return lastRecord;
 }
 
 test("GET /api/health returns ok and public readiness fields", async () => {
@@ -94,7 +125,8 @@ test("API replaces malformed inkspire_user cookie values", async () => {
 
 test("POST /api/generations creates a job and eventually a record with artwork", async () => {
   await withTempApp(async ({ app, temp }) => {
-    const response = await request(app)
+    const agent = request.agent(app);
+    const response = await agent
       .post("/api/generations")
       .send({
         type: "painting",
@@ -104,7 +136,11 @@ test("POST /api/generations creates a job and eventually a record with artwork",
       })
       .expect(201);
 
-    assert.equal(response.body.job.status, "succeeded");
+    assert.equal(response.body.job.status, "queued");
+    await waitForJob(agent, response.body.job.id);
+    const record = await waitForRecordStatus(agent, response.body.record.id);
+
+    assert.equal(record.status, "succeeded");
     assert.equal(response.body.record.type, "painting");
     assert.equal(response.body.record.favorite, true);
     assert.equal(response.body.record.source_photo_path, "records/upload-before-generate/source-photo.webp");
@@ -138,12 +174,13 @@ test("POST /api/uploads/photo returns source_photo_path and inferred artwork siz
 
 test("GET /api/records/:id/images/source reads source_photo_path", async () => {
   await withTempApp(async ({ app }) => {
-    const upload = await request(app)
+    const agent = request.agent(app);
+    const upload = await agent
       .post("/api/uploads/photo")
       .attach("photo", pngBuffer(120), { filename: "source.png", contentType: "image/png" })
       .expect(201);
 
-    const created = await request(app)
+    const created = await agent
       .post("/api/generations")
       .send({
         type: "painting",
@@ -152,7 +189,9 @@ test("GET /api/records/:id/images/source reads source_photo_path", async () => {
       })
       .expect(201);
 
-    const response = await request(app)
+    await waitForJob(agent, created.body.job.id);
+
+    const response = await agent
       .get(`/api/records/${created.body.record.id}/images/source`)
       .expect(200);
 
@@ -162,23 +201,28 @@ test("GET /api/records/:id/images/source reads source_photo_path", async () => {
 
 test("POST /api/records/:id/fusion can attach a source photo after artwork generation", async () => {
   await withTempApp(async ({ app }) => {
-    const upload = await request(app)
+    const agent = request.agent(app);
+    const upload = await agent
       .post("/api/uploads/photo")
       .attach("photo", pngBuffer(130), { filename: "source.png", contentType: "image/png" })
       .expect(201);
-    const created = await request(app)
+    const created = await agent
       .post("/api/generations")
       .send({ type: "painting", answers: { painting_subject: "山水" } })
       .expect(201);
+    await waitForJob(agent, created.body.job.id);
 
-    const response = await request(app)
+    const response = await agent
       .post(`/api/records/${created.body.record.id}/fusion`)
       .send({ source_photo_path: upload.body.source_photo_path })
       .expect(201);
 
     assert.equal(response.body.record.source_photo_path, upload.body.source_photo_path);
-    assert.equal(response.body.record.has_fusion, true);
-    await request(app)
+    assert.equal(response.body.record.status, "queued");
+    await waitForJob(agent, response.body.job.id);
+    const fused = await agent.get(`/api/records/${created.body.record.id}`).expect(200);
+    assert.equal(fused.body.has_fusion, true);
+    await agent
       .get(`/api/records/${created.body.record.id}/images/source`)
       .expect(200);
   });
@@ -186,12 +230,14 @@ test("POST /api/records/:id/fusion can attach a source photo after artwork gener
 
 test("GET /api/library returns the generated record", async () => {
   await withTempApp(async ({ app }) => {
-    const created = await request(app)
+    const agent = request.agent(app);
+    const created = await agent
       .post("/api/generations")
       .send({ type: "calligraphy", answers: { text: "明月松间照" } })
       .expect(201);
 
-    const response = await request(app).get("/api/library").expect(200);
+    await waitForJob(agent, created.body.job.id);
+    const response = await agent.get("/api/library").expect(200);
 
     assert.equal(response.body.records.length, 1);
     assert.equal(response.body.records[0].id, created.body.record.id);
@@ -200,14 +246,68 @@ test("GET /api/library returns the generated record", async () => {
   });
 });
 
+test("library, records, and jobs are scoped to the browser cookie user", async () => {
+  await withTempApp(async ({ app }) => {
+    const firstUser = request.agent(app);
+    const secondUser = request.agent(app);
+    const created = await firstUser
+      .post("/api/generations")
+      .send({ type: "painting", answers: { painting_subject: "山水" } })
+      .expect(201);
+
+    await waitForJob(firstUser, created.body.job.id);
+
+    const firstLibrary = await firstUser.get("/api/library").expect(200);
+    const secondLibrary = await secondUser.get("/api/library").expect(200);
+    assert.equal(firstLibrary.body.records.length, 1);
+    assert.equal(secondLibrary.body.records.length, 0);
+
+    await secondUser.get(`/api/records/${created.body.record.id}`).expect(404);
+    await secondUser.get(`/api/jobs/${created.body.job.id}`).expect(404);
+  });
+});
+
+test("POST /api/generations returns active jobs when the user already has two generations", async () => {
+  const releases = [];
+  await withTempApp(async ({ app }) => {
+    const agent = request.agent(app);
+    const first = await agent.post("/api/generations").send({ type: "painting", answers: {} }).expect(201);
+    const second = await agent.post("/api/generations").send({ type: "painting", answers: {} }).expect(201);
+
+    const third = await agent.post("/api/generations").send({ type: "painting", answers: {} }).expect(429);
+    assert.equal(third.body.limitReached, true);
+    assert.equal(third.body.code, "user_generation_limit_reached");
+    assert.equal(third.body.activeJobs.length, 2);
+
+    const active = await agent.get("/api/jobs/active").expect(200);
+    assert.equal(active.body.jobs.length, 2);
+
+    await waitUntil(() => releases.length === 2);
+    for (const release of releases) release();
+    await waitForJob(agent, first.body.job.id);
+    await waitForJob(agent, second.body.job.id);
+  }, {
+    runner: async ({ outputPngPath }) => {
+      await new Promise((resolve) => {
+        releases.push(resolve);
+      });
+      await fs.mkdir(path.dirname(outputPngPath), { recursive: true });
+      await fs.writeFile(outputPngPath, pngBuffer());
+      return { pngPath: outputPngPath, diagnostics: { reason: "slow_runner" } };
+    }
+  });
+});
+
 test("POST /api/records/:id/production-estimate returns expert_custom > expert_guided", async () => {
   await withTempApp(async ({ app }) => {
-    const created = await request(app)
+    const agent = request.agent(app);
+    const created = await agent
       .post("/api/generations")
       .send({ type: "painting", answers: {} })
       .expect(201);
+    await waitForJob(agent, created.body.job.id);
 
-    const response = await request(app)
+    const response = await agent
       .post(`/api/records/${created.body.record.id}/production-estimate`)
       .send({ expertId: "wu_jiayin" })
       .expect(200);
@@ -219,12 +319,14 @@ test("POST /api/records/:id/production-estimate returns expert_custom > expert_g
 
 test("POST /api/records/:id/production-estimate scales estimates by selected size", async () => {
   await withTempApp(async ({ app }) => {
-    const created = await request(app)
+    const agent = request.agent(app);
+    const created = await agent
       .post("/api/generations")
       .send({ type: "painting", answers: {} })
       .expect(201);
+    await waitForJob(agent, created.body.job.id);
 
-    const response = await request(app)
+    const response = await agent
       .post(`/api/records/${created.body.record.id}/production-estimate`)
       .send({ expertId: "wu_jiayin", size: "large" })
       .expect(200);
@@ -237,11 +339,12 @@ test("POST /api/records/:id/production-estimate scales estimates by selected siz
 
 test("POST /api/records/:id/production-orders creates retrievable order with size and reference level", async () => {
   await withTempApp(async ({ app }) => {
-    const upload = await request(app)
+    const agent = request.agent(app);
+    const upload = await agent
       .post("/api/uploads/photo")
       .attach("photo", pngBuffer(), { filename: "source.png", contentType: "image/png" })
       .expect(201);
-    const created = await request(app)
+    const created = await agent
       .post("/api/generations")
       .send({
         type: "painting",
@@ -250,8 +353,9 @@ test("POST /api/records/:id/production-orders creates retrievable order with siz
         recommended_artwork_size: upload.body.recommended_artwork_size
       })
       .expect(201);
+    await waitForJob(agent, created.body.job.id);
 
-    const response = await request(app)
+    const response = await agent
       .post(`/api/records/${created.body.record.id}/production-orders`)
       .send({
         expertId: "wu_jiayin",
@@ -273,7 +377,7 @@ test("POST /api/records/:id/production-orders creates retrievable order with siz
     });
     assert.equal(response.body.order.record_snapshot.artwork_path, created.body.record.artwork_path);
 
-    const lookup = await request(app)
+    const lookup = await agent
       .get(`/api/production-orders/${response.body.order.id}`)
       .expect(200);
 
