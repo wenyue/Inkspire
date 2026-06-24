@@ -11,7 +11,13 @@ interface LibraryProps {
     artwork: string;
     fusion: string;
     failed: string;
+    openRecord?: string;
     removeFavorite?: string;
+    removeFavoriteShort?: string;
+    removeConfirmTitle?: string;
+    removeConfirmHint?: string;
+    removeConfirmCancel?: string;
+    removeConfirmAction?: string;
   };
   onOpen?: (record: LibraryRecord) => void;
   onEmptyAction?: () => void;
@@ -81,15 +87,22 @@ function LibraryItem({
   onFavoriteToggle?: (record: LibraryRecord, favorite: boolean) => void;
 }) {
   const [imageFailed, setImageFailed] = useState(false);
+  const [confirmingRemove, setConfirmingRemove] = useState(false);
   const src = imageSrc(record);
+  const openLabel = labels.openRecord ?? "查看作品";
   const removeLabel = labels.removeFavorite ?? "移出藏卷";
+  const removeShortLabel = labels.removeFavoriteShort ?? "移出";
+  const removeConfirmTitle = labels.removeConfirmTitle ?? "从藏卷移出？";
+  const removeConfirmHint = labels.removeConfirmHint ?? "作品记录不会删除。";
+  const removeConfirmCancel = labels.removeConfirmCancel ?? "取消";
+  const removeConfirmAction = labels.removeConfirmAction ?? removeShortLabel;
 
   return (
     <article className="library-item">
       <button
         className="library-open surface-clear-button"
         type="button"
-        aria-label={`查看 ${record.title || record.id}`}
+        aria-label={`${openLabel} ${record.title || record.id}`}
         onClick={() => onOpen?.(record)}
       >
         <span className={imageFailed ? "library-thumb library-thumb-unavailable" : "library-thumb"}>
@@ -104,21 +117,42 @@ function LibraryItem({
         <span className="library-copy">
           <strong>{record.title || record.id}</strong>
           <span className="library-meta">{metadata(record, labels)}</span>
+          <span className="library-open-action">
+            <span>{openLabel}</span>
+            <span aria-hidden="true">→</span>
+          </span>
         </span>
       </button>
       <div className="library-actions">
         {onFavoriteToggle && record.status !== "failed" ? (
-          <button
-            className="library-remove-action"
-            type="button"
-            aria-label={removeLabel}
-            title={removeLabel}
-            onClick={() => onFavoriteToggle(record, false)}
-          >
-            <BookmarkX aria-hidden="true" size={16} />
-          </button>
+          <>
+            <button
+              className="library-remove-action"
+              type="button"
+              aria-label={removeLabel}
+              title={removeLabel}
+              onClick={() => setConfirmingRemove(true)}
+            >
+              <BookmarkX aria-hidden="true" size={16} />
+              <span>{removeShortLabel}</span>
+            </button>
+          </>
         ) : null}
       </div>
+      {confirmingRemove ? (
+        <div className="library-remove-confirm" role="group" aria-label={removeConfirmTitle}>
+          <strong>{removeConfirmTitle}</strong>
+          <span>{removeConfirmHint}</span>
+          <div>
+            <button type="button" className="secondary-action compact-action" onClick={() => setConfirmingRemove(false)}>
+              {removeConfirmCancel}
+            </button>
+            <button type="button" className="primary-action compact-action" onClick={() => onFavoriteToggle(record, false)}>
+              {removeConfirmAction}
+            </button>
+          </div>
+        </div>
+      ) : null}
     </article>
   );
 }

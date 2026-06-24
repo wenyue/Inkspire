@@ -10,12 +10,12 @@ const CLIENT_OVERRIDES: Dictionaries = {
     studio: {
       title: "墨起",
       subtitle: "园林卷轴里的书画生成",
-      photo: "照片可选",
+      photo: "您想要把作品摆在哪里？",
       camera: "拍照",
       album: "相册",
       skipPhoto: "先不放照片",
       uploadingPhoto: "正在整理照片",
-      photoReady: "照片已准备，将生成融合图",
+      photoReady: "已提供环境图，将用于生成效果图。",
       photoUploaded: "已选照片",
       selectedPhotoPreview: "已选照片预览",
       removePhoto: "移除照片",
@@ -31,23 +31,29 @@ const CLIENT_OVERRIDES: Dictionaries = {
     errors: { generic: "暂时无法完成，请稍后再试。" },
     result: {
       artwork: "作品图",
-      fusion: "融合图",
+      fusion: "效果图",
       continue: "继续生成",
-      attachPhotoFusion: "补图生成融合图",
+      attachPhotoFusion: "您想要把作品摆在哪里？",
       addNotes: "补充要求",
       makeHint: "可先看尺寸和估价，确认意向后再联系制作。",
       failedTitle: "生成未完成",
       failedHint: "可以补充要求后再试一次，或稍后重新生成。",
       imageUnavailableTitle: "作品图暂时无法显示",
       imageUnavailableHint: "可以补充要求后再生成，或稍后从藏卷重新打开。",
-      fusionUnavailableTitle: "融合图暂时无法显示",
-      fusionUnavailableHint: "作品图仍可继续查看，也可以稍后重新补图。"
+      fusionUnavailableTitle: "效果图暂时无法显示",
+      fusionUnavailableHint: "作品图仍可继续查看，也可以稍后重新提供环境图。"
     },
     library: {
       artwork: "作品",
-      fusion: "作品与融合图",
+      fusion: "作品与效果图",
       failed: "生成未完成",
-      removeFavorite: "移出藏卷"
+      openRecord: "查看作品",
+      removeFavorite: "移出藏卷",
+      removeFavoriteShort: "移出",
+      removeConfirmTitle: "从藏卷移出？",
+      removeConfirmHint: "作品记录不会删除。",
+      removeConfirmCancel: "取消",
+      removeConfirmAction: "移出"
     },
     empty: {
       library: "藏卷还空着",
@@ -85,12 +91,12 @@ const CLIENT_OVERRIDES: Dictionaries = {
     studio: {
       title: "墨起",
       subtitle: "園林卷軸裡的書畫生成",
-      photo: "照片可選",
+      photo: "您想把作品擺在哪裡？",
       camera: "拍照",
       album: "相簿",
       skipPhoto: "先不放照片",
       uploadingPhoto: "正在整理照片",
-      photoReady: "照片已準備，將生成融合圖",
+      photoReady: "已提供環境圖，將用於生成效果圖。",
       photoUploaded: "已選照片",
       selectedPhotoPreview: "已選照片預覽",
       removePhoto: "移除照片",
@@ -106,23 +112,29 @@ const CLIENT_OVERRIDES: Dictionaries = {
     errors: { generic: "暫時無法完成，請稍後再試。" },
     result: {
       artwork: "作品圖",
-      fusion: "融合圖",
+      fusion: "效果圖",
       continue: "繼續生成",
-      attachPhotoFusion: "補圖生成融合圖",
+      attachPhotoFusion: "您想把作品擺在哪裡？",
       addNotes: "補充要求",
       makeHint: "可先看尺寸和估價，確認意向後再聯絡製作。",
       failedTitle: "生成未完成",
       failedHint: "可以補充要求後再試一次，或稍後重新生成。",
       imageUnavailableTitle: "作品圖暫時無法顯示",
       imageUnavailableHint: "可以補充要求後再生成，或稍後從藏卷重新打開。",
-      fusionUnavailableTitle: "融合圖暫時無法顯示",
-      fusionUnavailableHint: "作品圖仍可繼續查看，也可以稍後重新補圖。"
+      fusionUnavailableTitle: "效果圖暫時無法顯示",
+      fusionUnavailableHint: "作品圖仍可繼續查看，也可以稍後重新提供環境圖。"
     },
     library: {
       artwork: "作品",
-      fusion: "作品與融合圖",
+      fusion: "作品與效果圖",
       failed: "生成未完成",
-      removeFavorite: "移出藏卷"
+      openRecord: "查看作品",
+      removeFavorite: "移出藏卷",
+      removeFavoriteShort: "移出",
+      removeConfirmTitle: "從藏卷移出？",
+      removeConfirmHint: "作品記錄不會刪除。",
+      removeConfirmCancel: "取消",
+      removeConfirmAction: "移出"
     },
     empty: {
       library: "藏卷還空著",
@@ -159,12 +171,12 @@ const CLIENT_OVERRIDES: Dictionaries = {
     studio: {
       title: "Inkspire",
       subtitle: "Chinese painting and calligraphy in a garden scroll",
-      photo: "Photo optional",
+      photo: "Where would you like to place the artwork?",
       camera: "Camera",
       album: "Album",
       skipPhoto: "Skip photo",
       uploadingPhoto: "Preparing photo",
-      photoReady: "Photo ready for fusion",
+      photoReady: "Environment image added. It will be used to generate a preview.",
       photoUploaded: "Selected photo",
       selectedPhotoPreview: "Selected photo preview",
       removePhoto: "Remove photo",
@@ -180,23 +192,29 @@ const CLIENT_OVERRIDES: Dictionaries = {
     errors: { generic: "Unable to complete this right now. Please try again." },
     result: {
       artwork: "Artwork",
-      fusion: "Fusion",
+      fusion: "Preview",
       continue: "Generate again",
-      attachPhotoFusion: "Add photo for fusion",
+      attachPhotoFusion: "Where would you like to place the artwork?",
       addNotes: "Add notes",
       makeHint: "Preview size and estimate first; contact follows after confirming intent.",
       failedTitle: "Generation did not finish",
       failedHint: "Add a note and try again, or regenerate later.",
       imageUnavailableTitle: "Artwork cannot be shown right now",
       imageUnavailableHint: "Add notes and generate again, or reopen it from Library later.",
-      fusionUnavailableTitle: "Fusion cannot be shown right now",
-      fusionUnavailableHint: "The artwork can still be viewed. You can add a photo again later."
+      fusionUnavailableTitle: "Preview cannot be shown right now",
+      fusionUnavailableHint: "The artwork can still be viewed. You can add a room photo again later."
     },
     library: {
       artwork: "Artwork",
-      fusion: "Artwork and fusion",
+      fusion: "Artwork and preview",
       failed: "Generation did not finish",
-      removeFavorite: "Remove"
+      openRecord: "View artwork",
+      removeFavorite: "Remove from Library",
+      removeFavoriteShort: "Remove",
+      removeConfirmTitle: "Remove from Library?",
+      removeConfirmHint: "The artwork record will not be deleted.",
+      removeConfirmCancel: "Cancel",
+      removeConfirmAction: "Remove"
     },
     empty: {
       library: "Library is empty",

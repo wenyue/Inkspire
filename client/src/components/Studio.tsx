@@ -74,9 +74,9 @@ function optionPreviewImage(question: Question, index: number, locale: Locale): 
 
 function optionPreviewFallback(question: Question, option: string, index: number): string {
   if (question.id === "calligraphy_script") {
-    return ["楷", "行", "草", "墨"][index] ?? "墨";
+    return ["◆", "●", "◇", "◎"][index] ?? "◆";
   }
-  return option.trim().charAt(0) || "墨";
+  return ["◆", "●", "◇", "◎"][index] ?? "◆";
 }
 
 function continueLabel(locale: Locale): string {
@@ -187,6 +187,7 @@ export default function Studio({
   }, [answers, config]);
   const complete = isQuestionFlowComplete(config, answers);
   const suggestions = list("suggestions");
+  const noteSuggestions = suggestions.slice(1);
   const canGoBack = Boolean(answers.work_type);
   const showCreationPanel = !hasResult || notesFocusRequest > 0;
   const showPhotoPanel = !answers.work_type || !question;
@@ -401,27 +402,21 @@ export default function Studio({
                 {isIteratingResult ? <p className="iteration-hint">{t("studio.iterationHint")}</p> : null}
                 <textarea
                   ref={notesRef}
+                  aria-label={t("studio.notesPlaceholder")}
                   value={conversationNotes}
                   onChange={(event) => setConversationNotes(event.target.value)}
                   placeholder={t("studio.notesPlaceholder")}
                 />
                 <div className="suggestion-row">
-                  {suggestions.map((suggestion, index) => {
-                    const isStartSuggestion = index === 0;
-                    if (isIteratingResult && isStartSuggestion) {
-                      return null;
-                    }
-                    return (
-                      <button
-                        key={suggestion}
-                        type="button"
-                        className={isStartSuggestion ? "primary-chip" : ""}
-                        onClick={() => generate(isStartSuggestion ? undefined : suggestion)}
-                      >
-                        {suggestion}
-                      </button>
-                    );
-                  })}
+                  {noteSuggestions.map((suggestion) => (
+                    <button
+                      key={suggestion}
+                      type="button"
+                      onClick={() => setConversationNotes(suggestion)}
+                    >
+                      {suggestion}
+                    </button>
+                  ))}
                 </div>
                 <div className="conversation-actions">
                   <button className="primary-action" type="button" disabled={!complete || isGenerating} onClick={() => generate()}>

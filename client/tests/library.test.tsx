@@ -5,8 +5,15 @@ import Library from "../src/components/Library";
 
 const labels = {
   artwork: "作品",
-  fusion: "作品与融合图",
-  failed: "生成未完成"
+  fusion: "作品与效果图",
+  failed: "生成未完成",
+  openRecord: "查看作品",
+  removeFavorite: "移出藏卷",
+  removeFavoriteShort: "移出",
+  removeConfirmTitle: "从藏卷移出？",
+  removeConfirmHint: "作品记录不会删除。",
+  removeConfirmCancel: "取消",
+  removeConfirmAction: "移出"
 };
 
 describe("Library", () => {
@@ -60,7 +67,7 @@ describe("Library", () => {
       "src",
       "/api/records/record-2/images/fusion"
     );
-    expect(screen.getByText("作品与融合图")).toBeInTheDocument();
+    expect(screen.getByText("作品与效果图")).toBeInTheDocument();
   });
 
   it("shows a clear unavailable state when a saved thumbnail fails to load", () => {
@@ -109,7 +116,30 @@ describe("Library", () => {
     expect(screen.getByText(/2026/)).toBeInTheDocument();
   });
 
-  it("keeps remove from library as a secondary icon action", () => {
+  it("makes opening saved records visible on the card", () => {
+    render(
+      <Library
+        records={[
+          {
+            id: "record-visible-open",
+            type: "painting",
+            title: "明显可打开作品",
+            thumbnail_path: "records/record-visible-open/artwork.webp",
+            status: "succeeded"
+          }
+        ]}
+        emptyLabel="暂无作品"
+        labels={labels}
+      />
+    );
+
+    expect(screen.getByText("查看作品")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /查看作品 明显可打开作品/ })).toHaveTextContent("查看作品");
+  });
+
+  it("asks for confirmation before moving a work out of the library", async () => {
+    const user = userEvent.setup();
+    const onFavoriteToggle = vi.fn();
     render(
       <Library
         records={[
@@ -122,13 +152,20 @@ describe("Library", () => {
           }
         ]}
         emptyLabel="暂无作品"
-        labels={{ ...labels, removeFavorite: "移出藏卷" }}
-        onFavoriteToggle={vi.fn()}
+        labels={labels}
+        onFavoriteToggle={onFavoriteToggle}
       />
     );
 
-    expect(screen.getByRole("button", { name: "移出藏卷" })).toHaveClass("library-remove-action");
-    expect(screen.queryByText("移出藏卷")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "移出藏卷" }));
+
+    expect(onFavoriteToggle).not.toHaveBeenCalled();
+    expect(screen.getByText("从藏卷移出？")).toBeInTheDocument();
+    expect(screen.getByText("作品记录不会删除。")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "移出" }));
+
+    expect(onFavoriteToggle).toHaveBeenCalledWith(expect.objectContaining({ id: "record-6" }), false);
   });
 
   it("clears the default button surface from library open actions", () => {
@@ -148,7 +185,7 @@ describe("Library", () => {
       />
     );
 
-    expect(screen.getByRole("button", { name: /查看 无灰底作品/ })).toHaveClass("surface-clear-button");
+    expect(screen.getByRole("button", { name: /查看作品 无灰底作品/ })).toHaveClass("surface-clear-button");
   });
 
   it("keeps a compact placeholder for failed records without thumbnails", () => {
@@ -186,7 +223,7 @@ describe("Library", () => {
       />
     );
 
-    await user.click(screen.getByRole("button", { name: /查看 可查看作品/ }));
+    await user.click(screen.getByRole("button", { name: /查看作品 可查看作品/ }));
 
     expect(onOpen).toHaveBeenCalledWith(expect.objectContaining({ id: "record-4" }));
   });

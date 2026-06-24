@@ -1,5 +1,7 @@
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../src/App";
 import { getProgressLabel } from "../src/components/Studio";
@@ -355,13 +357,49 @@ describe("App", () => {
     expect(questionCard!.compareDocumentPosition(photoStrip!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
+  it("keeps scrollable content clear of the fixed mobile navigation", async () => {
+    const styles = await readFile(resolve(process.cwd(), "src/styles.css"), "utf8");
+
+    expect(styles).toMatch(/--bottom-nav-clearance:\s*calc\(72px \+ env\(safe-area-inset-bottom\) \+ 24px\)/);
+    expect(styles).toMatch(/padding-bottom:\s*var\(--bottom-nav-clearance\)/);
+    expect(styles).toMatch(/padding:\s*8px 8px calc\(8px \+ env\(safe-area-inset-bottom\)\)/);
+  });
+
   it("keeps optional photo controls lightweight on the first screen", async () => {
     render(<App />);
 
     await screen.findByLabelText("相册");
 
+    expect(screen.getByText("您想要把作品摆在哪里？")).toBeInTheDocument();
+    expect(screen.queryByText("提供环境背景图，生成效果图")).not.toBeInTheDocument();
+    expect(screen.queryByText("用照片生成融合图（可选）")).not.toBeInTheDocument();
+    expect(screen.queryByText("上传照片生成融合图（可选）")).not.toBeInTheDocument();
+    expect(screen.queryByText("照片可选")).not.toBeInTheDocument();
     expect(screen.getByLabelText("拍照")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "先不放照片" })).not.toBeInTheDocument();
+  });
+
+  it("uses decorative option fallbacks without repeating visible labels", async () => {
+    const user = userEvent.setup();
+    const { container } = render(<App />);
+
+    await screen.findByRole("button", { name: "国画" });
+
+    expect(screen.getByRole("button", { name: "国画" }).textContent).not.toBe("国国画");
+    expect([...container.querySelectorAll(".option-preview-fallback")].map((item) => item.textContent?.trim())).toEqual([
+      "◆",
+      "●"
+    ]);
+
+    await user.click(screen.getByRole("button", { name: "国画" }));
+
+    expect(screen.getByRole("button", { name: "山水" }).textContent).not.toBe("山山水");
+    expect([...container.querySelectorAll(".option-preview-fallback")].map((item) => item.textContent?.trim())).toEqual([
+      "◆",
+      "●",
+      "◇",
+      "◎"
+    ]);
   });
 
   it("keeps branch questions focused by hiding optional photo controls until completion", async () => {
@@ -480,7 +518,7 @@ describe("App", () => {
     expect(new Set(subjectPreviews).size).toBe(4);
   });
 
-  it("shows local fallback glyphs for calligraphy option previews before images decode", async () => {
+  it("shows decorative fallback marks for calligraphy option previews before images decode", async () => {
     const user = userEvent.setup();
     const { container } = render(<App />);
 
@@ -488,7 +526,7 @@ describe("App", () => {
 
     expect(screen.getByRole("heading", { name: "偏好哪种书体？" })).toBeInTheDocument();
     const fallbackGlyphs = [...container.querySelectorAll(".option-preview-fallback")].map((item) => item.textContent?.trim());
-    expect(fallbackGlyphs).toEqual(["楷", "行", "草", "墨"]);
+    expect(fallbackGlyphs).toEqual(["◆", "●", "◇", "◎"]);
     expect(container.querySelectorAll(".option-preview-image")).toHaveLength(4);
   });
 
@@ -571,7 +609,7 @@ describe("App", () => {
     render(<App />);
 
     await user.upload(await screen.findByLabelText("相册"), new File(["sample"], "sample.png", { type: "image/png" }));
-    expect(await screen.findByText("照片已准备，将生成融合图")).toBeInTheDocument();
+    expect(await screen.findByText("已提供环境图，将用于生成效果图。")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "国画" }));
 
@@ -579,26 +617,28 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: "上一步" }));
 
     expect(screen.getByText("先定作品类型")).toBeInTheDocument();
-    expect(screen.getByText("照片已准备，将生成融合图")).toBeInTheDocument();
+    expect(screen.getByText("已提供环境图，将用于生成效果图。")).toBeInTheDocument();
   });
 
-  it("shows the default generation suggestion after questions complete", async () => {
+  it("keeps generation as the only submit action after questions complete", async () => {
     const user = userEvent.setup();
     render(<App />);
 
     await user.click(await screen.findByRole("button", { name: "国画" }));
     await user.click(screen.getByRole("button", { name: "山水" }));
 
-    expect(screen.getByRole("button", { name: "可以开始生成" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "可以开始生成" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "更清雅一点" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "生成" })).toBeInTheDocument();
   });
 
-  it("generates from the default suggestion without sending it as conversation notes", async () => {
+  it("generates from empty notes with the primary generate button", async () => {
     const user = userEvent.setup();
     render(<App />);
 
     await user.click(await screen.findByRole("button", { name: "国画" }));
     await user.click(screen.getByRole("button", { name: "山水" }));
-    await user.click(screen.getByRole("button", { name: "可以开始生成" }));
+    await user.click(screen.getByRole("button", { name: "生成" }));
 
     await waitFor(() => {
       expect(generationRequestBodies()).toHaveLength(1);
@@ -606,13 +646,17 @@ describe("App", () => {
     expect(generationRequestBodies()[0].conversationNotes).toBe("");
   });
 
-  it("passes refinement suggestions as conversation notes", async () => {
+  it("puts refinement suggestions into notes before generating", async () => {
     const user = userEvent.setup();
     render(<App />);
 
     await user.click(await screen.findByRole("button", { name: "国画" }));
     await user.click(screen.getByRole("button", { name: "山水" }));
     await user.click(screen.getByRole("button", { name: "更清雅一点" }));
+
+    expect(screen.getByLabelText("也可以补一句想法")).toHaveValue("更清雅一点");
+    expect(generationRequestBodies()).toHaveLength(0);
+    await user.click(screen.getByRole("button", { name: "生成" }));
 
     await waitFor(() => {
       expect(generationRequestBodies()).toHaveLength(1);
@@ -633,7 +677,7 @@ describe("App", () => {
     render(<App />);
 
     expect(await screen.findByDisplayValue("更像家里玄关")).toBeInTheDocument();
-    expect(screen.getByText("照片已准备，将生成融合图")).toBeInTheDocument();
+    expect(screen.getByText("已提供环境图，将用于生成效果图。")).toBeInTheDocument();
   });
 
   it("shows when an optional photo is ready for fusion", async () => {
@@ -642,7 +686,7 @@ describe("App", () => {
 
     await user.upload(await screen.findByLabelText("相册"), new File(["sample"], "sample.png", { type: "image/png" }));
 
-    expect(await screen.findByText("照片已准备，将生成融合图")).toBeInTheDocument();
+    expect(await screen.findByText("已提供环境图，将用于生成效果图。")).toBeInTheDocument();
     expect(screen.getByRole("img", { name: "已选照片预览" })).toHaveAttribute("src", "blob:photo-preview");
     expect(screen.getByText("sample.png")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "移除照片" })).toBeInTheDocument();
@@ -670,11 +714,11 @@ describe("App", () => {
     render(<App />);
 
     await user.upload(await screen.findByLabelText("相册"), new File(["sample"], "sample.png", { type: "image/png" }));
-    expect(await screen.findByText("照片已准备，将生成融合图")).toBeInTheDocument();
+    expect(await screen.findByText("已提供环境图，将用于生成效果图。")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "移除照片" }));
 
-    expect(screen.queryByText("照片已准备，将生成融合图")).not.toBeInTheDocument();
+    expect(screen.queryByText("已提供环境图，将用于生成效果图。")).not.toBeInTheDocument();
     expect(screen.getByLabelText("相册")).toBeInTheDocument();
   });
 
@@ -686,13 +730,13 @@ describe("App", () => {
     await user.upload(await screen.findByLabelText("相册"), photo);
     await user.click(await screen.findByRole("button", { name: "国画" }));
     await user.click(screen.getByRole("button", { name: "山水" }));
-    await user.click(screen.getByRole("button", { name: "可以开始生成" }));
+    await user.click(screen.getByRole("button", { name: "生成" }));
 
     await waitFor(() => {
       expect(fetch).toHaveBeenCalledWith("/api/records/record-1/fusion", expect.objectContaining({ method: "POST" }));
     });
     expect(await screen.findByRole("img", { name: "作品图" })).toBeInTheDocument();
-    expect(await screen.findByRole("img", { name: "融合图" })).toBeInTheDocument();
+    expect(await screen.findByRole("img", { name: "效果图" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "继续生成" })).toBeInTheDocument();
   });
 
@@ -704,11 +748,11 @@ describe("App", () => {
     await user.upload(await screen.findByLabelText("相册"), new File(["sample"], "sample.png", { type: "image/png" }));
     await user.click(await screen.findByRole("button", { name: "国画" }));
     await user.click(screen.getByRole("button", { name: "山水" }));
-    await user.click(screen.getByRole("button", { name: "可以开始生成" }));
+    await user.click(screen.getByRole("button", { name: "生成" }));
 
-    expect(await screen.findByRole("img", { name: "融合图" })).toBeInTheDocument();
+    expect(await screen.findByRole("img", { name: "效果图" })).toBeInTheDocument();
     const actions = container.querySelector(".result-actions");
-    const fusionFigure = screen.getByRole("img", { name: "融合图" }).closest("figure");
+    const fusionFigure = screen.getByRole("img", { name: "效果图" }).closest("figure");
 
     expect(actions).toBeTruthy();
     expect(fusionFigure).toBeTruthy();
@@ -819,10 +863,10 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: "生成" }));
 
     expect(await screen.findByRole("img", { name: "作品图" })).toBeInTheDocument();
-    expect(screen.queryByRole("img", { name: "融合图" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("img", { name: "效果图" })).not.toBeInTheDocument();
 
     const photo = new File(["late sample"], "late.png", { type: "image/png" });
-    await user.upload(screen.getByLabelText("补图生成融合图"), photo);
+    await user.upload(screen.getByLabelText("您想要把作品摆在哪里？"), photo);
 
     await waitFor(() => {
       expect(fetch).toHaveBeenCalledWith("/api/uploads/photo", expect.objectContaining({ method: "POST" }));
@@ -834,7 +878,7 @@ describe("App", () => {
         })
       );
     });
-    expect(await screen.findByRole("img", { name: "融合图" })).toBeInTheDocument();
+    expect(await screen.findByRole("img", { name: "效果图" })).toBeInTheDocument();
   });
 
   it("shows an error if attaching a photo for fusion fails", async () => {
@@ -845,10 +889,10 @@ describe("App", () => {
     await user.click(await screen.findByRole("button", { name: "国画" }));
     await user.click(screen.getByRole("button", { name: "山水" }));
     await user.click(screen.getByRole("button", { name: "生成" }));
-    await user.upload(screen.getByLabelText("补图生成融合图"), new File(["sample"], "late.png", { type: "image/png" }));
+    await user.upload(screen.getByLabelText("您想要把作品摆在哪里？"), new File(["sample"], "late.png", { type: "image/png" }));
 
     expect(await screen.findByText("暂时无法完成，请稍后再试。")).toBeInTheDocument();
-    expect(screen.queryByRole("img", { name: "融合图" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("img", { name: "效果图" })).not.toBeInTheDocument();
   });
 
   it("keeps artwork visible when fusion returns a failed job", async () => {
@@ -859,13 +903,13 @@ describe("App", () => {
     await user.click(await screen.findByRole("button", { name: "国画" }));
     await user.click(screen.getByRole("button", { name: "山水" }));
     await user.click(screen.getByRole("button", { name: "生成" }));
-    await user.upload(screen.getByLabelText("补图生成融合图"), new File(["sample"], "late.png", { type: "image/png" }));
+    await user.upload(screen.getByLabelText("您想要把作品摆在哪里？"), new File(["sample"], "late.png", { type: "image/png" }));
 
     expect(await screen.findByText("暂时无法完成，请稍后再试。")).toBeInTheDocument();
     expect(screen.getByRole("img", { name: "作品图" })).toBeInTheDocument();
-    expect(screen.queryByRole("img", { name: "融合图" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("img", { name: "效果图" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "制作作品" })).toBeInTheDocument();
-    expect(screen.getByLabelText("补图生成融合图")).toBeInTheDocument();
+    expect(screen.getByLabelText("您想要把作品摆在哪里？")).toBeInTheDocument();
     expect(screen.queryByText("生成未完成")).not.toBeInTheDocument();
   });
 
@@ -875,7 +919,7 @@ describe("App", () => {
 
     await user.click(await screen.findByRole("button", { name: "国画" }));
     await user.click(screen.getByRole("button", { name: "山水" }));
-    await user.click(screen.getByRole("button", { name: "可以开始生成" }));
+    await user.click(screen.getByRole("button", { name: "生成" }));
     await user.click(await screen.findByRole("button", { name: "制作作品" }));
 
     await waitFor(() => {
@@ -892,7 +936,7 @@ describe("App", () => {
 
     await user.click(await screen.findByRole("button", { name: "国画" }));
     await user.click(screen.getByRole("button", { name: "山水" }));
-    await user.click(screen.getByRole("button", { name: "可以开始生成" }));
+    await user.click(screen.getByRole("button", { name: "生成" }));
     await user.click(await screen.findByRole("button", { name: "制作作品" }));
 
     expect(await screen.findByRole("radio", { name: /第3级/ })).toHaveAttribute("aria-checked", "true");
@@ -911,7 +955,7 @@ describe("App", () => {
 
     await user.click(await screen.findByRole("button", { name: "国画" }));
     await user.click(screen.getByRole("button", { name: "山水" }));
-    await user.click(screen.getByRole("button", { name: "可以开始生成" }));
+    await user.click(screen.getByRole("button", { name: "生成" }));
     await user.click(await screen.findByRole("button", { name: "制作作品" }));
 
     expect(await screen.findByRole("radio", { name: /第1级 严格参考/ })).toBeInTheDocument();
@@ -929,7 +973,7 @@ describe("App", () => {
 
     await user.click(await screen.findByRole("button", { name: "国画" }));
     await user.click(screen.getByRole("button", { name: "山水" }));
-    await user.click(screen.getByRole("button", { name: "可以开始生成" }));
+    await user.click(screen.getByRole("button", { name: "生成" }));
     await user.click(await screen.findByRole("button", { name: "制作作品" }));
 
     await user.click(await screen.findByRole("button", { name: "调整尺寸" }));
@@ -956,7 +1000,7 @@ describe("App", () => {
 
     await user.click(await screen.findByRole("button", { name: "国画" }));
     await user.click(screen.getByRole("button", { name: "山水" }));
-    await user.click(screen.getByRole("button", { name: "可以开始生成" }));
+    await user.click(screen.getByRole("button", { name: "生成" }));
     await user.click(await screen.findByRole("button", { name: "制作作品" }));
 
     expect(await screen.findByText("专家定制")).toBeInTheDocument();
@@ -978,7 +1022,7 @@ describe("App", () => {
 
     await user.click(await screen.findByRole("button", { name: "国画" }));
     await user.click(screen.getByRole("button", { name: "山水" }));
-    await user.click(screen.getByRole("button", { name: "可以开始生成" }));
+    await user.click(screen.getByRole("button", { name: "生成" }));
     await user.click(await screen.findByRole("button", { name: "制作作品" }));
 
     expect(await screen.findByText("方形点景 · 约 50 × 50 cm")).toBeInTheDocument();
@@ -986,7 +1030,13 @@ describe("App", () => {
 
     await user.click(screen.getByRole("button", { name: "调整尺寸" }));
     expect(screen.getByRole("heading", { name: "调整作品尺寸" })).toBeInTheDocument();
-    await user.click(screen.getByRole("radio", { name: /自定义尺寸/ }));
+    const customSize = screen.getByRole("radio", { name: /自定义尺寸/ });
+    await user.click(customSize);
+    expect(customSize).toContainElement(screen.getByLabelText("宽度 cm"));
+    expect(customSize).toContainElement(screen.getByLabelText("高度 cm"));
+    await user.clear(screen.getByLabelText("宽度 cm"));
+    await user.click(screen.getByRole("button", { name: "用这个尺寸" }));
+    expect(screen.getByText("请输入有效的宽高尺寸")).toBeInTheDocument();
     await user.clear(screen.getByLabelText("宽度 cm"));
     await user.type(screen.getByLabelText("宽度 cm"), "42");
     await user.clear(screen.getByLabelText("高度 cm"));
@@ -1025,7 +1075,7 @@ describe("App", () => {
 
     await user.click(await screen.findByRole("button", { name: "国画" }));
     await user.click(screen.getByRole("button", { name: "山水" }));
-    await user.click(screen.getByRole("button", { name: "可以开始生成" }));
+    await user.click(screen.getByRole("button", { name: "生成" }));
     await user.selectOptions(screen.getByLabelText("语言"), "en");
     await user.click(await screen.findByRole("button", { name: "Make Artwork" }));
     await user.click(await screen.findByRole("button", { name: "Confirm production" }));
@@ -1042,7 +1092,7 @@ describe("App", () => {
 
     await user.click(await screen.findByRole("button", { name: "国画" }));
     await user.click(screen.getByRole("button", { name: "山水" }));
-    await user.click(screen.getByRole("button", { name: "可以开始生成" }));
+    await user.click(screen.getByRole("button", { name: "生成" }));
     await user.click(await screen.findByRole("button", { name: "继续生成" }));
 
     expect(screen.queryByRole("img", { name: "作品图" })).not.toBeInTheDocument();
@@ -1055,7 +1105,7 @@ describe("App", () => {
 
     await user.click(await screen.findByRole("button", { name: "国画" }));
     await user.click(screen.getByRole("button", { name: "山水" }));
-    await user.click(screen.getByRole("button", { name: "可以开始生成" }));
+    await user.click(screen.getByRole("button", { name: "生成" }));
     await user.click(await screen.findByRole("button", { name: "继续生成" }));
 
     expect(screen.getByText("将基于上次的主题、风格和选择继续生成，可补一句新想法。")).toBeInTheDocument();
@@ -1071,7 +1121,7 @@ describe("App", () => {
 
     await user.click(await screen.findByRole("button", { name: "国画" }));
     await user.click(screen.getByRole("button", { name: "山水" }));
-    await user.click(screen.getByRole("button", { name: "可以开始生成" }));
+    await user.click(screen.getByRole("button", { name: "生成" }));
 
     expect(await screen.findByRole("img", { name: "作品图" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "补充要求" }));
@@ -1172,7 +1222,7 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: "山水" }));
     await user.click(screen.getByRole("button", { name: "生成" }));
     await user.click(await screen.findByRole("button", { name: "藏卷" }));
-    await user.click(screen.getByRole("button", { name: /查看 record-1/ }));
+    await user.click(screen.getByRole("button", { name: /查看作品 record-1/ }));
 
     await waitFor(() => {
       expect(fetch).toHaveBeenCalledWith("/api/records/record-1", undefined);
@@ -1183,7 +1233,7 @@ describe("App", () => {
       "/api/records/record-1/images/artwork"
     );
     expect(screen.getByRole("button", { name: "制作作品" })).toBeInTheDocument();
-    expect(screen.getByLabelText("补图生成融合图")).toBeInTheDocument();
+    expect(screen.getByLabelText("您想要把作品摆在哪里？")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "画案" })).toHaveAttribute("aria-pressed", "true");
   });
 
@@ -1197,7 +1247,10 @@ describe("App", () => {
     await user.click(await screen.findByRole("button", { name: "藏卷" }));
 
     expect(screen.getByRole("img", { name: "record-1" })).toBeInTheDocument();
+    expect(screen.getByText("查看作品")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "移出藏卷" }));
+    expect(screen.getByText("作品记录不会删除。")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "移出" }));
 
     await waitFor(() => {
       expect(fetch).toHaveBeenCalledWith(

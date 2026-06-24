@@ -117,12 +117,13 @@ button:disabled {
 }
 
 .main-surface {
+  --bottom-nav-clearance: calc(72px + env(safe-area-inset-bottom) + 24px);
   width: 100%;
   min-height: 0;
   max-width: 980px;
   margin: 0 auto;
   overflow: auto;
-  padding-bottom: 16px;
+  padding-bottom: var(--bottom-nav-clearance);
   scrollbar-width: thin;
 }
 
@@ -570,7 +571,7 @@ button:disabled {
   width: min(100%, 520px);
   max-width: 520px;
   margin: 10px auto 0;
-  padding: 8px;
+  padding: 8px 8px calc(8px + env(safe-area-inset-bottom));
   border: 1px solid rgba(54, 84, 73, 0.18);
   border-radius: 8px;
   background: rgba(249, 246, 236, 0.94);
@@ -901,20 +902,60 @@ button:disabled {
   gap: 4px;
 }
 
+.library-open-action {
+  color: #2f634f;
+  font-size: 13px;
+  font-weight: 800;
+}
+
 .library-remove-action {
   display: inline-flex;
-  width: 36px;
-  min-height: 36px;
+  min-width: 62px;
+  min-height: 44px;
   align-items: center;
   justify-content: center;
   gap: 5px;
-  padding: 0;
+  padding: 0 10px;
   border-radius: 8px;
   background: rgba(249, 243, 231, 0.72);
   color: #5b6e66;
   font-size: 13px;
   font-weight: 700;
   box-shadow: inset 0 0 0 1px rgba(46, 79, 67, 0.16);
+}
+
+.library-actions {
+  display: grid;
+  justify-items: end;
+  gap: 8px;
+}
+
+.library-remove-confirm {
+  display: grid;
+  grid-column: 1 / -1;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 8px;
+  background: #fffaf0;
+  color: #253a33;
+  box-shadow:
+    inset 0 0 0 1px rgba(46, 79, 67, 0.16),
+    0 12px 30px rgba(25, 38, 33, 0.18);
+}
+
+.library-remove-confirm span {
+  color: #5b6e66;
+  font-size: 13px;
+}
+
+.library-remove-confirm div {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.library-remove-confirm .compact-action {
+  min-height: 44px;
 }
 
 .library-remove-action:active {
@@ -999,6 +1040,7 @@ button:disabled {
   border-radius: 8px;
   background: #f5efdf;
   color: #253a33;
+  cursor: pointer;
   text-align: left;
   box-shadow: inset 0 0 0 1px rgba(56, 86, 74, 0.12);
 }
@@ -1012,6 +1054,10 @@ button:disabled {
   color: #5c7067;
   font-size: 12px;
   line-height: 1.25;
+}
+
+.custom-size-card {
+  gap: 8px;
 }
 
 .selected-size-panel {
@@ -1056,6 +1102,10 @@ button:disabled {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
+}
+
+.size-error {
+  margin: -2px 0 0;
 }
 
 .custom-size-grid label {

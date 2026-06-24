@@ -125,6 +125,12 @@ function estimateSizeKey(size: ArtworkSize): string {
   return ["small", "medium", "large"].includes(size.preset_id) ? size.preset_id : "medium";
 }
 
+function scrollIntoViewIfAvailable(element: HTMLElement | null, options: ScrollIntoViewOptions): void {
+  if (typeof element?.scrollIntoView === "function") {
+    element.scrollIntoView(options);
+  }
+}
+
 export default function ProductionDialog({
   expert,
   supportContact,
@@ -154,6 +160,7 @@ export default function ProductionDialog({
   const [page, setPage] = useState<"main" | "size">("main");
   const [error, setError] = useState("");
   const contactPanelRef = useRef<HTMLDivElement | null>(null);
+  const customSizeRef = useRef<HTMLDivElement | null>(null);
   const selectedReference = REFERENCE_LEVELS.find((level) => level.value === referenceLevel) ?? REFERENCE_LEVELS[2];
   const contact = {
     phone: expert.phone || supportContact?.phone || "",
@@ -163,6 +170,20 @@ export default function ProductionDialog({
     const hasInferred = SIZE_OPTIONS.some((option) => option.preset_id === inferredSize.preset_id);
     return hasInferred ? SIZE_OPTIONS : [inferredSize as ProductionSize, ...SIZE_OPTIONS];
   }, [inferredSize]);
+  const customSelected = draftSize.preset_id === "custom";
+  const customWidthValue = Number(customWidth);
+  const customHeightValue = Number(customHeight);
+  const customSizeValid = !customSelected || (
+    Number.isFinite(customWidthValue) &&
+    Number.isFinite(customHeightValue) &&
+    customWidthValue > 0 &&
+    customHeightValue > 0 &&
+    customWidthValue <= 300 &&
+    customHeightValue <= 300
+  );
+  const customSizeError = customSelected && !customSizeValid
+    ? (locale === "en" ? "Enter valid width and height." : "请输入有效的宽高尺寸")
+    : "";
 
   useEffect(() => {
     getProductionEstimate(record.id, expert.id, estimateSizeKey(selectedSize))
@@ -174,23 +195,43 @@ export default function ProductionDialog({
     if (!order) {
       return;
     }
-    contactPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    scrollIntoViewIfAvailable(contactPanelRef.current, { behavior: "smooth", block: "start" });
   }, [order]);
+
+  useEffect(() => {
+    if (page !== "size" || !customSelected) {
+      return;
+    }
+    scrollIntoViewIfAvailable(customSizeRef.current, { behavior: "smooth", block: "nearest" });
+  }, [customSelected, page]);
 
   const chooseSize = (size: ArtworkSize) => {
     setDraftSize(size);
-    setCustomWidth(String(size.width_cm));
-    setCustomHeight(String(size.height_cm));
+    if (size.preset_id !== "custom") {
+      setCustomWidth(String(size.width_cm));
+      setCustomHeight(String(size.height_cm));
+    }
+  };
+
+  const chooseCustomSize = () => {
+    setDraftSize({
+      preset_id: "custom",
+      label: locale === "en" ? "Custom size" : "自定义尺寸",
+      width_cm: Number(customWidth) || selectedSize.width_cm,
+      height_cm: Number(customHeight) || selectedSize.height_cm
+    });
   };
 
   const applySize = () => {
-    const custom = draftSize.preset_id === "custom";
-    const nextSize = custom
+    if (customSelected && !customSizeValid) {
+      return;
+    }
+    const nextSize = customSelected
       ? {
         preset_id: "custom",
         label: locale === "en" ? "Custom size" : "自定义尺寸",
-        width_cm: Math.max(1, Number(customWidth) || selectedSize.width_cm),
-        height_cm: Math.max(1, Number(customHeight) || selectedSize.height_cm)
+        width_cm: Number(customWidth),
+        height_cm: Number(customHeight)
       }
       : draftSize;
     setSelectedSize(nextSize);
@@ -249,30 +290,38 @@ export default function ProductionDialog({
                   <span>{option.hint ? text(option.hint, locale) : option.reason}</span>
                 </button>
               ))}
-              <button
-                type="button"
+              <div
+                ref={customSizeRef}
                 role="radio"
-                aria-checked={draftSize.preset_id === "custom"}
-                className={draftSize.preset_id === "custom" ? "size-chip selected" : "size-chip"}
-                onClick={() => chooseSize({ preset_id: "custom", label: locale === "en" ? "Custom size" : "自定义尺寸", width_cm: Number(customWidth), height_cm: Number(customHeight) })}
+                tabIndex={0}
+                aria-checked={customSelected}
+                className={customSelected ? "size-chip custom-size-card selected" : "size-chip custom-size-card"}
+                onClick={chooseCustomSize}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    chooseCustomSize();
+                  }
+                }}
               >
                 <strong>{locale === "en" ? "Custom size" : "自定义尺寸"}</strong>
                 <span>{locale === "en" ? "Enter width and height in centimeters." : "自己输入宽和高，单位是厘米。"}</span>
-              </button>
-            </div>
-            {draftSize.preset_id === "custom" ? (
-              <div className="custom-size-grid">
-                <label>
-                  宽度 cm
-                  <input aria-label="宽度 cm" inputMode="numeric" value={customWidth} onChange={(event) => setCustomWidth(event.target.value)} />
-                </label>
-                <label>
-                  高度 cm
-                  <input aria-label="高度 cm" inputMode="numeric" value={customHeight} onChange={(event) => setCustomHeight(event.target.value)} />
-                </label>
+                {customSelected ? (
+                  <div className="custom-size-grid" onClick={(event) => event.stopPropagation()}>
+                    <label>
+                      宽度 cm
+                      <input aria-label="宽度 cm" inputMode="decimal" value={customWidth} onChange={(event) => setCustomWidth(event.target.value)} />
+                    </label>
+                    <label>
+                      高度 cm
+                      <input aria-label="高度 cm" inputMode="decimal" value={customHeight} onChange={(event) => setCustomHeight(event.target.value)} />
+                    </label>
+                  </div>
+                ) : null}
               </div>
-            ) : null}
-            <button className="primary-action" type="button" onClick={applySize}>
+            </div>
+            {customSizeError ? <p className="error-line size-error">{customSizeError}</p> : null}
+            <button className="primary-action" type="button" disabled={customSelected && !customSizeValid} onClick={applySize}>
               {locale === "en" ? "Use this size" : "用这个尺寸"}
             </button>
           </div>

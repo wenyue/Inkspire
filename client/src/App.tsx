@@ -242,7 +242,13 @@ export default function App() {
               artwork: t("library.artwork"),
               fusion: t("library.fusion"),
               failed: t("library.failed"),
-              removeFavorite: t("library.removeFavorite")
+              openRecord: t("library.openRecord"),
+              removeFavorite: t("library.removeFavorite"),
+              removeFavoriteShort: t("library.removeFavoriteShort"),
+              removeConfirmTitle: t("library.removeConfirmTitle"),
+              removeConfirmHint: t("library.removeConfirmHint"),
+              removeConfirmCancel: t("library.removeConfirmCancel"),
+              removeConfirmAction: t("library.removeConfirmAction")
             }}
             onEmptyAction={() => setActiveTab("studio")}
             onOpen={async (record) => {
