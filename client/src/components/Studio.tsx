@@ -1,6 +1,6 @@
 import { Camera, ImagePlus, RotateCcw, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { createFusion, createGeneration, uploadPhoto, type GenerationRecord, type PublicConfig } from "../api";
+import { isGenerationLimitError, uploadPhoto, type GenerationJob, type GenerationRecord, type PublicConfig } from "../api";
 import {
   getInitialQuestion,
   isQuestionFlowComplete,
@@ -28,7 +28,14 @@ interface StudioProps {
   locale: Locale;
   t: (key: string) => string;
   list: (key: string) => string[];
-  onResult: (record: GenerationRecord) => void;
+  onStartGeneration: (payload: {
+    type: WorkType;
+    answers: Answers;
+    conversationNotes: string;
+    source_photo_path?: string;
+    recommended_artwork_size?: GenerationRecord["recommended_artwork_size"];
+  }) => Promise<void>;
+  activeJobs?: GenerationJob[];
   resultSlot: React.ReactNode;
   notesFocusRequest?: number;
   hasResult?: boolean;
@@ -138,6 +145,13 @@ function expectedInitialStepTotal(config: PublicConfig): number | null {
   return totals.length > 0 && totals.every((total) => total === totals[0]) ? totals[0] : null;
 }
 
+function generationJobLabel(job: GenerationJob, locale: Locale): string {
+  const stage = job.stage === "fusion_render"
+    ? (locale === "en" ? "preview" : "效果图")
+    : (locale === "en" ? "artwork" : "作品图");
+  return job.title ? `${job.title} ${stage}` : stage;
+}
+
 export function getProgressLabel(config: PublicConfig, answers: Answers, locale: Locale): string {
   const workType = answers.work_type;
   if (!workType) {
@@ -158,7 +172,8 @@ export default function Studio({
   locale,
   t,
   list,
-  onResult,
+  onStartGeneration,
+  activeJobs = [],
   resultSlot,
   notesFocusRequest = 0,
   hasResult = false,
@@ -175,7 +190,7 @@ export default function Studio({
   );
   const [textQuestionDraft, setTextQuestionDraft] = useState("");
   const [isUploading, setIsUploading] = useState(false);
-  const [isGenerating, setIsGenerating] = useState(false);
+  const [isSubmittingGeneration, setIsSubmittingGeneration] = useState(false);
   const [error, setError] = useState("");
   const notesRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -192,6 +207,7 @@ export default function Studio({
   const showCreationPanel = !hasResult || notesFocusRequest > 0;
   const showPhotoPanel = !answers.work_type || !question;
   const isIteratingResult = complete && notesFocusRequest > 0;
+  const generationLimitReached = activeJobs.length >= 2;
 
   useEffect(() => {
     writeStudioDraft({
@@ -312,32 +328,20 @@ export default function Studio({
     if (!type) {
       return;
     }
-    setIsGenerating(true);
+    setIsSubmittingGeneration(true);
     setError("");
     try {
-      const payload = await createGeneration({
+      await onStartGeneration({
         type,
         answers,
         conversationNotes: note || conversationNotes,
         source_photo_path: sourcePhotoPath,
         recommended_artwork_size: recommendedArtworkSize ?? null
       });
-      const record = payload.record ?? payload;
-      onResult(record);
-      if (record.status === "failed") {
-        return;
-      }
-      if (sourcePhotoPath && record.id) {
-        try {
-          onResult(await createFusion(record.id));
-        } catch {
-          setError(t("errors.generic"));
-        }
-      }
-    } catch {
-      setError(t("errors.generic"));
+    } catch (caught) {
+      setError(isGenerationLimitError(caught) ? t("studio.generationLimit") : t("errors.generic"));
     } finally {
-      setIsGenerating(false);
+      setIsSubmittingGeneration(false);
     }
   };
 
@@ -419,8 +423,13 @@ export default function Studio({
                   ))}
                 </div>
                 <div className="conversation-actions">
-                  <button className="primary-action" type="button" disabled={!complete || isGenerating} onClick={() => generate()}>
-                    {isGenerating ? t("studio.generating") : isIteratingResult ? t("studio.continueGenerate") : t("buttons.generate")}
+                  <button
+                    className="primary-action"
+                    type="button"
+                    disabled={!complete || isSubmittingGeneration || generationLimitReached}
+                    onClick={() => generate()}
+                  >
+                    {isSubmittingGeneration ? t("studio.generating") : isIteratingResult ? t("studio.continueGenerate") : t("buttons.generate")}
                   </button>
                   {isIteratingResult ? (
                     <button className="secondary-action compact-action restart-action" type="button" onClick={resetStudioDraft}>
@@ -481,6 +490,12 @@ export default function Studio({
         </>
       ) : null}
 
+      {activeJobs.length > 0 ? (
+        <p className="status-line generation-status" role="status">
+          {generationLimitReached ? t("studio.generationLimit") : t("studio.generatingWait")}
+          <span>{activeJobs.map((job) => generationJobLabel(job, locale)).join(" · ")}</span>
+        </p>
+      ) : null}
       {error ? <p className="error-line">{error}</p> : null}
       {resultSlot}
     </section>

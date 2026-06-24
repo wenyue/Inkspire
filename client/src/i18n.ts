@@ -25,6 +25,8 @@ const CLIENT_OVERRIDES: Dictionaries = {
       startOver: "重开画案",
       suggestionStart: "可以开始生成",
       generating: "墨色正在铺开",
+      generatingWait: "墨色正在铺开，可能需要 2-3 分钟，请耐心等待。",
+      generationLimit: "当前已有 2 个生成任务，请等其中一个完成后再开始。",
       back: "上一步"
     },
     suggestions: ["可以开始生成", "更清雅一点", "留白更多", "更适合挂在客厅", "更适合送礼", "加一点诗意"],
@@ -106,6 +108,8 @@ const CLIENT_OVERRIDES: Dictionaries = {
       startOver: "重開畫案",
       suggestionStart: "可以開始生成",
       generating: "墨色正在鋪開",
+      generatingWait: "墨色正在鋪開，可能需要 2-3 分鐘，請耐心等待。",
+      generationLimit: "目前已有 2 個生成任務，請等其中一個完成後再開始。",
       back: "上一步"
     },
     suggestions: ["可以開始生成", "更清雅一點", "留白更多", "更適合掛在客廳", "更適合送禮", "加一點詩意"],
@@ -186,6 +190,8 @@ const CLIENT_OVERRIDES: Dictionaries = {
       startOver: "Start over",
       suggestionStart: "Start generating",
       generating: "Ink is unfolding",
+      generatingWait: "Ink is unfolding. This may take 2-3 minutes. Please wait.",
+      generationLimit: "You already have 2 generation tasks. Please wait for one to finish.",
       back: "Back"
     },
     suggestions: ["Start generating", "Make it more refined", "Add more blank space", "Fit a living room", "Better for gifting", "Add poetic feeling"],
