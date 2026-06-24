@@ -199,7 +199,7 @@ export default function App() {
     <div className="app-shell">
       <ParticleBackdrop />
       <header className="topbar">
-        <div>
+        <div className="topbar-title">
           <h1>墨起</h1>
           <span>{t("studio.subtitle")}</span>
         </div>

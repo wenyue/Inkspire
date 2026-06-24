@@ -15,7 +15,15 @@ async function completePaintingFlow(page) {
   for (const option of ["山水", "水墨", "清雅", "竖幅", "适中"]) {
     await page.getByRole("button", { name: option }).click();
   }
-  await expect(page.getByRole("button", { name: "可以开始生成" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "您想要把作品摆在哪里？" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "生成", exact: true })).not.toBeVisible();
+}
+
+async function addPhotoAndContinue(page) {
+  await page.getByLabel("相册").setInputFiles(samplePng);
+  await expect(page.getByText("已提供环境图，将用于生成效果图。")).toBeVisible();
+  await page.getByRole("button", { name: "继续" }).click();
+  await expect(page.getByRole("button", { name: "生成", exact: true })).toBeVisible();
 }
 
 test("mobile user can complete Inkspire creation flow with mocked generation", async ({ page }) => {
@@ -47,8 +55,8 @@ test("mobile user can complete Inkspire creation flow with mocked generation", a
   await page.getByLabel("Language").selectOption("zh-Hans");
   await expect(page.getByRole("button", { name: "画案" })).toBeVisible();
 
-  await page.locator('input[type="file"]').first().setInputFiles(samplePng);
   await completePaintingFlow(page);
+  await addPhotoAndContinue(page);
   await page.getByRole("button", { name: "生成", exact: true }).click();
 
   await expect(page.getByRole("img", { name: "作品图" })).toBeVisible({ timeout: 30_000 });
@@ -82,8 +90,8 @@ test("wide viewport shows artwork and fusion side by side", async ({ page }) => 
   await page.setViewportSize({ width: 900, height: 900 });
   await page.goto("/");
 
-  await page.locator('input[type="file"]').first().setInputFiles(samplePng);
   await completePaintingFlow(page);
+  await addPhotoAndContinue(page);
   await page.getByRole("button", { name: "生成", exact: true }).click();
 
   await expect(page.getByRole("img", { name: "作品图" })).toBeVisible({ timeout: 30_000 });

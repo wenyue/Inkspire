@@ -125,3 +125,80 @@ test("record ids must be safe path segments", async () => {
     );
   });
 });
+
+test("listLibrary filters records by user while keeping legacy records visible", async () => {
+  await withTempStore(async (temp) => {
+    const storage = createStorage(temp);
+    await storage.saveRecord({
+      id: "mine",
+      user_id: "user-a",
+      created_at: "2026-06-25T10:00:00.000Z",
+      type: "painting",
+      artwork_path: "records/mine/artwork.webp",
+      favorite: true,
+      status: "succeeded"
+    });
+    await storage.saveRecord({
+      id: "theirs",
+      user_id: "user-b",
+      created_at: "2026-06-25T10:01:00.000Z",
+      type: "painting",
+      artwork_path: "records/theirs/artwork.webp",
+      favorite: true,
+      status: "succeeded"
+    });
+    await storage.saveRecord({
+      id: "legacy",
+      created_at: "2026-06-25T10:02:00.000Z",
+      type: "calligraphy",
+      artwork_path: "records/legacy/artwork.webp",
+      favorite: true,
+      status: "succeeded"
+    });
+
+    const records = await storage.listLibrary("user-a");
+
+    assert.deepEqual(records.map((record) => record.id), ["legacy", "mine"]);
+  });
+});
+
+test("getRecordForUser rejects records owned by another user", async () => {
+  await withTempStore(async (temp) => {
+    const storage = createStorage(temp);
+    await storage.saveRecord({
+      id: "private-work",
+      user_id: "user-a",
+      created_at: "2026-06-25T10:00:00.000Z",
+      type: "painting",
+      artwork_path: "records/private-work/artwork.webp",
+      favorite: true,
+      status: "succeeded"
+    });
+
+    await assert.rejects(
+      () => storage.getRecordForUser("private-work", "user-b"),
+      /not found/i
+    );
+    assert.equal((await storage.getRecordForUser("private-work", "user-a")).id, "private-work");
+  });
+});
+
+test("saveRecord backfills legacy user_id when owner is provided", async () => {
+  await withTempStore(async (temp) => {
+    const storage = createStorage(temp);
+    await storage.saveRecord({
+      id: "legacy-backfill",
+      created_at: "2026-06-25T10:00:00.000Z",
+      type: "painting",
+      artwork_path: "records/legacy-backfill/artwork.webp",
+      favorite: true,
+      status: "succeeded"
+    });
+
+    const legacy = await storage.getRecordForUser("legacy-backfill", "user-a");
+    legacy.favorite = false;
+    await storage.saveRecord(legacy, "user-a");
+
+    assert.equal((await storage.getRecord("legacy-backfill")).user_id, "user-a");
+  });
+});

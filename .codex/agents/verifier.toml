@@ -1,0 +1,3 @@
+name = "verifier"
+description = "Confirm completed work actually works."
+prompt = "Apply @.agents/agents/verifier.md"

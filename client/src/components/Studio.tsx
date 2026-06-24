@@ -21,6 +21,7 @@ interface StudioDraft {
   sourcePhotoPath?: string;
   selectedPhotoName?: string;
   recommendedArtworkSize?: GenerationRecord["recommended_artwork_size"];
+  photoStepComplete?: boolean;
 }
 
 interface StudioProps {
@@ -70,6 +71,13 @@ function questionOptions(question: Question, locale: Locale): string[] {
 
 function optionPreviewImage(question: Question, index: number, locale: Locale): string {
   return question.option_preview_images?.[index] ?? localizedPreviewImage(question, locale);
+}
+
+function montagePreviewImages(question: Question, locale: Locale): string[] {
+  const images = (question.option_preview_images ?? [])
+    .filter((src): src is string => typeof src === "string" && src.length > 0)
+    .filter((src) => !src.includes("inkspire-decide"));
+  return images.length > 0 ? images : [localizedPreviewImage(question, locale)];
 }
 
 function optionPreviewFallback(question: Question, option: string, index: number): string {
@@ -132,9 +140,12 @@ function progressStepOnly(step: number, locale: Locale): string {
 }
 
 function expectedInitialStepTotal(config: PublicConfig): number | null {
-  const totals = [config.questions.painting.length, config.questions.calligraphy.length]
+  const totals = [
+    config.questions.painting.length,
+    config.questions.calligraphy.length,
+  ]
     .filter((total) => total > 0)
-    .map((total) => total + 1);
+    .map((total) => total + 2);
   return totals.length > 0 && totals.every((total) => total === totals[0]) ? totals[0] : null;
 }
 
@@ -144,7 +155,7 @@ export function getProgressLabel(config: PublicConfig, answers: Answers, locale:
     const initialTotal = expectedInitialStepTotal(config);
     return initialTotal ? progressLabel(1, initialTotal, locale) : progressStepOnly(1, locale);
   }
-  const total = 1 + questionsForAnswers(config, answers).length;
+  const total = 1 + questionsForAnswers(config, answers).length + 1;
   const currentQuestion = nextQuestion(config, answers);
   const branchQuestions = questionsForAnswers(config, answers);
   const step = currentQuestion
@@ -170,6 +181,9 @@ export default function Studio({
   const [selectedPhotoName, setSelectedPhotoName] = useState(() => readStudioDraft().selectedPhotoName ?? "");
   const [photoPreviewUrl, setPhotoPreviewUrl] = useState("");
   const [photoPreviewFailed, setPhotoPreviewFailed] = useState(false);
+  const [photoStepComplete, setPhotoStepComplete] = useState(
+    () => readStudioDraft().photoStepComplete ?? false,
+  );
   const [recommendedArtworkSize, setRecommendedArtworkSize] = useState<GenerationRecord["recommended_artwork_size"]>(
     () => readStudioDraft().recommendedArtworkSize ?? null
   );
@@ -189,9 +203,10 @@ export default function Studio({
   const suggestions = list("suggestions");
   const noteSuggestions = suggestions.slice(1);
   const canGoBack = Boolean(answers.work_type);
+  const showPhotoStep = complete && !photoStepComplete;
+  const showConversationStep = complete && photoStepComplete;
   const showCreationPanel = !hasResult || notesFocusRequest > 0;
-  const showPhotoPanel = !answers.work_type || !question;
-  const isIteratingResult = complete && notesFocusRequest > 0;
+  const isIteratingResult = showConversationStep && notesFocusRequest > 0;
 
   useEffect(() => {
     writeStudioDraft({
@@ -199,23 +214,31 @@ export default function Studio({
       conversationNotes,
       sourcePhotoPath,
       selectedPhotoName,
-      recommendedArtworkSize
+      recommendedArtworkSize,
+      photoStepComplete,
     });
-  }, [answers, conversationNotes, sourcePhotoPath, selectedPhotoName, recommendedArtworkSize]);
+  }, [
+    answers,
+    conversationNotes,
+    sourcePhotoPath,
+    selectedPhotoName,
+    recommendedArtworkSize,
+    photoStepComplete,
+  ]);
 
   useEffect(() => () => {
     revokePhotoPreview(photoPreviewUrl);
   }, [photoPreviewUrl]);
 
   useEffect(() => {
-    if (notesFocusRequest <= 0 || !complete) {
+    if (notesFocusRequest <= 0 || !showConversationStep) {
       return;
     }
     notesRef.current?.focus();
     if (typeof notesRef.current?.scrollIntoView === "function") {
       notesRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
     }
-  }, [complete, notesFocusRequest]);
+  }, [notesFocusRequest, showConversationStep]);
 
   useEffect(() => {
     if (question?.input_type === "textarea") {
@@ -245,6 +268,11 @@ export default function Studio({
   };
 
   const goBack = () => {
+    if (photoStepComplete) {
+      setPhotoStepComplete(false);
+      setError("");
+      return;
+    }
     setAnswers((current) => {
       const questionIds = ["work_type", ...questionsForAnswers(config, current).map((item) => item.id)];
       const lastAnsweredId = [...questionIds].reverse().find((id) => current[id]);
@@ -274,6 +302,7 @@ export default function Studio({
       setSourcePhotoPath(upload.source_photo_path);
       setSelectedPhotoName(file.name);
       setPhotoPreviewFailed(false);
+      setPhotoStepComplete(false);
       setPhotoPreviewUrl((current) => {
         revokePhotoPreview(current);
         return previewUrl;
@@ -299,10 +328,24 @@ export default function Studio({
     setError("");
   };
 
+  const skipPhotoStep = () => {
+    setPhotoStepComplete(true);
+    setError("");
+  };
+
+  const continueFromPhotoStep = () => {
+    if (!sourcePhotoPath) {
+      return;
+    }
+    setPhotoStepComplete(true);
+    setError("");
+  };
+
   const resetStudioDraft = () => {
     setAnswers({});
     setConversationNotes("");
     setTextQuestionDraft("");
+    setPhotoStepComplete(false);
     removePhoto();
     onStartOver?.();
   };
@@ -362,6 +405,21 @@ export default function Studio({
                     src={localizedPreviewImage(question, locale)}
                     alt={localizedPreviewText(question, locale)}
                   />
+                  <div
+                    className="preview-montage"
+                    data-count={montagePreviewImages(question, locale).length}
+                    aria-hidden="true"
+                  >
+                    {montagePreviewImages(question, locale).map((src, index) => (
+                      <img
+                        key={`${src}-${index}`}
+                        className="montage-tile"
+                        src={src}
+                        alt=""
+                        aria-hidden="true"
+                      />
+                    ))}
+                  </div>
                 </div>
                 <h2>{localizedText(question.title, locale)}</h2>
                 {question.input_type === "textarea" ? (
@@ -369,20 +427,44 @@ export default function Studio({
                     <textarea
                       aria-label={localizedText(question.title, locale)}
                       value={textQuestionDraft}
-                      onChange={(event) => setTextQuestionDraft(event.target.value)}
-                      placeholder={question.placeholder ? localizedText(question.placeholder, locale) : localizedText(question.title, locale)}
+                      onChange={(event) =>
+                        setTextQuestionDraft(event.target.value)
+                      }
+                      placeholder={
+                        question.placeholder
+                          ? localizedText(question.placeholder, locale)
+                          : localizedText(question.title, locale)
+                      }
                     />
-                    {question.helper_text ? <p>{localizedText(question.helper_text, locale)}</p> : null}
-                    <button type="button" className="primary-action" disabled={!textQuestionDraft.trim()} onClick={answerTextQuestion}>
-                      {question.submit_label ? localizedText(question.submit_label, locale) : continueLabel(locale)}
+                    {question.helper_text ? (
+                      <p>{localizedText(question.helper_text, locale)}</p>
+                    ) : null}
+                    <button
+                      type="button"
+                      className="primary-action"
+                      disabled={!textQuestionDraft.trim()}
+                      onClick={answerTextQuestion}
+                    >
+                      {question.submit_label
+                        ? localizedText(question.submit_label, locale)
+                        : continueLabel(locale)}
                     </button>
                   </div>
                 ) : (
                   <div className="option-grid">
                     {questionOptions(question, locale).map((option, index) => (
-                      <button key={option} type="button" onClick={() => answerQuestion(option)}>
-                        <span className="option-preview-frame" aria-hidden="true">
-                          <span className="option-preview-fallback">{optionPreviewFallback(question, option, index)}</span>
+                      <button
+                        key={option}
+                        type="button"
+                        onClick={() => answerQuestion(option)}
+                      >
+                        <span
+                          className="option-preview-frame"
+                          aria-hidden="true"
+                        >
+                          <span className="option-preview-fallback">
+                            {optionPreviewFallback(question, option, index)}
+                          </span>
                           <img
                             className="option-preview-image"
                             src={optionPreviewImage(question, index, locale)}
@@ -396,10 +478,98 @@ export default function Studio({
                   </div>
                 )}
               </>
+            ) : showPhotoStep ? (
+              <div className="photo-step">
+                <h2>{t("studio.photo")}</h2>
+                {isUploading ? (
+                  <p className="status-line" role="status">
+                    {t("studio.uploadingPhoto")}
+                  </p>
+                ) : null}
+                {!isUploading && sourcePhotoPath ? (
+                  <>
+                    <div className="selected-photo-panel">
+                      {photoPreviewUrl && !photoPreviewFailed ? (
+                        <img
+                          className="selected-photo-preview"
+                          src={photoPreviewUrl}
+                          alt={t("studio.selectedPhotoPreview")}
+                          onError={() => setPhotoPreviewFailed(true)}
+                        />
+                      ) : (
+                        <div
+                          className="selected-photo-placeholder"
+                          aria-hidden="true"
+                        >
+                          <ImagePlus size={20} />
+                        </div>
+                      )}
+                      <div className="selected-photo-copy">
+                        <p className="status-line" role="status">
+                          {t("studio.photoReady")}
+                        </p>
+                        <span>
+                          {selectedPhotoName || t("studio.photoUploaded")}
+                        </span>
+                      </div>
+                      <button
+                        className="selected-photo-remove"
+                        type="button"
+                        onClick={removePhoto}
+                      >
+                        <X aria-hidden="true" size={16} />
+                        {t("studio.removePhoto")}
+                      </button>
+                    </div>
+                    <button
+                      className="primary-action"
+                      type="button"
+                      onClick={continueFromPhotoStep}
+                    >
+                      {continueLabel(locale)}
+                    </button>
+                  </>
+                ) : null}
+                {!isUploading && !sourcePhotoPath ? (
+                  <div
+                    className="photo-step-actions"
+                    aria-label={t("studio.photo")}
+                  >
+                    <label>
+                      <ImagePlus aria-hidden="true" size={16} />
+                      {t("studio.album")}
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={onPhotoChange}
+                      />
+                    </label>
+                    <label>
+                      <Camera aria-hidden="true" size={16} />
+                      {t("studio.camera")}
+                      <input
+                        type="file"
+                        accept="image/*"
+                        capture="environment"
+                        onChange={onPhotoChange}
+                      />
+                    </label>
+                    <button
+                      className="secondary-action"
+                      type="button"
+                      onClick={skipPhotoStep}
+                    >
+                      {t("studio.skipPhoto")}
+                    </button>
+                  </div>
+                ) : null}
+              </div>
             ) : (
               <div className="conversation-panel">
                 <h2>{t("studio.notesPlaceholder")}</h2>
-                {isIteratingResult ? <p className="iteration-hint">{t("studio.iterationHint")}</p> : null}
+                {isIteratingResult ? (
+                  <p className="iteration-hint">{t("studio.iterationHint")}</p>
+                ) : null}
                 <textarea
                   ref={notesRef}
                   aria-label={t("studio.notesPlaceholder")}
@@ -419,11 +589,24 @@ export default function Studio({
                   ))}
                 </div>
                 <div className="conversation-actions">
-                  <button className="primary-action" type="button" disabled={!complete || isGenerating} onClick={() => generate()}>
-                    {isGenerating ? t("studio.generating") : isIteratingResult ? t("studio.continueGenerate") : t("buttons.generate")}
+                  <button
+                    className="primary-action"
+                    type="button"
+                    disabled={!complete || isGenerating}
+                    onClick={() => generate()}
+                  >
+                    {isGenerating
+                      ? t("studio.generating")
+                      : isIteratingResult
+                        ? t("studio.continueGenerate")
+                        : t("buttons.generate")}
                   </button>
                   {isIteratingResult ? (
-                    <button className="secondary-action compact-action restart-action" type="button" onClick={resetStudioDraft}>
+                    <button
+                      className="secondary-action compact-action restart-action"
+                      type="button"
+                      onClick={resetStudioDraft}
+                    >
                       <RotateCcw aria-hidden="true" size={16} />
                       {t("studio.startOver")}
                     </button>
@@ -432,52 +615,6 @@ export default function Studio({
               </div>
             )}
           </div>
-
-          {showPhotoPanel ? (
-            <>
-              {isUploading ? <p className="status-line" role="status">{t("studio.uploadingPhoto")}</p> : null}
-              {!isUploading ? (
-                sourcePhotoPath ? (
-                <div className="selected-photo-panel">
-                  {photoPreviewUrl && !photoPreviewFailed ? (
-                    <img
-                      className="selected-photo-preview"
-                      src={photoPreviewUrl}
-                      alt={t("studio.selectedPhotoPreview")}
-                      onError={() => setPhotoPreviewFailed(true)}
-                    />
-                  ) : (
-                    <div className="selected-photo-placeholder" aria-hidden="true">
-                      <ImagePlus size={20} />
-                    </div>
-                  )}
-                  <div className="selected-photo-copy">
-                    <p className="status-line" role="status">{t("studio.photoReady")}</p>
-                    <span>{selectedPhotoName || t("studio.photoUploaded")}</span>
-                  </div>
-                  <button className="selected-photo-remove" type="button" onClick={removePhoto}>
-                    <X aria-hidden="true" size={16} />
-                    {t("studio.removePhoto")}
-                  </button>
-                </div>
-                ) : (
-                <div className="photo-strip" aria-label={t("studio.photo")}>
-                  <span>{t("studio.photo")}</span>
-                  <label>
-                    <ImagePlus aria-hidden="true" size={16} />
-                    {t("studio.album")}
-                    <input type="file" accept="image/*" onChange={onPhotoChange} />
-                  </label>
-                  <label>
-                    <Camera aria-hidden="true" size={16} />
-                    {t("studio.camera")}
-                    <input type="file" accept="image/*" capture="environment" onChange={onPhotoChange} />
-                  </label>
-                </div>
-                )
-              ) : null}
-            </>
-          ) : null}
         </>
       ) : null}
 

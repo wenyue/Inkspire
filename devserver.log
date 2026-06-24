@@ -1,0 +1,35 @@
+
+> inkspire@0.1.0 dev
+> concurrently "npm run dev --workspace server" "npm run dev --workspace client"
+
+(node:62952) [DEP0060] DeprecationWarning: The `util._extend` API is deprecated. Please use Object.assign() instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+[0] 
+[0] > @inkspire/server@0.1.0 dev
+[0] > node src/index.js
+[0] 
+[1] 
+[1] > @inkspire/client@0.1.0 dev
+[1] > vite --host 0.0.0.0
+[1] 
+[0] Inkspire server listening on http://localhost:3001
+[1] 
+[1]   [32m[1mVITE[22m v5.4.21[39m  [2mready in [0m[1m304[22m[2m[0m ms[22m
+[1] 
+[1]   [32m➜[39m  [1mLocal[22m:   [36mhttp://localhost:[1m5173[22m/[39m
+[1]   [32m➜[39m  [1mNetwork[22m: [36mhttp://172.19.0.1:[1m5173[22m/[39m
+[1]   [32m➜[39m  [1mNetwork[22m: [36mhttp://192.168.0.141:[1m5173[22m/[39m
+[1]   [32m➜[39m  [1mNetwork[22m: [36mhttp://172.30.240.1:[1m5173[22m/[39m
+[0] npm error Lifecycle script `dev` failed with error:
+[0] npm error code 4294967295
+[0] npm error path D:\Inkspire\server
+[0] npm error workspace @inkspire/server@0.1.0
+[0] npm error location D:\Inkspire\server
+[0] npm error command failed
+[0] npm error command C:\WINDOWS\system32\cmd.exe /d /s /c node src/index.js
+[1] npm error Lifecycle script `dev` failed with error:
+[1] npm error code 4294967295
+[1] npm error path D:\Inkspire\client
+[1] npm error workspace @inkspire/client@0.1.0
+[1] npm error location D:\Inkspire\client
+[1] npm error command failed

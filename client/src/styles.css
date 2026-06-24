@@ -76,8 +76,14 @@ button:disabled {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  width: 100%;
   max-width: 980px;
   margin: 0 auto 10px;
+}
+
+.topbar-title {
+  min-width: 0;
+  text-align: left;
 }
 
 .topbar h1 {
@@ -98,6 +104,7 @@ button:disabled {
   align-items: center;
   gap: 6px;
   flex: 0 0 auto;
+  margin-left: auto;
   min-height: 38px;
   padding: 0 10px;
   border: 1px solid rgba(57, 87, 75, 0.18);
@@ -122,9 +129,10 @@ button:disabled {
   min-height: 0;
   max-width: 980px;
   margin: 0 auto;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
   padding-bottom: var(--bottom-nav-clearance);
-  scrollbar-width: thin;
+  scrollbar-gutter: stable;
 }
 
 .photo-strip {
@@ -141,7 +149,9 @@ button:disabled {
 }
 
 .photo-strip label,
-.photo-strip button {
+.photo-strip button,
+.photo-step-actions label,
+.photo-step-actions button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -156,11 +166,27 @@ button:disabled {
   white-space: normal;
 }
 
-.photo-strip input {
+.photo-strip input,
+.photo-step-actions input {
   position: absolute;
   width: 1px;
   height: 1px;
   opacity: 0;
+}
+
+.photo-step {
+  display: grid;
+  gap: 12px;
+}
+
+.photo-step h2 {
+  margin: 2px 0 0;
+}
+
+.photo-step-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
 }
 
 .selected-photo-panel {
@@ -240,6 +266,7 @@ button:disabled {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
+  min-height: 34px;
   margin-bottom: 10px;
   color: #5c7067;
   font-size: 13px;
@@ -260,13 +287,11 @@ button:disabled {
   position: relative;
   aspect-ratio: 16 / 9;
   overflow: hidden;
-  border-radius: 8px;
-  background:
-    linear-gradient(90deg, rgba(78, 57, 31, 0.1), transparent 18%, transparent 82%, rgba(78, 57, 31, 0.1)),
-    #f7f1e4;
+  border-radius: 10px;
+  background: #f7f1e4;
   box-shadow:
     inset 0 0 0 1px rgba(48, 78, 67, 0.16),
-    0 10px 28px rgba(48, 74, 65, 0.12);
+    0 14px 32px rgba(48, 74, 65, 0.14);
 }
 
 .preview-ink::after {
@@ -274,17 +299,69 @@ button:disabled {
   inset: 0;
   content: "";
   pointer-events: none;
-  background:
-    linear-gradient(115deg, rgba(255, 255, 255, 0.38), transparent 28%),
-    radial-gradient(circle at 74% 22%, rgba(255, 246, 205, 0.28), transparent 20%);
+  z-index: 2;
+  background: linear-gradient(115deg, rgba(255, 255, 255, 0.28), transparent 32%);
   mix-blend-mode: screen;
 }
 
-.question-preview-image {
+/* 把各选项的图无缝拼成一张横幅 */
+.preview-montage {
+  display: grid;
+  grid-template-columns: repeat(var(--montage-cols, 2), 1fr);
+  gap: 2px;
+  padding: 2px;
+  width: 100%;
+  height: 100%;
+  animation: previewReveal 640ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+
+.preview-montage[data-count="1"] {
+  --montage-cols: 1;
+}
+
+.preview-montage[data-count="2"] {
+  --montage-cols: 2;
+}
+
+.preview-montage[data-count="3"] {
+  --montage-cols: 3;
+}
+
+.preview-montage[data-count="4"] {
+  --montage-cols: 4;
+}
+
+.montage-tile {
   display: block;
   width: 100%;
   height: 100%;
-  object-fit: contain;
+  object-fit: cover;
+}
+
+.question-preview-image {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+@keyframes previewReveal {
+  from {
+    opacity: 0;
+    transform: scale(1.02);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .preview-montage {
+    animation: none;
+  }
 }
 
 .scroll-question h2 {
@@ -1238,5 +1315,38 @@ button:disabled {
 @media (max-width: 420px) {
   .result-actions {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-height: 740px) and (max-width: 520px) {
+  .scroll-question {
+    padding: 12px;
+  }
+
+  .question-toolbar {
+    margin-bottom: 8px;
+  }
+
+  .preview-ink {
+    aspect-ratio: 2 / 1;
+  }
+
+  .scroll-question h2 {
+    margin: 12px 0 10px;
+    font-size: 20px;
+  }
+
+  .option-grid {
+    gap: 8px;
+  }
+
+  .option-grid button {
+    grid-template-columns: 64px minmax(0, 1fr);
+    min-height: 64px;
+  }
+
+  .option-preview-frame {
+    width: 64px;
+    height: 50px;
   }
 }
