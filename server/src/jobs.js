@@ -21,6 +21,22 @@ function relativeRecordPath(recordId, fileName) {
   return path.join("records", recordId, fileName).replace(/\\/g, "/");
 }
 
+function normalizeSourcePhotoPath(sourcePhotoPath = "") {
+  if (!sourcePhotoPath) return "";
+  if (typeof sourcePhotoPath !== "string") {
+    const error = new Error("Invalid source photo path");
+    error.status = 400;
+    throw error;
+  }
+  const normalized = sourcePhotoPath.replace(/\\/g, "/");
+  if (!/^records\/[a-z0-9-]+\/source-photo\.webp$/i.test(normalized)) {
+    const error = new Error("Invalid source photo path");
+    error.status = 400;
+    throw error;
+  }
+  return normalized;
+}
+
 function diagnosticsFromError(error) {
   return error?.diagnostics || { reason: "runner_error" };
 }
@@ -32,7 +48,6 @@ function createJobManager({ config, storage, runner }) {
   const activeCounts = new Map();
   const runningCounts = new Map();
   let runningCount = 0;
-  let legacyLocked = false;
   let schedulePending = false;
   let saveChain = Promise.resolve();
   let pendingSaves = 0;
@@ -188,177 +203,12 @@ function createJobManager({ config, storage, runner }) {
     throw lastError;
   }
 
-  function createLegacyJob(stage, recordId = "", fields = {}) {
-    const createdAt = new Date().toISOString();
-    const job = {
-      id: newId("job"),
-      user_id: "",
-      recordId,
-      stage,
-      type: fields.type || "",
-      title: fields.title || "",
-      status: "queued",
-      created_at: createdAt,
-      started_at: null,
-      completed_at: null,
-      error: "",
-      diagnostics: null
-    };
-    jobs.set(job.id, job);
-    return job;
-  }
-
-  function legacyBusyJob(stage) {
-    const job = createLegacyJob(stage);
-    job.status = "failed";
-    job.error = "generation busy";
-    job.completed_at = new Date().toISOString();
-    return { busy: true, job: cloneJob(job) };
-  }
-
-  async function runLegacyLocked(stage, fn) {
-    if (legacyLocked || runningCount >= 6) return legacyBusyJob(stage);
-    legacyLocked = true;
-    incrementRunningSlot("");
-    try {
-      return await fn();
-    } finally {
-      releaseRunningSlot("");
-      legacyLocked = false;
-      flushWaiters();
-      scheduleQueue();
-    }
-  }
-
   function saveRecordSerial(record, userId = "") {
     pendingSaves += 1;
     const next = saveChain.then(() => storage.saveRecord(record, userId));
     saveChain = next.catch(() => {});
     return next.finally(() => {
       pendingSaves -= 1;
-    });
-  }
-
-  async function runImmediateArtwork({
-    userId = "",
-    type,
-    answers = {},
-    conversationNotes = "",
-    sourcePhotoPath = "",
-    recommendedArtworkSize = null
-  }) {
-    const ownerId = normalizeUserId(userId);
-    return runLegacyLocked("artwork", async () => {
-      const recordId = newId("record");
-      const artworkPath = relativeRecordPath(recordId, "artwork.webp");
-      const pngPath = path.join(storage.dataDir, "records", recordId, "artwork.png");
-      const createdAt = new Date().toISOString();
-      const title = titleFromRequest(type, answers);
-      const job = createLegacyJob("artwork", recordId, { type, title });
-      const record = {
-        id: recordId,
-        user_id: ownerId,
-        created_at: createdAt,
-        type,
-        title,
-        answers,
-        conversation_notes: conversationNotes,
-        source_photo_path: sourcePhotoPath,
-        recommended_artwork_size: recommendedArtworkSize,
-        artwork_path: artworkPath,
-        favorite: true,
-        status: "running",
-        diagnostics: null
-      };
-
-      job.status = "running";
-      job.started_at = new Date().toISOString();
-      await saveRecordSerial(record, ownerId);
-      try {
-        const prompt = config.prompts?.[type]
-          ? buildArtworkPrompt({ type, answers, conversationNotes, config })
-          : "";
-        const result = await runRunnerWithRetry({
-          stage: "artwork",
-          prompt,
-          record,
-          outputPngPath: pngPath
-        });
-        await convertPngToWebp(result.pngPath, path.join(storage.dataDir, artworkPath), qualityFromConfig(config));
-        record.status = "succeeded";
-        record.diagnostics = result.diagnostics || null;
-        delete record.error;
-        job.status = "succeeded";
-        job.diagnostics = record.diagnostics;
-      } catch (error) {
-        record.status = "failed";
-        record.error = error.message;
-        record.diagnostics = diagnosticsFromError(error);
-        job.status = "failed";
-        job.error = error.message;
-        job.diagnostics = record.diagnostics;
-      } finally {
-        job.completed_at = new Date().toISOString();
-      }
-
-      await saveRecordSerial(record, ownerId);
-      return { job: cloneJob(job), record: cloneRecord(record) };
-    });
-  }
-
-  async function runImmediateFusion({ userId = "", recordId, sourcePhotoPath = "" }) {
-    const ownerId = normalizeUserId(userId);
-    return runLegacyLocked("fusion_render", async () => {
-      const getRecord = typeof storage.getRecordForUser === "function"
-        ? storage.getRecordForUser.bind(storage)
-        : storage.getRecord.bind(storage);
-      const record = await getRecord(recordId, ownerId);
-      const fusionPath = relativeRecordPath(recordId, "fusion.webp");
-      const pngPath = path.join(storage.dataDir, "records", recordId, "fusion.png");
-      const job = createLegacyJob("fusion_render", recordId, {
-        type: record.type,
-        title: record.title || titleFromRequest(record.type, record.answers || {})
-      });
-
-      job.status = "running";
-      job.started_at = new Date().toISOString();
-      record.status = "running";
-      if (sourcePhotoPath) {
-        record.source_photo_path = sourcePhotoPath;
-      }
-      await saveRecordSerial(record, ownerId);
-
-      try {
-        const prompt = config.prompts?.fusion ? buildFusionPrompt({ record, config }) : "";
-        const result = await runRunnerWithRetry({
-          stage: "fusion_render",
-          prompt,
-          record,
-          outputPngPath: pngPath
-        });
-        await convertPngToWebp(result.pngPath, path.join(storage.dataDir, fusionPath), qualityFromConfig(config));
-        record.fusion_path = fusionPath;
-        record.has_fusion = true;
-        record.fusion_status = "succeeded";
-        record.status = "succeeded";
-        record.diagnostics = result.diagnostics || null;
-        delete record.error;
-        job.status = "succeeded";
-        job.diagnostics = record.diagnostics;
-      } catch (error) {
-        record.status = record.artwork_path ? "succeeded" : "failed";
-        record.fusion_status = "failed";
-        record.error = error.message;
-        record.diagnostics = diagnosticsFromError(error);
-        job.status = "failed";
-        job.error = error.message;
-        job.diagnostics = record.diagnostics;
-      } finally {
-        job.completed_at = new Date().toISOString();
-      }
-
-      await saveRecordSerial(record, ownerId);
-      return { job: cloneJob(job), record: cloneRecord(record) };
     });
   }
 
@@ -458,16 +308,7 @@ function createJobManager({ config, storage, runner }) {
     recommendedArtworkSize = null
   }) {
     const ownerId = normalizeUserId(userId);
-    if (!ownerId) {
-      return runImmediateArtwork({
-        userId: ownerId,
-        type,
-        answers,
-        conversationNotes,
-        sourcePhotoPath,
-        recommendedArtworkSize
-      });
-    }
+    const normalizedSourcePhotoPath = normalizeSourcePhotoPath(sourcePhotoPath);
     const reservation = reserveActiveSlot(ownerId);
     if (reservation.limitReached) {
       return {
@@ -489,7 +330,7 @@ function createJobManager({ config, storage, runner }) {
       title: titleFromRequest(type, answers),
       answers,
       conversation_notes: conversationNotes,
-      source_photo_path: sourcePhotoPath,
+      source_photo_path: normalizedSourcePhotoPath,
       recommended_artwork_size: recommendedArtworkSize,
       artwork_path: artworkPath,
       favorite: true,
@@ -521,7 +362,7 @@ function createJobManager({ config, storage, runner }) {
         title: record.title,
         answers,
         conversationNotes,
-        sourcePhotoPath,
+        sourcePhotoPath: normalizedSourcePhotoPath,
         record,
         job,
         outputPngPath: pngPath,
@@ -539,9 +380,7 @@ function createJobManager({ config, storage, runner }) {
 
   async function createFusion({ userId = "", recordId, sourcePhotoPath = "" }) {
     const ownerId = normalizeUserId(userId);
-    if (!ownerId) {
-      return runImmediateFusion({ userId: ownerId, recordId, sourcePhotoPath });
-    }
+    const normalizedSourcePhotoPath = normalizeSourcePhotoPath(sourcePhotoPath);
     const reservation = reserveActiveSlot(ownerId);
     if (reservation.limitReached) {
       return {
@@ -577,8 +416,8 @@ function createJobManager({ config, storage, runner }) {
       jobs.set(job.id, job);
 
       record.status = "queued";
-      if (sourcePhotoPath) {
-        record.source_photo_path = sourcePhotoPath;
+      if (normalizedSourcePhotoPath) {
+        record.source_photo_path = normalizedSourcePhotoPath;
       }
       await saveRecordSerial(record, ownerId);
 
@@ -589,7 +428,7 @@ function createJobManager({ config, storage, runner }) {
         title: job.title,
         record,
         job,
-        sourcePhotoPath,
+        sourcePhotoPath: normalizedSourcePhotoPath,
         outputPngPath: pngPath,
         outputWebpPath: fusionPath
       });
