@@ -67,6 +67,31 @@ test("GET /api/config/public returns tabs/questions/experts without codex intern
   });
 });
 
+test("API assigns an inkspire_user cookie when missing", async () => {
+  await withTempApp(async ({ app }) => {
+    const response = await request(app).get("/api/library").expect(200);
+
+    assert.match(
+      response.headers["set-cookie"].join("; "),
+      /inkspire_user=user-[a-z0-9-]+; Path=\/; HttpOnly; SameSite=Lax/i
+    );
+  });
+});
+
+test("API replaces malformed inkspire_user cookie values", async () => {
+  await withTempApp(async ({ app }) => {
+    const response = await request(app)
+      .get("/api/library")
+      .set("Cookie", "inkspire_user=%E0%A4%A")
+      .expect(200);
+
+    assert.match(
+      response.headers["set-cookie"].join("; "),
+      /inkspire_user=user-[a-z0-9-]+; Path=\/; HttpOnly; SameSite=Lax/i
+    );
+  });
+});
+
 test("POST /api/generations creates a job and eventually a record with artwork", async () => {
   await withTempApp(async ({ app, temp }) => {
     const response = await request(app)

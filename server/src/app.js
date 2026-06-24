@@ -11,6 +11,7 @@ const { runCodexImageGeneration } = require("./codexRunner");
 const { archiveSourcePhoto } = require("./imagePipeline");
 const { createJobManager } = require("./jobs");
 const { createStorage } = require("./storage");
+const { userIdentityMiddleware } = require("./userIdentity");
 
 function asyncHandler(fn) {
   return (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
@@ -174,6 +175,7 @@ function createApp(options = {}) {
   const clientDist = path.join(projectRoot, "client", "dist");
 
   app.use(express.json({ limit: "1mb" }));
+  app.use(userIdentityMiddleware);
 
   app.get("/api/health", asyncHandler(async (req, res) => {
     await storage.ensureStore();
@@ -349,7 +351,7 @@ function createApp(options = {}) {
       next(error);
       return;
     }
-    const status = /not found|ENOENT/i.test(error.message) ? 404 : 500;
+    const status = error.status || (/not found|ENOENT/i.test(error.message) ? 404 : 500);
     res.status(status).json({ error: error.message });
   });
 

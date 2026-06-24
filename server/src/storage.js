@@ -9,6 +9,16 @@ function validateRecordId(id) {
   }
 }
 
+function canAccessRecord(record, userId) {
+  return !record.user_id || record.user_id === userId;
+}
+
+function notFound(id) {
+  const error = new Error(`Record not found: ${id}`);
+  error.status = 404;
+  return error;
+}
+
 async function writeJsonAtomic(filePath, value) {
   const tempPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
   await fs.mkdir(path.dirname(filePath), { recursive: true });
@@ -22,6 +32,7 @@ function summarizeRecord(record) {
 
   return {
     id: record.id,
+    user_id: record.user_id || "",
     created_at: record.created_at || record.createdAt || null,
     type: record.type,
     title: record.title || "",
@@ -60,15 +71,20 @@ function createStorage(dataDir) {
     return JSON.parse(await fs.readFile(libraryPath, "utf8"));
   }
 
-  async function saveRecord(record) {
+  async function saveRecord(record, userId = "") {
     validateRecordId(record && record.id);
     await ensureStore();
 
-    const recordPath = path.join(recordsDir, record.id, "record.json");
-    await writeJsonAtomic(recordPath, record);
+    const nextRecord = { ...record };
+    if (userId && !nextRecord.user_id) {
+      nextRecord.user_id = userId;
+    }
 
-    const summary = summarizeRecord(record);
-    const library = (await readLibrary()).filter((entry) => entry.id !== record.id);
+    const recordPath = path.join(recordsDir, nextRecord.id, "record.json");
+    await writeJsonAtomic(recordPath, nextRecord);
+
+    const summary = summarizeRecord(nextRecord);
+    const library = (await readLibrary()).filter((entry) => entry.id !== nextRecord.id);
     library.push(summary);
     library.sort(compareNewestFirst);
     await writeJsonAtomic(libraryPath, library);
@@ -79,17 +95,35 @@ function createStorage(dataDir) {
     return JSON.parse(await fs.readFile(path.join(recordsDir, id, "record.json"), "utf8"));
   }
 
-  async function listLibrary() {
+  async function getRecordForUser(id, userId) {
+    let record;
+    try {
+      record = await getRecord(id);
+    } catch (error) {
+      if (error.code === "ENOENT") {
+        throw notFound(id);
+      }
+      throw error;
+    }
+    if (!canAccessRecord(record, userId)) {
+      throw notFound(id);
+    }
+    return record;
+  }
+
+  async function listLibrary(userId = "") {
     const library = await readLibrary();
     return library
       .map(summarizeRecord)
+      .filter((record) => canAccessRecord(record, userId))
       .sort(compareNewestFirst);
   }
 
-  async function saveProductionOrder(order) {
+  async function saveProductionOrder(order, userId = "") {
     validateRecordId(order && order.id);
     await ensureStore();
-    await writeJsonAtomic(path.join(ordersDir, `${order.id}.json`), order);
+    const nextOrder = userId && !order.user_id ? { ...order, user_id: userId } : order;
+    await writeJsonAtomic(path.join(ordersDir, `${nextOrder.id}.json`), nextOrder);
   }
 
   async function getProductionOrder(id) {
@@ -97,7 +131,18 @@ function createStorage(dataDir) {
     return JSON.parse(await fs.readFile(path.join(ordersDir, `${id}.json`), "utf8"));
   }
 
-  return { dataDir, ensureStore, saveRecord, getRecord, listLibrary, saveProductionOrder, getProductionOrder };
+  return {
+    dataDir,
+    ensureStore,
+    saveRecord,
+    getRecord,
+    getRecordForUser,
+    listLibrary,
+    saveProductionOrder,
+    getProductionOrder
+  };
 }
 
-module.exports = { createStorage };
+module.exports = {
+  createStorage
+};
