@@ -15,7 +15,7 @@ async function completePaintingFlow(page) {
   for (const option of ["山水", "水墨", "清雅", "竖幅", "适中"]) {
     await page.getByRole("button", { name: option }).click();
   }
-  await expect(page.getByRole("button", { name: "可以开始生成" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "生成" })).toBeVisible();
 }
 
 test("mobile user can complete Inkspire creation flow with mocked generation", async ({ page }) => {
@@ -51,10 +51,11 @@ test("mobile user can complete Inkspire creation flow with mocked generation", a
   await completePaintingFlow(page);
   await page.getByRole("button", { name: "生成", exact: true }).click();
 
+  await expect(page.getByText("墨色正在铺开，可能需要 2-3 分钟，请耐心等待。")).toBeVisible();
   await expect(page.getByRole("img", { name: "作品图" })).toBeVisible({ timeout: 30_000 });
-  await expect(page.getByRole("img", { name: "融合图" })).toBeVisible();
+  await expect(page.getByRole("img", { name: "效果图" })).toBeVisible();
   await expect(page.getByText("作品图", { exact: true })).toBeVisible();
-  await expect(page.getByText("融合图", { exact: true })).toBeVisible();
+  await expect(page.getByText("效果图", { exact: true })).toBeVisible();
   await expect(page.getByText(/制作作品/)).toBeVisible({ timeout: 30_000 });
   await page.getByText("制作作品").click();
   await expect(page.getByText("专家定制")).toBeVisible();
@@ -86,8 +87,9 @@ test("wide viewport shows artwork and fusion side by side", async ({ page }) => 
   await completePaintingFlow(page);
   await page.getByRole("button", { name: "生成", exact: true }).click();
 
+  await expect(page.getByText("墨色正在铺开，可能需要 2-3 分钟，请耐心等待。")).toBeVisible();
   await expect(page.getByRole("img", { name: "作品图" })).toBeVisible({ timeout: 30_000 });
-  await expect(page.getByRole("img", { name: "融合图" })).toBeVisible();
+  await expect(page.getByRole("img", { name: "效果图" })).toBeVisible();
   const resultColumns = await page.locator(".result-grid").first().evaluate((element) => {
     return window.getComputedStyle(element).gridTemplateColumns.split(" ").length;
   });
