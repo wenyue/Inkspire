@@ -71,6 +71,28 @@ export interface GenerationRecord extends LibraryRecord {
   answers?: Answers;
 }
 
+export interface GenerationJob {
+  id: string;
+  user_id?: string;
+  recordId: string;
+  stage: "artwork" | "fusion_render";
+  type?: WorkType;
+  title?: string;
+  status: "queued" | "running" | "succeeded" | "failed";
+  created_at?: string;
+  started_at?: string | null;
+  completed_at?: string | null;
+  error?: string;
+}
+
+export interface GenerationStartResult {
+  job?: GenerationJob;
+  record?: GenerationRecord;
+  limitReached?: boolean;
+  code?: string;
+  activeJobs?: GenerationJob[];
+}
+
 export interface ProductionEstimate {
   expert_id: string;
   size?: string;
@@ -100,10 +122,41 @@ export const fallbackConfig: PublicConfig = {
   }
 };
 
+export class ApiError extends Error {
+  status: number;
+  payload: unknown;
+
+  constructor(status: number, payload: unknown) {
+    super(typeof payload === "object" && payload && "error" in payload && typeof payload.error === "string"
+      ? payload.error
+      : `Request failed: ${status}`);
+    this.status = status;
+    this.payload = payload;
+  }
+}
+
+export function isGenerationLimitError(error: unknown): error is ApiError {
+  return typeof error === "object"
+    && error !== null
+    && "status" in error
+    && error.status === 429
+    && "payload" in error
+    && typeof error.payload === "object"
+    && error.payload !== null
+    && "code" in error.payload
+    && error.payload.code === "user_generation_limit_reached";
+}
+
 async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, init);
   if (!response.ok) {
-    throw new Error(`Request failed: ${response.status}`);
+    let payload: unknown = null;
+    try {
+      payload = await response.json();
+    } catch {
+      payload = null;
+    }
+    throw new ApiError(response.status, payload);
   }
   return response.json() as Promise<T>;
 }
@@ -129,6 +182,15 @@ export async function getRecord(recordId: string): Promise<GenerationRecord> {
   return requestJson(`/api/records/${recordId}`);
 }
 
+export async function getJob(jobId: string): Promise<GenerationJob> {
+  return requestJson(`/api/jobs/${jobId}`);
+}
+
+export async function loadActiveJobs(): Promise<GenerationJob[]> {
+  const payload = await requestJson<{ jobs: GenerationJob[] }>("/api/jobs/active");
+  return Array.isArray(payload.jobs) ? payload.jobs : [];
+}
+
 export async function uploadPhoto(file: File): Promise<{
   record_id: string;
   source_photo_path: string;
@@ -146,7 +208,7 @@ export async function createGeneration(payload: {
   conversationNotes: string;
   source_photo_path?: string;
   recommended_artwork_size?: ArtworkSize | null;
-}): Promise<{ record?: GenerationRecord } & GenerationRecord> {
+}): Promise<GenerationStartResult> {
   return requestJson("/api/generations", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -160,16 +222,12 @@ export async function createGeneration(payload: {
   });
 }
 
-export async function createFusion(recordId: string, sourcePhotoPath = ""): Promise<GenerationRecord> {
-  const payload = await requestJson<{ job?: { status?: string; error?: string }; record?: GenerationRecord } & GenerationRecord>(`/api/records/${recordId}/fusion`, {
+export async function createFusion(recordId: string, sourcePhotoPath = ""): Promise<GenerationStartResult> {
+  return requestJson(`/api/records/${recordId}/fusion`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ source_photo_path: sourcePhotoPath })
   });
-  if (payload.job?.status === "failed") {
-    throw new Error(payload.job.error || "Fusion generation failed");
-  }
-  return payload.record ?? payload;
 }
 
 export async function getProductionEstimate(recordId: string, expertId: string, size = "medium"): Promise<ProductionEstimate> {

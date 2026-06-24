@@ -227,15 +227,15 @@ function createApp(options = {}) {
   });
 
   app.get("/api/library", asyncHandler(async (req, res) => {
-    res.json({ records: await storage.listLibrary() });
+    res.json({ records: await storage.listLibrary(req.userId) });
   }));
 
   app.get("/api/records/:id", asyncHandler(async (req, res) => {
-    res.json(await storage.getRecord(req.params.id));
+    res.json(await storage.getRecordForUser(req.params.id, req.userId));
   }));
 
   app.get("/api/records/:id/images/:kind", asyncHandler(async (req, res) => {
-    const record = await storage.getRecord(req.params.id);
+    const record = await storage.getRecordForUser(req.params.id, req.userId);
     const field = req.params.kind === "fusion" ? "fusion_path"
       : req.params.kind === "source" || req.params.kind === "source-photo" ? "source_photo_path"
         : "artwork_path";
@@ -292,35 +292,42 @@ function createApp(options = {}) {
 
   app.post("/api/generations", asyncHandler(async (req, res) => {
     const result = await jobs.createArtwork({
+      userId: req.userId,
       type: req.body.type,
       answers: req.body.answers || {},
       conversationNotes: req.body.conversationNotes || req.body.conversation_notes || "",
       sourcePhotoPath: req.body.source_photo_path || "",
       recommendedArtworkSize: req.body.recommended_artwork_size || null
     });
-    res.status(result.busy ? 423 : 201).json(result);
+    res.status(result.limitReached ? 429 : 201).json(result);
   }));
 
   app.post("/api/records/:id/fusion", asyncHandler(async (req, res) => {
     const result = await jobs.createFusion({
+      userId: req.userId,
       recordId: req.params.id,
       sourcePhotoPath: req.body.source_photo_path || req.body.sourcePhotoPath || ""
     });
-    res.status(result.busy ? 423 : 201).json(result);
+    res.status(result.limitReached ? 429 : 201).json(result);
   }));
 
   app.post("/api/records/:id/regenerate", asyncHandler(async (req, res) => {
-    const current = await storage.getRecord(req.params.id);
+    const current = await storage.getRecordForUser(req.params.id, req.userId);
     const result = await jobs.createArtwork({
+      userId: req.userId,
       type: current.type,
       answers: req.body.answers || current.answers || {},
       conversationNotes: req.body.conversationNotes || current.conversation_notes || ""
     });
-    res.status(result.busy ? 423 : 201).json(result);
+    res.status(result.limitReached ? 429 : 201).json(result);
   }));
 
+  app.get("/api/jobs/active", (req, res) => {
+    res.json({ jobs: jobs.listActiveJobs(req.userId) });
+  });
+
   app.get("/api/jobs/:id", (req, res) => {
-    const job = jobs.getJob(req.params.id);
+    const job = jobs.getJob(req.params.id, req.userId);
     if (!job) {
       res.status(404).json({ error: "job not found" });
       return;
@@ -329,14 +336,14 @@ function createApp(options = {}) {
   });
 
   app.post("/api/records/:id/favorite", asyncHandler(async (req, res) => {
-    const record = await storage.getRecord(req.params.id);
+    const record = await storage.getRecordForUser(req.params.id, req.userId);
     record.favorite = Boolean(req.body.favorite);
-    await storage.saveRecord(record);
+    await storage.saveRecord(record, req.userId);
     res.json(record);
   }));
 
   app.post("/api/records/:id/production-estimate", asyncHandler(async (req, res) => {
-    await storage.getRecord(req.params.id);
+    await storage.getRecordForUser(req.params.id, req.userId);
     const expert = config.experts.find((entry) => entry.id === req.body.expertId) || config.experts[0];
     const size = productionSize(req.body.size);
     const multiplier = PRODUCTION_SIZE_MULTIPLIERS[size];
@@ -352,13 +359,14 @@ function createApp(options = {}) {
   }));
 
   app.post("/api/records/:id/production-orders", asyncHandler(async (req, res) => {
-    const record = await storage.getRecord(req.params.id);
+    const record = await storage.getRecordForUser(req.params.id, req.userId);
     const expert = config.experts.find((entry) => entry.id === req.body.expertId) || config.experts[0];
     const service = (expert.services || []).find((entry) => entry.id === req.body.serviceId) || expert.services?.[0];
     const size = req.body.size || record.recommended_artwork_size || inferArtworkSizeFromScene();
     const referenceLevel = Math.max(1, Math.min(5, Number(req.body.referenceLevel || 3)));
     const order = {
       id: newId("order"),
+      user_id: req.userId,
       created_at: new Date().toISOString(),
       record_id: record.id,
       expert_id: expert.id,
@@ -375,12 +383,17 @@ function createApp(options = {}) {
         recommended_artwork_size: record.recommended_artwork_size || null
       }
     };
-    await storage.saveProductionOrder(order);
+    await storage.saveProductionOrder(order, req.userId);
     res.status(201).json({ order });
   }));
 
   app.get("/api/production-orders/:id", asyncHandler(async (req, res) => {
-    res.json({ order: await storage.getProductionOrder(req.params.id) });
+    const order = await storage.getProductionOrder(req.params.id);
+    if (order.user_id && order.user_id !== req.userId) {
+      res.status(404).json({ error: "order not found" });
+      return;
+    }
+    res.json({ order });
   }));
 
   if (fs.existsSync(path.join(clientDist, "index.html"))) {

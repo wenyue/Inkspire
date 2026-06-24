@@ -51,6 +51,7 @@ test("saveRecord writes record JSON, updates library, and getRecord returns it",
     assert.deepEqual(JSON.parse(await fs.readFile(path.join(temp, "library.json"), "utf8")), [
       {
         id: "artwork-1",
+        user_id: "",
         created_at: "2026-06-24T12:00:00.000Z",
         type: "painting",
         title: "松风入画",
@@ -92,6 +93,7 @@ test("listLibrary returns spec summaries sorted newest first", async () => {
     assert.deepEqual(await storage.listLibrary(), [
       {
         id: "newer",
+        user_id: "",
         created_at: "2026-06-24T11:00:00.000Z",
         type: "calligraphy",
         title: "新作",
@@ -102,6 +104,7 @@ test("listLibrary returns spec summaries sorted newest first", async () => {
       },
       {
         id: "older",
+        user_id: "",
         created_at: "2026-06-24T10:00:00.000Z",
         type: "painting",
         title: "旧作",

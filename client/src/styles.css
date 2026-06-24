@@ -523,6 +523,18 @@ button:disabled {
   color: #a33b2f;
 }
 
+.generation-status {
+  display: grid;
+  gap: 4px;
+  color: #315b4d;
+  line-height: 1.45;
+}
+
+.generation-status span {
+  color: #6b5f4f;
+  overflow-wrap: anywhere;
+}
+
 .result-view {
   margin-top: 16px;
 }

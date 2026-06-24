@@ -1,14 +1,20 @@
 import { BookOpen, Brush, Languages, Users } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   fallbackConfig,
   createFusion,
+  createGeneration,
   getRecord,
+  getJob,
+  isGenerationLimitError,
+  loadActiveJobs,
   loadLibrary,
   loadPublicConfig,
   uploadPhoto,
   updateFavorite,
+  type GenerationJob,
   type GenerationRecord,
+  type GenerationStartResult,
   type LibraryRecord,
   type PublicConfig
 } from "./api";
@@ -74,11 +80,14 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<Tab>(() => readStoredTab());
   const [library, setLibrary] = useState<LibraryRecord[]>([]);
   const [currentRecord, setCurrentRecord] = useState<GenerationRecord | null>(null);
+  const [activeJobs, setActiveJobs] = useState<GenerationJob[]>([]);
   const [restoringRecordId, setRestoringRecordId] = useState(() => readStoredRecordId());
   const [showProduction, setShowProduction] = useState(false);
   const [isAttachingPhoto, setIsAttachingPhoto] = useState(false);
   const [resultActionError, setResultActionError] = useState("");
   const [notesFocusRequest, setNotesFocusRequest] = useState(0);
+  const activeJobsRef = useRef<GenerationJob[]>([]);
+  const autoFusionRecordIds = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     loadPublicConfig().then((nextConfig) => {
@@ -89,7 +98,12 @@ export default function App() {
       });
     });
     loadLibrary().then((records) => setLibrary(visibleLibraryRecords(records)));
+    loadActiveJobs().then((jobs) => setActiveJobs(jobs)).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    activeJobsRef.current = activeJobs;
+  }, [activeJobs]);
 
   useEffect(() => {
     window.localStorage.setItem(LOCALE_KEY, locale);
@@ -129,7 +143,7 @@ export default function App() {
   const t = useMemo(() => createTranslator(locale, config.i18n), [config.i18n, locale]);
   const list = useMemo(() => createListTranslator(locale, config.i18n), [config.i18n, locale]);
 
-  const onResult = (record: GenerationRecord) => {
+  const onResult = useCallback((record: GenerationRecord) => {
     setCurrentRecord(record);
     setNotesFocusRequest(0);
     if (record.id) {
@@ -139,7 +153,145 @@ export default function App() {
       const withoutDuplicate = records.filter((item) => item.id !== record.id);
       return visibleLibraryRecords([record, ...withoutDuplicate]);
     });
-  };
+  }, []);
+
+  const mergeActiveJob = useCallback((job: GenerationJob) => {
+    setActiveJobs((jobs) => {
+      const next = [job, ...jobs.filter((item) => item.id !== job.id)]
+        .filter((item) => item.status === "queued" || item.status === "running")
+        .slice(0, 2);
+      activeJobsRef.current = next;
+      return next;
+    });
+  }, []);
+
+  const replaceActiveJobs = useCallback((jobs: GenerationJob[]) => {
+    const next = jobs
+      .filter((job) => job.status === "queued" || job.status === "running")
+      .slice(0, 2);
+    activeJobsRef.current = next;
+    setActiveJobs(next);
+  }, []);
+
+  const handleGenerationStart = useCallback((result: GenerationStartResult) => {
+    if (result.limitReached) {
+      replaceActiveJobs(result.activeJobs ?? []);
+      const error = new Error(result.code || "generation limit reached");
+      Object.assign(error, {
+        status: 429,
+        payload: result
+      });
+      throw error;
+    }
+    if (result.job?.status === "queued" || result.job?.status === "running") {
+      mergeActiveJob(result.job);
+    }
+  }, [mergeActiveJob, replaceActiveJobs]);
+
+  const applyFinishedRecord = useCallback((record: GenerationRecord) => {
+    onResult(record);
+  }, [onResult]);
+
+  const startFusionJob = useCallback(async (recordId: string, sourcePhotoPath = "") => {
+    try {
+      const result = await createFusion(recordId, sourcePhotoPath);
+      handleGenerationStart(result);
+      if (result.record && (!result.job || result.job.status === "succeeded" || result.job.status === "failed")) {
+        applyFinishedRecord(result.record);
+      }
+      if (result.job?.status === "failed") {
+        throw new Error(result.job.error || "fusion generation failed");
+      }
+    } catch (error) {
+      if (isGenerationLimitError(error)) {
+        replaceActiveJobs((error.payload as GenerationStartResult).activeJobs ?? []);
+      }
+      throw error;
+    }
+  }, [applyFinishedRecord, handleGenerationStart, replaceActiveJobs]);
+
+  const startGenerationJob = useCallback(async (payload: Parameters<typeof createGeneration>[0]) => {
+    try {
+      const result = await createGeneration(payload);
+      handleGenerationStart(result);
+      if (result.record && !result.job) {
+        if (
+          result.record.status === "succeeded"
+          && payload.source_photo_path
+          && result.record.source_photo_path
+          && !result.record.fusion_path
+          && !autoFusionRecordIds.current.has(result.record.id)
+        ) {
+          autoFusionRecordIds.current.add(result.record.id);
+          await startFusionJob(result.record.id, result.record.source_photo_path);
+          return;
+        }
+        applyFinishedRecord(result.record);
+      }
+    } catch (error) {
+      if (isGenerationLimitError(error)) {
+        replaceActiveJobs((error.payload as GenerationStartResult).activeJobs ?? []);
+      }
+      throw error;
+    }
+  }, [applyFinishedRecord, handleGenerationStart, replaceActiveJobs, startFusionJob]);
+
+  const completeJob = useCallback(async (job: GenerationJob) => {
+    const record = await getRecord(job.recordId);
+    if (
+      job.stage === "artwork"
+      && record.status === "succeeded"
+      && record.source_photo_path
+      && !record.fusion_path
+      && !autoFusionRecordIds.current.has(record.id)
+    ) {
+      autoFusionRecordIds.current.add(record.id);
+      await startFusionJob(record.id, record.source_photo_path);
+      return;
+    }
+    applyFinishedRecord(record);
+  }, [applyFinishedRecord, startFusionJob]);
+
+  const pollActiveJobs = useCallback(async () => {
+    const currentJobs = activeJobsRef.current;
+    if (currentJobs.length === 0) {
+      return;
+    }
+    const completedIds = new Set<string>();
+    const updates = new Map<string, GenerationJob>();
+
+    await Promise.all(currentJobs.map(async (job) => {
+      try {
+        const nextJob = await getJob(job.id);
+        if (nextJob.status === "queued" || nextJob.status === "running") {
+          updates.set(nextJob.id, nextJob);
+          return;
+        }
+        completedIds.add(nextJob.id);
+        await completeJob(nextJob);
+      } catch {
+        completedIds.add(job.id);
+      }
+    }));
+
+    setActiveJobs((jobs) => {
+      const next = jobs
+        .filter((job) => !completedIds.has(job.id))
+        .map((job) => updates.get(job.id) ?? job)
+        .filter((job) => job.status === "queued" || job.status === "running")
+        .slice(0, 2);
+      activeJobsRef.current = next;
+      return next;
+    });
+  }, [completeJob]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      void pollActiveJobs();
+    }, 1500);
+    void pollActiveJobs();
+    return () => window.clearInterval(timer);
+  }, [pollActiveJobs]);
 
   const clearCurrentRecord = () => {
     setCurrentRecord(null);
@@ -185,7 +337,7 @@ export default function App() {
         setResultActionError("");
         try {
           const upload = await uploadPhoto(file);
-          onResult(await createFusion(currentRecord.id, upload.source_photo_path));
+          await startFusionJob(currentRecord.id, upload.source_photo_path);
         } catch {
           setResultActionError(t("errors.generic"));
         } finally {
@@ -225,7 +377,8 @@ export default function App() {
             locale={locale}
             t={t}
             list={list}
-            onResult={onResult}
+            onStartGeneration={startGenerationJob}
+            activeJobs={activeJobs}
             resultSlot={resultSlot}
             notesFocusRequest={notesFocusRequest}
             hasResult={Boolean(currentRecord)}

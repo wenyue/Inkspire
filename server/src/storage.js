@@ -72,6 +72,7 @@ function summarizeRecord(record) {
 
   const summary = {
     id: record.id,
+    user_id: record.user_id || "",
     created_at: record.created_at || record.createdAt || null,
     type: record.type,
     title: record.title || "",

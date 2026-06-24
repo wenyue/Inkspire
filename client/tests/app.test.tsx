@@ -197,12 +197,14 @@ describe("App", () => {
   let failLateFusionJob = false;
   let configResponse = publicConfig;
   let libraryRecords: unknown[] = [];
+  let activeJobsResponse: unknown[] = [];
 
   beforeEach(() => {
     failLateFusion = false;
     failLateFusionJob = false;
     configResponse = publicConfig;
     libraryRecords = [];
+    activeJobsResponse = [];
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       if (url.endsWith("/api/config/public")) {
@@ -210,6 +212,9 @@ describe("App", () => {
       }
       if (url.endsWith("/api/library")) {
         return Response.json({ records: libraryRecords });
+      }
+      if (url.endsWith("/api/jobs/active")) {
+        return Response.json({ jobs: activeJobsResponse });
       }
       if (url.endsWith("/api/uploads/photo")) {
         return Response.json({
@@ -366,10 +371,43 @@ describe("App", () => {
 
   it("aligns the 墨起 title left and the language selector right", async () => {
     const styles = await readFile(resolve(process.cwd(), "src/styles.css"), "utf8");
-
     expect(styles).toMatch(/\.topbar\s*{[^}]*width:\s*100%/s);
     expect(styles).toMatch(/\.topbar-title\s*{[^}]*text-align:\s*left/s);
     expect(styles).toMatch(/\.language-select\s*{[^}]*margin-left:\s*auto/s);
+  });
+
+  it("restores active generation status from the server", async () => {
+    activeJobsResponse = [
+      {
+        id: "job-active",
+        recordId: "record-1",
+        stage: "artwork",
+        title: "山水",
+        status: "running"
+      }
+    ];
+
+    render(<App />);
+
+    expect(await screen.findByText("墨色正在铺开，可能需要 2-3 分钟，请耐心等待。")).toBeInTheDocument();
+    expect(screen.getByText("山水 作品图")).toBeInTheDocument();
+  });
+
+  it("disables generation when the restored active job list already has two tasks", async () => {
+    const user = userEvent.setup();
+    activeJobsResponse = [
+      { id: "job-a", recordId: "record-a", stage: "artwork", title: "山水", status: "running" },
+      { id: "job-b", recordId: "record-b", stage: "fusion_render", title: "花鸟", status: "queued" }
+    ];
+
+    render(<App />);
+
+    await user.click(await screen.findByRole("button", { name: "国画" }));
+    await user.click(screen.getByRole("button", { name: "山水" }));
+
+    expect(await screen.findByText("当前已有 2 个生成任务，请等其中一个完成后再开始。")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "不需要效果图，直接生成" })).toBeDisabled();
+    expect(screen.getByText("山水 作品图 · 花鸟 效果图")).toBeInTheDocument();
   });
 
   it("does not show photo controls before the final photo step", async () => {
@@ -664,6 +702,67 @@ describe("App", () => {
     expect(screen.queryByRole("button", { name: "可以开始生成" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "更清雅一点" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "生成" })).toBeInTheDocument();
+  });
+
+  it("restores active generation status from the server", async () => {
+    activeJobsResponse = [{
+      id: "job-active-1",
+      recordId: "record-1",
+      stage: "artwork",
+      type: "painting",
+      title: "藏卷山水",
+      status: "running"
+    }];
+
+    render(<App />);
+
+    expect(await screen.findByText("墨色正在铺开，可能需要 2-3 分钟，请耐心等待。")).toBeInTheDocument();
+    expect(screen.getByText("藏卷山水 作品图")).toBeInTheDocument();
+  });
+
+  it("keeps active generation status when switching tabs", async () => {
+    activeJobsResponse = [{
+      id: "job-active-1",
+      recordId: "record-1",
+      stage: "artwork",
+      type: "painting",
+      title: "藏卷山水",
+      status: "queued"
+    }];
+    const user = userEvent.setup();
+    render(<App />);
+
+    expect(await screen.findByText("墨色正在铺开，可能需要 2-3 分钟，请耐心等待。")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "藏卷" }));
+    await user.click(screen.getByRole("button", { name: "画案" }));
+
+    expect(screen.getByText("藏卷山水 作品图")).toBeInTheDocument();
+  });
+
+  it("shows the generation limit when two active jobs are already running", async () => {
+    activeJobsResponse = [{
+      id: "job-active-1",
+      recordId: "record-1",
+      stage: "artwork",
+      type: "painting",
+      title: "山水",
+      status: "running"
+    }, {
+      id: "job-active-2",
+      recordId: "record-2",
+      stage: "fusion_render",
+      type: "painting",
+      title: "花鸟",
+      status: "queued"
+    }];
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole("button", { name: "国画" }));
+    await user.click(screen.getByRole("button", { name: "山水" }));
+
+    expect(screen.getByText("当前已有 2 个生成任务，请等其中一个完成后再开始。")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "不需要效果图，直接生成" })).toBeDisabled();
   });
 
   it("generates from empty notes with the primary generate button", async () => {
