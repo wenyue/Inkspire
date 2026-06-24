@@ -1,8 +1,10 @@
 const express = require("express");
 const multer = require("multer");
+const { spawn } = require("node:child_process");
 const fs = require("node:fs");
 const path = require("node:path");
 const { PNG } = require("pngjs");
+const sharp = require("sharp");
 const { loadConfig, publicConfig } = require("./config");
 const { runCodexImageGeneration } = require("./codexRunner");
 const { archiveSourcePhoto } = require("./imagePipeline");
@@ -25,6 +27,70 @@ function configuredGeneratedImagesRoot(projectRoot, config) {
   return path.isAbsolute(configuredRoot)
     ? configuredRoot
     : path.resolve(projectRoot, configuredRoot);
+}
+
+const PRODUCTION_SIZE_MULTIPLIERS = {
+  small: 0.75,
+  medium: 1,
+  large: 1.5
+};
+
+function productionSize(value) {
+  return Object.hasOwn(PRODUCTION_SIZE_MULTIPLIERS, value) ? value : "medium";
+}
+
+function checkCommandAvailable(command) {
+  return new Promise((resolve) => {
+    if (!command) {
+      resolve("missing");
+      return;
+    }
+    const child = spawn(command, ["--version"], {
+      shell: false,
+      stdio: ["ignore", "ignore", "ignore"],
+      windowsHide: true
+    });
+    const timeout = setTimeout(() => {
+      child.kill();
+      resolve("missing");
+    }, 2000);
+    child.on("error", () => {
+      clearTimeout(timeout);
+      resolve("missing");
+    });
+    child.on("close", (code) => {
+      clearTimeout(timeout);
+      resolve(code === 0 ? "ready" : "missing");
+    });
+  });
+}
+
+async function checkDataDirWritable(dataDir) {
+  const probePath = path.join(dataDir, `.health-${process.pid}-${Date.now()}`);
+  try {
+    await fs.promises.mkdir(dataDir, { recursive: true });
+    await fs.promises.writeFile(probePath, "ok");
+    await fs.promises.rm(probePath, { force: true });
+    return "ready";
+  } catch {
+    return "blocked";
+  }
+}
+
+async function checkWebpAvailable() {
+  try {
+    await sharp({
+      create: {
+        width: 1,
+        height: 1,
+        channels: 4,
+        background: { r: 255, g: 255, b: 255, alpha: 1 }
+      }
+    }).webp({ quality: 82 }).toBuffer();
+    return "ready";
+  } catch {
+    return "blocked";
+  }
 }
 
 async function runDeterministicImageGeneration({ outputPngPath, stage }) {
@@ -66,7 +132,19 @@ function createApp(options = {}) {
 
   app.get("/api/health", asyncHandler(async (req, res) => {
     await storage.ensureStore();
-    res.json({ ok: true, storage: "ready", config: "ready" });
+    const runtime = options.healthChecks
+      ? await options.healthChecks()
+      : {
+        codex: await checkCommandAvailable(config.app.runtime.codexCommand),
+        dataDirWritable: await checkDataDirWritable(dataDir),
+        webp: await checkWebpAvailable()
+      };
+    res.json({
+      ok: runtime.codex === "ready" && runtime.dataDirWritable === "ready" && runtime.webp === "ready",
+      storage: "ready",
+      config: "ready",
+      runtime
+    });
   }));
 
   app.get("/api/config/public", (req, res) => {
@@ -118,7 +196,10 @@ function createApp(options = {}) {
   }));
 
   app.post("/api/records/:id/fusion", asyncHandler(async (req, res) => {
-    const result = await jobs.createFusion({ recordId: req.params.id });
+    const result = await jobs.createFusion({
+      recordId: req.params.id,
+      sourcePhotoPath: req.body.source_photo_path || req.body.sourcePhotoPath || ""
+    });
     res.status(result.busy ? 423 : 201).json(result);
   }));
 
@@ -151,15 +232,17 @@ function createApp(options = {}) {
   app.post("/api/records/:id/production-estimate", asyncHandler(async (req, res) => {
     await storage.getRecord(req.params.id);
     const expert = config.experts.find((entry) => entry.id === req.body.expertId) || config.experts[0];
+    const size = productionSize(req.body.size);
+    const multiplier = PRODUCTION_SIZE_MULTIPLIERS[size];
     const estimates = {};
     for (const service of expert.services || []) {
       estimates[service.id] = {
-        amount: service.priceEstimate.base,
+        amount: Math.round(service.priceEstimate.base * multiplier),
         currency: service.priceEstimate.currency,
         rule: service.priceEstimate.rule
       };
     }
-    res.json({ expert_id: expert.id, estimates });
+    res.json({ expert_id: expert.id, size, estimates });
   }));
 
   if (fs.existsSync(path.join(clientDist, "index.html"))) {

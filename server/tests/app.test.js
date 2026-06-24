@@ -12,17 +12,20 @@ const root = path.resolve(__dirname, "../..");
 
 async function withTempApp(fn) {
   const temp = await fs.mkdtemp(path.join(os.tmpdir(), "inkspire-app-"));
+  const config = loadConfig(root);
+  config.app.runtime.codexCommand = process.execPath;
   try {
     const app = createApp({
       projectRoot: root,
       dataDir: temp,
+      config,
       runner: async ({ outputPngPath }) => {
         await fs.mkdir(path.dirname(outputPngPath), { recursive: true });
         await fs.writeFile(outputPngPath, pngBuffer());
         return { pngPath: outputPngPath, diagnostics: { reason: "fake_runner" } };
       }
     });
-    await fn({ app, temp, config: loadConfig(root) });
+    await fn({ app, temp, config });
   } finally {
     await fs.rm(temp, { recursive: true, force: true });
   }
@@ -46,6 +49,9 @@ test("GET /api/health returns ok and public readiness fields", async () => {
     assert.equal(response.body.ok, true);
     assert.equal(response.body.storage, "ready");
     assert.equal(response.body.config, "ready");
+    assert.equal(response.body.runtime.codex, "ready");
+    assert.equal(response.body.runtime.dataDirWritable, "ready");
+    assert.equal(response.body.runtime.webp, "ready");
   });
 });
 
@@ -75,6 +81,7 @@ test("POST /api/generations creates a job and eventually a record with artwork",
 
     assert.equal(response.body.job.status, "succeeded");
     assert.equal(response.body.record.type, "painting");
+    assert.equal(response.body.record.favorite, true);
     assert.equal(response.body.record.source_photo_path, "records/upload-before-generate/source-photo.webp");
     assert.match(response.body.record.artwork_path, /artwork\.webp$/);
     assert.equal((await fs.readFile(path.join(temp, response.body.record.artwork_path))).subarray(0, 4).toString("ascii"), "RIFF");
@@ -119,6 +126,30 @@ test("GET /api/records/:id/images/source reads source_photo_path", async () => {
   });
 });
 
+test("POST /api/records/:id/fusion can attach a source photo after artwork generation", async () => {
+  await withTempApp(async ({ app }) => {
+    const upload = await request(app)
+      .post("/api/uploads/photo")
+      .attach("photo", pngBuffer(130), { filename: "source.png", contentType: "image/png" })
+      .expect(201);
+    const created = await request(app)
+      .post("/api/generations")
+      .send({ type: "painting", answers: { painting_subject: "山水" } })
+      .expect(201);
+
+    const response = await request(app)
+      .post(`/api/records/${created.body.record.id}/fusion`)
+      .send({ source_photo_path: upload.body.source_photo_path })
+      .expect(201);
+
+    assert.equal(response.body.record.source_photo_path, upload.body.source_photo_path);
+    assert.equal(response.body.record.has_fusion, true);
+    await request(app)
+      .get(`/api/records/${created.body.record.id}/images/source`)
+      .expect(200);
+  });
+});
+
 test("GET /api/library returns the generated record", async () => {
   await withTempApp(async ({ app }) => {
     const created = await request(app)
@@ -130,6 +161,7 @@ test("GET /api/library returns the generated record", async () => {
 
     assert.equal(response.body.records.length, 1);
     assert.equal(response.body.records[0].id, created.body.record.id);
+    assert.equal(response.body.records[0].favorite, true);
     assert.equal(response.body.records[0].thumbnail_path, created.body.record.artwork_path);
   });
 });
@@ -148,5 +180,23 @@ test("POST /api/records/:id/production-estimate returns expert_custom > expert_g
 
     assert.ok(response.body.estimates.expert_custom.amount > response.body.estimates.expert_guided.amount);
     assert.equal(response.body.estimates.expert_custom.currency, "CNY");
+  });
+});
+
+test("POST /api/records/:id/production-estimate scales estimates by selected size", async () => {
+  await withTempApp(async ({ app }) => {
+    const created = await request(app)
+      .post("/api/generations")
+      .send({ type: "painting", answers: {} })
+      .expect(201);
+
+    const response = await request(app)
+      .post(`/api/records/${created.body.record.id}/production-estimate`)
+      .send({ expertId: "wu_jiayin", size: "large" })
+      .expect(200);
+
+    assert.equal(response.body.size, "large");
+    assert.equal(response.body.estimates.expert_custom.amount, 2700);
+    assert.equal(response.body.estimates.expert_guided.amount, 900);
   });
 });

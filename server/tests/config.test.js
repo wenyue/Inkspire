@@ -36,6 +36,31 @@ test("loads required Inkspire configuration", () => {
   assert.match(config.prompts.fusion.system, /融合图/);
 });
 
+test("allows platform production contact to be configured from environment", () => {
+  const originalPhone = process.env.INKSPIRE_CONTACT_PHONE;
+  const originalWechat = process.env.INKSPIRE_CONTACT_WECHAT;
+  process.env.INKSPIRE_CONTACT_PHONE = "020-12345678";
+  process.env.INKSPIRE_CONTACT_WECHAT = "InkspireArt";
+  try {
+    const exposed = publicConfig(loadConfig(root));
+    assert.deepEqual(exposed.productionContact, {
+      phone: "020-12345678",
+      wechat: "InkspireArt"
+    });
+  } finally {
+    if (originalPhone === undefined) {
+      delete process.env.INKSPIRE_CONTACT_PHONE;
+    } else {
+      process.env.INKSPIRE_CONTACT_PHONE = originalPhone;
+    }
+    if (originalWechat === undefined) {
+      delete process.env.INKSPIRE_CONTACT_WECHAT;
+    } else {
+      process.env.INKSPIRE_CONTACT_WECHAT = originalWechat;
+    }
+  }
+});
+
 test("public config exposes only UI-safe fields", () => {
   const exposed = publicConfig(loadConfig(root));
   assert.equal(exposed.name, "墨起");

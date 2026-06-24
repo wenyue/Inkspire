@@ -1,5 +1,6 @@
 import { cleanup, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import userEvent from "@testing-library/user-event";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import Library from "../src/components/Library";
 
 const labels = {
@@ -74,5 +75,31 @@ describe("Library", () => {
     expect(screen.queryByRole("img", { name: "失败记录" })).not.toBeInTheDocument();
     expect(screen.getByText("书")).toBeInTheDocument();
     expect(screen.getByText("生成未完成")).toBeInTheDocument();
+  });
+
+  it("opens a saved record from the library item", async () => {
+    const user = userEvent.setup();
+    const onOpen = vi.fn();
+    render(
+      <Library
+        records={[
+          {
+            id: "record-4",
+            type: "painting",
+            title: "可查看作品",
+            thumbnail_path: "records/record-4/artwork.webp",
+            has_fusion: false,
+            status: "succeeded"
+          }
+        ]}
+        emptyLabel="暂无作品"
+        labels={labels}
+        onOpen={onOpen}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: /查看 可查看作品/ }));
+
+    expect(onOpen).toHaveBeenCalledWith(expect.objectContaining({ id: "record-4" }));
   });
 });

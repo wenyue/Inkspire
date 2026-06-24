@@ -12,6 +12,13 @@ function requireArray(value, label) {
   return value;
 }
 
+function productionContact(app) {
+  return {
+    phone: process.env.INKSPIRE_CONTACT_PHONE || app.productionContact?.phone || "",
+    wechat: process.env.INKSPIRE_CONTACT_WECHAT || app.productionContact?.wechat || ""
+  };
+}
+
 function loadConfig(projectRoot = path.resolve(__dirname, "../..")) {
   const configDir = path.join(projectRoot, "config");
   const app = readJson(path.join(configDir, "app.json"));
@@ -31,6 +38,8 @@ function loadConfig(projectRoot = path.resolve(__dirname, "../..")) {
   requireArray(questions.painting, "painting questions");
   requireArray(questions.calligraphy, "calligraphy questions");
 
+  app.productionContact = productionContact(app);
+
   return { app, experts, questions, i18n, prompts };
 }
 
@@ -39,6 +48,7 @@ function publicConfig(config) {
     name: config.app.name,
     defaultLocale: config.app.defaultLocale,
     image: config.app.image,
+    productionContact: config.app.productionContact,
     experts: config.experts,
     questions: config.questions,
     i18n: config.i18n

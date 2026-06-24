@@ -1,5 +1,5 @@
 import { Camera, ImagePlus, Sparkles } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createFusion, createGeneration, uploadPhoto, type GenerationRecord, type PublicConfig } from "../api";
 import {
   getInitialQuestion,
@@ -19,6 +19,7 @@ interface StudioProps {
   list: (key: string) => string[];
   onResult: (record: GenerationRecord) => void;
   resultSlot: React.ReactNode;
+  notesFocusRequest?: number;
 }
 
 function localizedText(value: Record<string, string>, locale: Locale): string {
@@ -45,13 +46,14 @@ function previewClassName(questionId: string, index: number): string {
   return `option-preview ${family}-preview preview-${index % 4}`;
 }
 
-export default function Studio({ config, locale, t, list, onResult, resultSlot }: StudioProps) {
+export default function Studio({ config, locale, t, list, onResult, resultSlot, notesFocusRequest = 0 }: StudioProps) {
   const [answers, setAnswers] = useState<Answers>({});
   const [conversationNotes, setConversationNotes] = useState("");
   const [sourcePhotoPath, setSourcePhotoPath] = useState("");
   const [isUploading, setIsUploading] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState("");
+  const notesRef = useRef<HTMLTextAreaElement | null>(null);
 
   const question = useMemo(() => {
     if (!answers.work_type) {
@@ -61,6 +63,16 @@ export default function Studio({ config, locale, t, list, onResult, resultSlot }
   }, [answers, config]);
   const complete = isQuestionFlowComplete(config, answers);
   const suggestions = list("suggestions");
+
+  useEffect(() => {
+    if (notesFocusRequest <= 0 || !complete) {
+      return;
+    }
+    notesRef.current?.focus();
+    if (typeof notesRef.current?.scrollIntoView === "function") {
+      notesRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }, [complete, notesFocusRequest]);
 
   const answerQuestion = (option: string) => {
     if (!question) {
@@ -142,11 +154,18 @@ export default function Studio({ config, locale, t, list, onResult, resultSlot }
           {t("studio.camera")}
           <input type="file" accept="image/*" capture="environment" onChange={onPhotoChange} />
         </label>
-        <button type="button" onClick={() => setSourcePhotoPath("")}>
+        <button
+          type="button"
+          onClick={() => {
+            setSourcePhotoPath("");
+            setError("");
+          }}
+        >
           {t("studio.skipPhoto")}
         </button>
       </div>
-      {isUploading ? <p className="status-line">{t("status.generating")}</p> : null}
+      {isUploading ? <p className="status-line" role="status">{t("studio.uploadingPhoto")}</p> : null}
+      {!isUploading && sourcePhotoPath ? <p className="status-line" role="status">{t("studio.photoReady")}</p> : null}
 
       <div className="scroll-question">
         {question ? (
@@ -168,6 +187,7 @@ export default function Studio({ config, locale, t, list, onResult, resultSlot }
           <div className="conversation-panel">
             <h2>{t("studio.notesPlaceholder")}</h2>
             <textarea
+              ref={notesRef}
               value={conversationNotes}
               onChange={(event) => setConversationNotes(event.target.value)}
               placeholder={t("studio.notesPlaceholder")}

@@ -360,7 +360,7 @@ button {
 
 .result-actions {
   display: grid;
-  grid-template-columns: minmax(0, 0.72fr) minmax(0, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
   gap: 10px;
 }
 
@@ -371,6 +371,27 @@ button {
   color: #2c5146;
   font-weight: 700;
   box-shadow: inset 0 0 0 1px rgba(46, 79, 67, 0.18);
+}
+
+.result-action-button,
+.result-upload-action {
+  display: inline-flex;
+  width: 100%;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 10px;
+  text-align: center;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+
+.result-upload-action input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
 }
 
 .result-failed {
@@ -480,8 +501,23 @@ button {
 }
 
 .library-item {
+  grid-template-columns: 1fr;
+  align-items: center;
+}
+
+.library-open {
+  display: grid;
+  min-height: 62px;
   grid-template-columns: 62px 1fr;
   align-items: center;
+  gap: 10px;
+  padding: 0;
+  text-align: left;
+  color: inherit;
+}
+
+.library-open:active {
+  transform: translateY(1px);
 }
 
 .library-thumb {
@@ -502,16 +538,36 @@ button {
   object-fit: cover;
 }
 
-.library-item h3,
+.library-copy strong,
 .expert-card h3,
 .experts-panel h2 {
   margin: 0;
 }
 
-.library-item p,
+.library-copy > span,
 .expert-card p {
   margin: 4px 0 0;
   color: #5b6e66;
+}
+
+.library-copy {
+  display: grid;
+  gap: 4px;
+}
+
+.library-action {
+  display: inline-flex;
+  min-height: 34px;
+  align-items: center;
+  gap: 5px;
+  margin-top: 8px;
+  padding: 0 10px;
+  border-radius: 8px;
+  background: rgba(249, 243, 231, 0.92);
+  color: #315347;
+  font-size: 13px;
+  font-weight: 700;
+  box-shadow: inset 0 0 0 1px rgba(46, 79, 67, 0.16);
 }
 
 .dialog-layer {
@@ -555,6 +611,48 @@ button {
   place-items: center;
   border-radius: 8px;
   background: #eef4eb;
+}
+
+.size-section {
+  display: grid;
+  gap: 8px;
+  margin: 14px 0;
+}
+
+.size-section p {
+  margin: 0;
+  color: #5c7067;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.size-list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.size-chip {
+  display: grid;
+  min-height: 62px;
+  align-content: center;
+  gap: 3px;
+  padding: 8px;
+  border-radius: 8px;
+  background: #f5efdf;
+  color: #253a33;
+  box-shadow: inset 0 0 0 1px rgba(56, 86, 74, 0.12);
+}
+
+.size-chip.selected {
+  background: #e7f1e8;
+  box-shadow: inset 0 0 0 2px #3b6657;
+}
+
+.size-chip span {
+  color: #5c7067;
+  font-size: 12px;
+  line-height: 1.25;
 }
 
 .service-list {

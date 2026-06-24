@@ -17,5 +17,9 @@
     "outputFormat": "webp",
     "webpQuality": 82,
     "maxInputSizeMb": 10
+  },
+  "productionContact": {
+    "phone": "",
+    "wechat": ""
   }
 }

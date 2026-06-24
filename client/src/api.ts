@@ -28,9 +28,15 @@ export interface Expert {
   services: ExpertService[];
 }
 
+export interface ProductionContact {
+  phone?: string;
+  wechat?: string;
+}
+
 export interface PublicConfig extends QuestionConfig {
   name?: string;
   defaultLocale?: Locale;
+  productionContact?: ProductionContact;
   experts: Expert[];
   i18n: Dictionaries;
 }
@@ -46,6 +52,7 @@ export interface LibraryRecord {
   has_fusion?: boolean;
   favorite?: boolean;
   status?: string;
+  fusion_status?: string;
 }
 
 export interface GenerationRecord extends LibraryRecord {
@@ -54,12 +61,14 @@ export interface GenerationRecord extends LibraryRecord {
 
 export interface ProductionEstimate {
   expert_id: string;
+  size?: string;
   estimates: Record<string, { amount: number; currency: string; rule: string }>;
 }
 
 export const fallbackConfig: PublicConfig = {
   name: appConfig.name,
   defaultLocale: appConfig.defaultLocale as Locale,
+  productionContact: appConfig.productionContact,
   questions,
   experts,
   i18n: {
@@ -94,6 +103,10 @@ export async function loadLibrary(): Promise<LibraryRecord[]> {
   }
 }
 
+export async function getRecord(recordId: string): Promise<GenerationRecord> {
+  return requestJson(`/api/records/${recordId}`);
+}
+
 export async function uploadPhoto(file: File): Promise<{ record_id: string; source_photo_path: string }> {
   const formData = new FormData();
   formData.append("photo", file);
@@ -118,17 +131,30 @@ export async function createGeneration(payload: {
   });
 }
 
-export async function createFusion(recordId: string): Promise<GenerationRecord> {
-  const payload = await requestJson<{ record?: GenerationRecord } & GenerationRecord>(`/api/records/${recordId}/fusion`, {
-    method: "POST"
+export async function createFusion(recordId: string, sourcePhotoPath = ""): Promise<GenerationRecord> {
+  const payload = await requestJson<{ job?: { status?: string; error?: string }; record?: GenerationRecord } & GenerationRecord>(`/api/records/${recordId}/fusion`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ source_photo_path: sourcePhotoPath })
   });
+  if (payload.job?.status === "failed") {
+    throw new Error(payload.job.error || "Fusion generation failed");
+  }
   return payload.record ?? payload;
 }
 
-export async function getProductionEstimate(recordId: string, expertId: string): Promise<ProductionEstimate> {
+export async function getProductionEstimate(recordId: string, expertId: string, size = "medium"): Promise<ProductionEstimate> {
   return requestJson(`/api/records/${recordId}/production-estimate`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ expertId })
+    body: JSON.stringify({ expertId, size })
+  });
+}
+
+export async function updateFavorite(recordId: string, favorite: boolean): Promise<GenerationRecord> {
+  return requestJson(`/api/records/${recordId}/favorite`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ favorite })
   });
 }

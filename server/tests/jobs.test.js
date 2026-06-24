@@ -134,3 +134,101 @@ test("artwork failure records failed status and diagnostics", async () => {
     assert.match(job.error, /fake policy refusal/);
   });
 });
+
+test("fusion failure preserves succeeded artwork record for retry", async () => {
+  await withTempStore(async (temp) => {
+    const storage = createStorage(temp);
+    const manager = createJobManager({
+      config: { app: { image: { webpQuality: 82 } }, prompts: {}, questions: {} },
+      storage,
+      runner: async ({ outputPngPath, stage }) => {
+        if (stage === "fusion_render") {
+          const error = new Error("fusion model unavailable");
+          error.diagnostics = { reason: "fusion_unavailable" };
+          throw error;
+        }
+        await fs.mkdir(path.dirname(outputPngPath), { recursive: true });
+        await fs.writeFile(outputPngPath, pngBuffer(90));
+        return { pngPath: outputPngPath, diagnostics: { reason: "artwork_success" } };
+      }
+    });
+    const { record } = await manager.createArtwork({ type: "painting", answers: {} });
+    const artworkPath = record.artwork_path;
+
+    const { job } = await manager.createFusion({ recordId: record.id });
+    const stored = await storage.getRecord(record.id);
+
+    assert.equal(job.status, "failed");
+    assert.equal(stored.status, "succeeded");
+    assert.equal(stored.fusion_status, "failed");
+    assert.equal(stored.artwork_path, artworkPath);
+    assert.equal(stored.fusion_path, undefined);
+    assert.equal(stored.has_fusion, undefined);
+    assert.equal(stored.diagnostics.reason, "fusion_unavailable");
+  });
+});
+
+test("artwork generation retries once before recording failure", async () => {
+  await withTempStore(async (temp) => {
+    let attempts = 0;
+    const manager = createJobManager({
+      config: { app: { image: { webpQuality: 82 } }, prompts: {}, questions: {} },
+      storage: createStorage(temp),
+      runner: async ({ outputPngPath }) => {
+        attempts += 1;
+        if (attempts === 1) {
+          const error = new Error("temporary codex issue");
+          error.diagnostics = { reason: "temporary" };
+          throw error;
+        }
+        await fs.mkdir(path.dirname(outputPngPath), { recursive: true });
+        await fs.writeFile(outputPngPath, pngBuffer(210));
+        return { pngPath: outputPngPath, diagnostics: { reason: "retry_success" } };
+      }
+    });
+
+    const { job, record } = await manager.createArtwork({ type: "painting", answers: {} });
+
+    assert.equal(attempts, 2);
+    assert.equal(job.status, "succeeded");
+    assert.equal(record.status, "succeeded");
+    assert.equal(record.diagnostics.reason, "retry_success");
+    assert.equal((await fs.readFile(path.join(temp, record.artwork_path))).subarray(0, 4).toString("ascii"), "RIFF");
+  });
+});
+
+test("fusion generation retries once and preserves artwork", async () => {
+  await withTempStore(async (temp) => {
+    const storage = createStorage(temp);
+    let fusionAttempts = 0;
+    const manager = createJobManager({
+      config: { app: { image: { webpQuality: 82 } }, prompts: {}, questions: {} },
+      storage,
+      runner: async ({ outputPngPath, stage }) => {
+        if (stage === "fusion_render") {
+          fusionAttempts += 1;
+          if (fusionAttempts === 1) {
+            const error = new Error("temporary fusion issue");
+            error.diagnostics = { reason: "temporary" };
+            throw error;
+          }
+        }
+        await fs.mkdir(path.dirname(outputPngPath), { recursive: true });
+        await fs.writeFile(outputPngPath, pngBuffer(stage === "fusion_render" ? 220 : 80));
+        return { pngPath: outputPngPath, diagnostics: { reason: `${stage}_success` } };
+      }
+    });
+    const { record } = await manager.createArtwork({ type: "painting", answers: {} });
+    const artworkPath = record.artwork_path;
+
+    const { job } = await manager.createFusion({ recordId: record.id });
+    const fused = await storage.getRecord(record.id);
+
+    assert.equal(fusionAttempts, 2);
+    assert.equal(job.status, "succeeded");
+    assert.equal(fused.status, "succeeded");
+    assert.equal(fused.artwork_path, artworkPath);
+    assert.equal(fused.diagnostics.reason, "fusion_render_success");
+    assert.equal((await fs.readFile(path.join(temp, fused.fusion_path))).subarray(8, 12).toString("ascii"), "WEBP");
+  });
+});

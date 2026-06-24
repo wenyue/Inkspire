@@ -59,6 +59,18 @@ function createJobManager({ config, storage, runner }) {
     }
   }
 
+  async function runRunnerWithRetry(options) {
+    let lastError;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        return await runner(options);
+      } catch (error) {
+        lastError = error;
+      }
+    }
+    throw lastError;
+  }
+
   async function createArtwork({ type, answers = {}, conversationNotes = "", sourcePhotoPath = "" }) {
     return runLocked("artwork", async () => {
       const recordId = newId("record");
@@ -74,7 +86,7 @@ function createJobManager({ config, storage, runner }) {
         conversation_notes: conversationNotes,
         source_photo_path: sourcePhotoPath,
         artwork_path: artworkPath,
-        favorite: false,
+        favorite: true,
         status: "running",
         diagnostics: null
       };
@@ -85,7 +97,7 @@ function createJobManager({ config, storage, runner }) {
         const prompt = config.prompts?.[type]
           ? buildArtworkPrompt({ type, answers, conversationNotes, config })
           : "";
-        const result = await runner({
+        const result = await runRunnerWithRetry({
           stage: "artwork",
           prompt,
           record,
@@ -110,7 +122,7 @@ function createJobManager({ config, storage, runner }) {
     });
   }
 
-  async function createFusion({ recordId }) {
+  async function createFusion({ recordId, sourcePhotoPath = "" }) {
     return runLocked("fusion_render", async () => {
       const record = await storage.getRecord(recordId);
       const job = createJob("fusion_render", recordId);
@@ -118,11 +130,14 @@ function createJobManager({ config, storage, runner }) {
       const pngPath = path.join(storage.dataDir, "records", recordId, "fusion.png");
       job.status = "running";
       record.status = "running";
+      if (sourcePhotoPath) {
+        record.source_photo_path = sourcePhotoPath;
+      }
       await storage.saveRecord(record);
 
       try {
         const prompt = config.prompts?.fusion ? buildFusionPrompt({ record, config }) : "";
-        const result = await runner({
+        const result = await runRunnerWithRetry({
           stage: "fusion_render",
           prompt,
           record,
@@ -131,12 +146,15 @@ function createJobManager({ config, storage, runner }) {
         await convertPngToWebp(result.pngPath, path.join(storage.dataDir, fusionPath), qualityFromConfig(config));
         record.fusion_path = fusionPath;
         record.has_fusion = true;
+        record.fusion_status = "succeeded";
         record.status = "succeeded";
         record.diagnostics = result.diagnostics || null;
+        delete record.error;
         job.status = "succeeded";
         job.diagnostics = record.diagnostics;
       } catch (error) {
-        record.status = "failed";
+        record.status = record.artwork_path ? "succeeded" : "failed";
+        record.fusion_status = "failed";
         record.error = error.message;
         record.diagnostics = diagnosticsFromError(error);
         job.status = "failed";

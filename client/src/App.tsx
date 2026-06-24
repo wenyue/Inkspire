@@ -2,8 +2,12 @@ import { BookOpen, Brush, Languages, Users } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import {
   fallbackConfig,
+  createFusion,
+  getRecord,
   loadLibrary,
   loadPublicConfig,
+  uploadPhoto,
+  updateFavorite,
   type GenerationRecord,
   type LibraryRecord,
   type PublicConfig
@@ -25,6 +29,10 @@ const tabIcons = {
   experts: Users
 };
 
+function visibleLibraryRecords(records: LibraryRecord[]): LibraryRecord[] {
+  return records.filter((record) => record.favorite !== false);
+}
+
 export default function App() {
   const [config, setConfig] = useState<PublicConfig>(fallbackConfig);
   const [locale, setLocale] = useState<Locale>(fallbackConfig.defaultLocale ?? "zh-Hans");
@@ -32,13 +40,16 @@ export default function App() {
   const [library, setLibrary] = useState<LibraryRecord[]>([]);
   const [currentRecord, setCurrentRecord] = useState<GenerationRecord | null>(null);
   const [showProduction, setShowProduction] = useState(false);
+  const [isAttachingPhoto, setIsAttachingPhoto] = useState(false);
+  const [resultActionError, setResultActionError] = useState("");
+  const [notesFocusRequest, setNotesFocusRequest] = useState(0);
 
   useEffect(() => {
     loadPublicConfig().then((nextConfig) => {
       setConfig(nextConfig);
       setLocale(nextConfig.defaultLocale ?? "zh-Hans");
     });
-    loadLibrary().then(setLibrary);
+    loadLibrary().then((records) => setLibrary(visibleLibraryRecords(records)));
   }, []);
 
   const t = useMemo(() => createTranslator(locale, config.i18n), [config.i18n, locale]);
@@ -48,7 +59,7 @@ export default function App() {
     setCurrentRecord(record);
     setLibrary((records) => {
       const withoutDuplicate = records.filter((item) => item.id !== record.id);
-      return [record, ...withoutDuplicate];
+      return visibleLibraryRecords([record, ...withoutDuplicate]);
     });
   };
 
@@ -59,12 +70,37 @@ export default function App() {
       fusionLabel={t("result.fusion")}
       makeLabel={t("buttons.make")}
       continueLabel={t("result.continue")}
+      addNotesLabel={t("result.addNotes")}
+      attachPhotoLabel={t("result.attachPhotoFusion")}
+      busyLabel={t("studio.generating")}
       failedTitle={t("result.failedTitle")}
       failedHint={t("result.failedHint")}
+      actionError={resultActionError}
+      isAttachingPhoto={isAttachingPhoto}
       onMake={() => setShowProduction(true)}
       onContinue={() => {
         setCurrentRecord(null);
         setShowProduction(false);
+        setResultActionError("");
+      }}
+      onAddNotes={() => {
+        setActiveTab("studio");
+        setNotesFocusRequest((request) => request + 1);
+      }}
+      onAttachPhoto={async (file) => {
+        if (!currentRecord?.id) {
+          return;
+        }
+        setIsAttachingPhoto(true);
+        setResultActionError("");
+        try {
+          const upload = await uploadPhoto(file);
+          onResult(await createFusion(currentRecord.id, upload.source_photo_path));
+        } catch {
+          setResultActionError(t("errors.generic"));
+        } finally {
+          setIsAttachingPhoto(false);
+        }
       }}
     />
   ) : null;
@@ -94,7 +130,15 @@ export default function App() {
 
       <main className="main-surface">
         {activeTab === "studio" ? (
-          <Studio config={config} locale={locale} t={t} list={list} onResult={onResult} resultSlot={resultSlot} />
+          <Studio
+            config={config}
+            locale={locale}
+            t={t}
+            list={list}
+            onResult={onResult}
+            resultSlot={resultSlot}
+            notesFocusRequest={notesFocusRequest}
+          />
         ) : null}
         {activeTab === "library" ? (
           <Library
@@ -103,7 +147,24 @@ export default function App() {
             labels={{
               artwork: t("library.artwork"),
               fusion: t("library.fusion"),
-              failed: t("library.failed")
+              failed: t("library.failed"),
+              removeFavorite: t("library.removeFavorite")
+            }}
+            onOpen={async (record) => {
+              setResultActionError("");
+              try {
+                const fullRecord = await getRecord(record.id);
+                setCurrentRecord(fullRecord);
+                setActiveTab("studio");
+              } catch {
+                setResultActionError(t("errors.generic"));
+              }
+            }}
+            onFavoriteToggle={async (record, favorite) => {
+              await updateFavorite(record.id, favorite);
+              setLibrary((records) => visibleLibraryRecords(
+                records.map((item) => item.id === record.id ? { ...item, favorite } : item)
+              ));
             }}
           />
         ) : null}
@@ -133,12 +194,16 @@ export default function App() {
       {showProduction && currentRecord && currentRecord.status !== "failed" ? (
         <ProductionDialog
           expert={config.experts[0]}
+          supportContact={config.productionContact}
           locale={locale}
           recordId={currentRecord.id}
           title={t("production.title")}
           closeLabel={t("production.close")}
+          sizeLabel={t("production.size")}
           estimateLabel={t("production.estimate")}
           contactLabel={t("production.contact")}
+          phoneLabel={t("production.phone")}
+          wechatLabel={t("production.wechat")}
           confirmLabel={t("production.confirm")}
           contactPendingLabel={t("experts.contactPending")}
           onClose={() => setShowProduction(false)}

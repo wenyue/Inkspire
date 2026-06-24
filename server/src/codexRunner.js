@@ -243,6 +243,7 @@ async function runCodexImageGeneration(options) {
 
   const eventBuffer = latestImageBufferFromEvents(eventsPath);
   ensureDirectoryFor(outputPngPath);
+  let imageSource = "image_event";
   if (eventBuffer) {
     fs.writeFileSync(outputPngPath, eventBuffer);
   } else {
@@ -254,12 +255,17 @@ async function runCodexImageGeneration(options) {
       throw error;
     }
     fs.copyFileSync(generatedPng, outputPngPath);
+    imageSource = "generated_images_fallback";
   }
 
   validatePngFile(outputPngPath);
+  const diagnostics = diagnoseCodexImageGeneration({ eventsPath, outputPath });
+  if (imageSource === "generated_images_fallback") {
+    diagnostics.reason = imageSource;
+  }
   return {
     pngPath: outputPngPath,
-    diagnostics: diagnoseCodexImageGeneration({ eventsPath, outputPath })
+    diagnostics
   };
 }
 

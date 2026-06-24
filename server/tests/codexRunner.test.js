@@ -121,6 +121,7 @@ test("finds newest generated PNG under generated_images root when events have no
 
     assert.deepEqual(await fs.readFile(result.pngPath), pngBuffer(90));
     assert.equal(result.diagnostics.image_event_count, 1);
+    assert.equal(result.diagnostics.reason, "generated_images_fallback");
   });
 });
 
