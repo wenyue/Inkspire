@@ -31,7 +31,11 @@ const CLIENT_OVERRIDES: Dictionaries = {
       back: "上一步"
     },
     suggestions: ["可以开始生成", "更清雅一点", "留白更多", "更适合挂在客厅", "更适合送礼", "加一点诗意"],
-    errors: { generic: "暂时无法完成，请稍后再试。" },
+    errors: {
+      generic: "暂时无法完成，请稍后再试。",
+      photoTooLarge: "照片过大，请选择较小图片或先压缩。",
+      libraryOpenFailed: "作品暂时无法打开，请稍后再试。"
+    },
     result: {
       artwork: "作品图",
       fusion: "效果图",
@@ -74,7 +78,8 @@ const CLIENT_OVERRIDES: Dictionaries = {
       currentWork: "当前作品",
       currentWorkPreview: "当前作品预览",
       ctaStart: "先生成作品，再咨询雅匠",
-      ctaWithRecord: "用当前作品咨询雅匠"
+      ctaWithRecord: "用当前作品咨询雅匠",
+      productionUnavailable: "暂未开放制作咨询"
     },
     production: {
       title: "制作作品",
@@ -115,7 +120,11 @@ const CLIENT_OVERRIDES: Dictionaries = {
       back: "上一步"
     },
     suggestions: ["可以開始生成", "更清雅一點", "留白更多", "更適合掛在客廳", "更適合送禮", "加一點詩意"],
-    errors: { generic: "暫時無法完成，請稍後再試。" },
+    errors: {
+      generic: "暫時無法完成，請稍後再試。",
+      photoTooLarge: "照片過大，請選擇較小圖片或先壓縮。",
+      libraryOpenFailed: "作品暫時無法打開，請稍後再試。"
+    },
     result: {
       artwork: "作品圖",
       fusion: "效果圖",
@@ -158,7 +167,8 @@ const CLIENT_OVERRIDES: Dictionaries = {
       currentWork: "目前作品",
       currentWorkPreview: "目前作品預覽",
       ctaStart: "先生成作品，再諮詢雅匠",
-      ctaWithRecord: "用目前作品諮詢雅匠"
+      ctaWithRecord: "用目前作品諮詢雅匠",
+      productionUnavailable: "暫未開放製作諮詢"
     },
     production: {
       title: "製作作品",
@@ -198,7 +208,11 @@ const CLIENT_OVERRIDES: Dictionaries = {
       back: "Back"
     },
     suggestions: ["Start generating", "Make it more refined", "Add more blank space", "Fit a living room", "Better for gifting", "Add poetic feeling"],
-    errors: { generic: "Unable to complete this right now. Please try again." },
+    errors: {
+      generic: "Unable to complete this right now. Please try again.",
+      photoTooLarge: "Photo is too large. Choose a smaller image or compress it first.",
+      libraryOpenFailed: "This artwork cannot be opened right now. Please try again later."
+    },
     result: {
       artwork: "Artwork",
       fusion: "Preview",
@@ -241,7 +255,8 @@ const CLIENT_OVERRIDES: Dictionaries = {
       currentWork: "Current artwork",
       currentWorkPreview: "Current artwork preview",
       ctaStart: "Create artwork before consulting",
-      ctaWithRecord: "Consult with current artwork"
+      ctaWithRecord: "Consult with current artwork",
+      productionUnavailable: "Production consultation is not open yet"
     },
     production: {
       title: "Make Artwork",

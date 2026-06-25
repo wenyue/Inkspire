@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
+import type { KeyboardEvent } from "react";
 import { ArrowLeft, Ruler, X } from "lucide-react";
 import {
   createProductionOrder,
@@ -122,6 +123,8 @@ interface ProductionDialogProps {
   wechatLabel: string;
   confirmLabel: string;
   contactPendingLabel: string;
+  productionAvailable?: boolean;
+  productionUnavailableLabel: string;
   onClose: () => void;
 }
 
@@ -191,6 +194,8 @@ export default function ProductionDialog({
   wechatLabel,
   confirmLabel,
   contactPendingLabel,
+  productionAvailable = true,
+  productionUnavailableLabel,
   onClose
 }: ProductionDialogProps) {
   const inferredSize = record.recommended_artwork_size ?? DEFAULT_SIZE;
@@ -204,6 +209,9 @@ export default function ProductionDialog({
   const [order, setOrder] = useState<ProductionOrder | null>(null);
   const [page, setPage] = useState<"main" | "size">("main");
   const [error, setError] = useState("");
+  const dialogTitleId = useId();
+  const dialogRef = useRef<HTMLElement | null>(null);
+  const closeButtonRef = useRef<HTMLButtonElement | null>(null);
   const contactPanelRef = useRef<HTMLDivElement | null>(null);
   const customSizeRef = useRef<HTMLDivElement | null>(null);
   const selectedReference = REFERENCE_LEVELS.find((level) => level.value === referenceLevel) ?? REFERENCE_LEVELS[2];
@@ -211,6 +219,7 @@ export default function ProductionDialog({
     phone: expert.phone || supportContact?.phone || "",
     wechat: expert.wechat || supportContact?.wechat || ""
   };
+  const productionOpen = productionAvailable && Boolean(contact.phone || contact.wechat);
   const presetOptions = useMemo(() => {
     const hasInferred = SIZE_OPTIONS.some((option) => option.preset_id === inferredSize.preset_id);
     return hasInferred ? SIZE_OPTIONS : [inferredSize as ProductionSize, ...SIZE_OPTIONS];
@@ -250,6 +259,42 @@ export default function ProductionDialog({
     scrollIntoViewIfAvailable(customSizeRef.current, { behavior: "smooth", block: "nearest" });
   }, [customSelected, page]);
 
+  useEffect(() => {
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    closeButtonRef.current?.focus();
+    return () => {
+      previousFocus?.focus();
+    };
+  }, []);
+
+  const onDialogKeyDown = (event: KeyboardEvent<HTMLElement>) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      onClose();
+      return;
+    }
+    if (event.key !== "Tab") {
+      return;
+    }
+    const focusable = Array.from(dialogRef.current?.querySelectorAll<HTMLElement>(
+      "button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])"
+    ) ?? []).filter((element) => !element.hasAttribute("disabled"));
+    if (focusable.length === 0) {
+      return;
+    }
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+      return;
+    }
+    if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  };
+
   const chooseSize = (size: ArtworkSize) => {
     setDraftSize(size);
     if (size.preset_id !== "custom") {
@@ -285,7 +330,7 @@ export default function ProductionDialog({
   };
 
   const confirm = async () => {
-    if (!selectedService) {
+    if (!selectedService || !productionOpen) {
       return;
     }
     setError("");
@@ -304,13 +349,20 @@ export default function ProductionDialog({
 
   return (
     <div className="dialog-layer">
-      <section className="production-dialog" role="dialog" aria-modal="true" aria-label={title}>
+      <section
+        className="production-dialog"
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={dialogTitleId}
+        onKeyDown={onDialogKeyDown}
+      >
         <div className="dialog-heading">
           <div>
             <p>{expert.name}</p>
-            <h2>{page === "size" ? (locale === "en" ? "Adjust Artwork Size" : "调整作品尺寸") : title}</h2>
+            <h2 id={dialogTitleId}>{page === "size" ? (locale === "en" ? "Adjust Artwork Size" : "调整作品尺寸") : title}</h2>
           </div>
-          <button className="icon-button" type="button" onClick={onClose} aria-label={closeLabel}>
+          <button ref={closeButtonRef} className="icon-button" type="button" onClick={onClose} aria-label={closeLabel}>
             <X aria-hidden="true" size={18} />
           </button>
         </div>
@@ -452,6 +504,11 @@ export default function ProductionDialog({
                 {contact.phone ? <span>{phoneLabel}{contact.phone}</span> : null}
                 {contact.wechat ? <span>{wechatLabel}{contact.wechat}</span> : null}
                 {!contact.phone && !contact.wechat ? <span>{contactPendingLabel}</span> : null}
+              </div>
+            ) : !productionOpen ? (
+              <div className="contact-panel" role="status">
+                <strong>{productionUnavailableLabel}</strong>
+                <span>{contactPendingLabel}</span>
               </div>
             ) : (
               <button className="primary-action" type="button" onClick={confirm}>

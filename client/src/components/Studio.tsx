@@ -104,6 +104,20 @@ function continueLabel(locale: Locale): string {
   return "继续";
 }
 
+function maxInputBytes(config: PublicConfig): number {
+  const configuredMb = Number(config.image?.maxInputSizeMb ?? 10);
+  const maxInputSizeMb = Number.isFinite(configuredMb) && configuredMb > 0 ? configuredMb : 10;
+  return maxInputSizeMb * 1024 * 1024;
+}
+
+function openNestedFileInput(event: React.KeyboardEvent<HTMLElement>): void {
+  if (event.key !== "Enter" && event.key !== " ") {
+    return;
+  }
+  event.preventDefault();
+  event.currentTarget.querySelector("input")?.click();
+}
+
 function readStudioDraft(): StudioDraft {
   if (typeof window === "undefined") {
     return {};
@@ -306,6 +320,11 @@ export default function Studio({
     const input = event.currentTarget;
     const file = event.target.files?.[0];
     if (!file) {
+      return;
+    }
+    if (file.size > maxInputBytes(config)) {
+      input.value = "";
+      setError(t("errors.photoTooLarge"));
       return;
     }
     setIsUploading(true);
@@ -540,22 +559,24 @@ export default function Studio({
                     className="photo-step-actions"
                     aria-label={t("studio.photo")}
                   >
-                    <label>
+                    <label tabIndex={0} onKeyDown={openNestedFileInput}>
                       <ImagePlus aria-hidden="true" size={16} />
                       {t("studio.album")}
                       <input
                         type="file"
                         accept="image/*"
+                        tabIndex={-1}
                         onChange={onPhotoChange}
                       />
                     </label>
-                    <label>
+                    <label tabIndex={0} onKeyDown={openNestedFileInput}>
                       <Camera aria-hidden="true" size={16} />
                       {t("studio.camera")}
                       <input
                         type="file"
                         accept="image/*"
                         capture="environment"
+                        tabIndex={-1}
                         onChange={onPhotoChange}
                       />
                     </label>

@@ -21,6 +21,7 @@ interface ResultViewProps {
   fusionUnavailableHint: string;
   actionError?: string;
   isAttachingPhoto?: boolean;
+  canMake?: boolean;
   onMake: () => void;
   onContinue: () => void;
   onAddNotes: () => void;
@@ -33,6 +34,14 @@ function recordImage(record: GenerationRecord, kind: "artwork" | "fusion") {
     return "";
   }
   return `/api/records/${record.id}/images/${kind}`;
+}
+
+function openNestedFileInput(event: React.KeyboardEvent<HTMLElement>): void {
+  if (event.key !== "Enter" && event.key !== " ") {
+    return;
+  }
+  event.preventDefault();
+  event.currentTarget.querySelector("input")?.click();
 }
 
 export default function ResultView({
@@ -53,6 +62,7 @@ export default function ResultView({
   fusionUnavailableHint,
   actionError = "",
   isAttachingPhoto = false,
+  canMake = true,
   onMake,
   onContinue,
   onAddNotes,
@@ -119,9 +129,9 @@ export default function ResultView({
   ) : null;
   const resultActions = (
     <>
-      {!failed && !artworkFailed ? <p className="result-conversion-hint">{makeHint}</p> : null}
+      {canMake && !failed && !artworkFailed ? <p className="result-conversion-hint">{makeHint}</p> : null}
       <div className="result-actions">
-        {!failed && !artworkFailed ? (
+        {canMake && !failed && !artworkFailed ? (
           <button className="primary-action result-action-button" type="button" onClick={onMake}>
             {makeLabel}
           </button>
@@ -134,7 +144,7 @@ export default function ResultView({
           {addNotesLabel}
         </button>
         {!failed && !fusion ? (
-          <label className="secondary-action result-upload-action">
+          <label className="secondary-action result-upload-action" tabIndex={0} onKeyDown={openNestedFileInput}>
             <ImagePlus aria-hidden="true" size={16} />
             {isAttachingPhoto ? busyLabel : attachPhotoLabel}
             <input
@@ -142,6 +152,7 @@ export default function ResultView({
               accept="image/*"
               disabled={isAttachingPhoto}
               aria-label={attachPhotoLabel}
+              tabIndex={-1}
               onChange={(event) => {
                 const file = event.target.files?.[0];
                 if (file) {

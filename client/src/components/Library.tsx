@@ -1,12 +1,15 @@
 import { BookOpen, BookmarkX } from "lucide-react";
 import { useState } from "react";
 import type { LibraryRecord } from "../api";
+import type { Locale } from "../domain";
 
 interface LibraryProps {
   records: LibraryRecord[];
+  locale: Locale;
   emptyLabel: string;
   emptyHint?: string;
   emptyActionLabel?: string;
+  actionError?: string;
   labels: {
     artwork: string;
     fusion: string;
@@ -53,7 +56,11 @@ function statusLabel(record: LibraryRecord, labels: LibraryProps["labels"]): str
   return record.has_fusion ? labels.fusion : labels.artwork;
 }
 
-function formattedCreatedAt(record: LibraryRecord): string {
+function dateLocale(locale: Locale): string {
+  return locale === "en" ? "en-US" : locale === "zh-Hant" ? "zh-TW" : "zh-CN";
+}
+
+function formattedCreatedAt(record: LibraryRecord, locale: Locale): string {
   if (!record.created_at) {
     return "";
   }
@@ -61,7 +68,7 @@ function formattedCreatedAt(record: LibraryRecord): string {
   if (Number.isNaN(time.getTime())) {
     return "";
   }
-  return new Intl.DateTimeFormat("zh-CN", {
+  return new Intl.DateTimeFormat(dateLocale(locale), {
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
@@ -71,17 +78,19 @@ function formattedCreatedAt(record: LibraryRecord): string {
   }).format(time);
 }
 
-function metadata(record: LibraryRecord, labels: LibraryProps["labels"]): string {
-  return [statusLabel(record, labels), formattedCreatedAt(record)].filter(Boolean).join(" · ");
+function metadata(record: LibraryRecord, labels: LibraryProps["labels"], locale: Locale): string {
+  return [statusLabel(record, labels), formattedCreatedAt(record, locale)].filter(Boolean).join(" · ");
 }
 
 function LibraryItem({
   record,
+  locale,
   labels,
   onOpen,
   onFavoriteToggle
 }: {
   record: LibraryRecord;
+  locale: Locale;
   labels: LibraryProps["labels"];
   onOpen?: (record: LibraryRecord) => void;
   onFavoriteToggle?: (record: LibraryRecord, favorite: boolean) => void;
@@ -116,7 +125,7 @@ function LibraryItem({
         </span>
         <span className="library-copy">
           <strong>{record.title || record.id}</strong>
-          <span className="library-meta">{metadata(record, labels)}</span>
+          <span className="library-meta">{metadata(record, labels, locale)}</span>
           <span className="library-open-action">
             <span>{openLabel}</span>
             <span aria-hidden="true">→</span>
@@ -164,9 +173,11 @@ function LibraryItem({
 
 export default function Library({
   records,
+  locale,
   emptyLabel,
   emptyHint,
   emptyActionLabel,
+  actionError = "",
   labels,
   onOpen,
   onEmptyAction,
@@ -191,10 +202,12 @@ export default function Library({
 
   return (
     <section className="library-grid">
+      {actionError ? <p className="error-line library-error" role="status">{actionError}</p> : null}
       {records.map((record) => (
         <LibraryItem
           key={record.id}
           record={record}
+          locale={locale}
           labels={labels}
           onOpen={onOpen}
           onFavoriteToggle={onFavoriteToggle}

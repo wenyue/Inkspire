@@ -43,6 +43,20 @@ function visibleLibraryRecords(records: LibraryRecord[]): LibraryRecord[] {
   return records.filter((record) => record.favorite !== false);
 }
 
+function maxInputBytes(config: PublicConfig): number {
+  return Math.max(1, config.image?.maxInputSizeMb ?? 10) * 1024 * 1024;
+}
+
+function hasProductionContact(config: PublicConfig): boolean {
+  const expert = config.experts[0];
+  return config.productionAvailable !== false && Boolean(
+    config.productionContact?.phone
+    || config.productionContact?.wechat
+    || expert?.phone
+    || expert?.wechat
+  );
+}
+
 function isLocale(value: string | null): value is Locale {
   return value === "zh-Hans" || value === "zh-Hant" || value === "en";
 }
@@ -85,6 +99,7 @@ export default function App() {
   const [showProduction, setShowProduction] = useState(false);
   const [isAttachingPhoto, setIsAttachingPhoto] = useState(false);
   const [resultActionError, setResultActionError] = useState("");
+  const [libraryActionError, setLibraryActionError] = useState("");
   const [notesFocusRequest, setNotesFocusRequest] = useState(0);
   const activeJobsRef = useRef<GenerationJob[]>([]);
   const autoFusionRecordIds = useRef<Set<string>>(new Set());
@@ -142,6 +157,7 @@ export default function App() {
 
   const t = useMemo(() => createTranslator(locale, config.i18n), [config.i18n, locale]);
   const list = useMemo(() => createListTranslator(locale, config.i18n), [config.i18n, locale]);
+  const productionEnabled = hasProductionContact(config);
 
   const onResult = useCallback((record: GenerationRecord) => {
     setCurrentRecord(record);
@@ -299,6 +315,7 @@ export default function App() {
     setRestoringRecordId("");
     setShowProduction(false);
     setResultActionError("");
+    setLibraryActionError("");
   };
 
   const resultSlot = currentRecord ? (
@@ -320,6 +337,7 @@ export default function App() {
       fusionUnavailableHint={t("result.fusionUnavailableHint")}
       actionError={resultActionError}
       isAttachingPhoto={isAttachingPhoto}
+      canMake={productionEnabled}
       onMake={() => setShowProduction(true)}
       onContinue={() => {
         clearCurrentRecord();
@@ -331,6 +349,10 @@ export default function App() {
       }}
       onAttachPhoto={async (file) => {
         if (!currentRecord?.id) {
+          return;
+        }
+        if (file.size > maxInputBytes(config)) {
+          setResultActionError(t("errors.photoTooLarge"));
           return;
         }
         setIsAttachingPhoto(true);
@@ -388,9 +410,11 @@ export default function App() {
         {activeTab === "library" ? (
           <Library
             records={library}
+            locale={locale}
             emptyLabel={t("empty.library")}
             emptyHint={t("empty.libraryHint")}
             emptyActionLabel={t("empty.libraryAction")}
+            actionError={libraryActionError}
             labels={{
               artwork: t("library.artwork"),
               fusion: t("library.fusion"),
@@ -403,18 +427,23 @@ export default function App() {
               removeConfirmCancel: t("library.removeConfirmCancel"),
               removeConfirmAction: t("library.removeConfirmAction")
             }}
-            onEmptyAction={() => setActiveTab("studio")}
+            onEmptyAction={() => {
+              setLibraryActionError("");
+              setActiveTab("studio");
+            }}
             onOpen={async (record) => {
               setResultActionError("");
+              setLibraryActionError("");
               try {
                 const fullRecord = await getRecord(record.id);
                 onResult(fullRecord);
                 setActiveTab("studio");
               } catch {
-                setResultActionError(t("errors.generic"));
+                setLibraryActionError(t("errors.libraryOpenFailed"));
               }
             }}
             onFavoriteToggle={async (record, favorite) => {
+              setLibraryActionError("");
               await updateFavorite(record.id, favorite);
               setLibrary((records) => visibleLibraryRecords(
                 records.map((item) => item.id === record.id ? { ...item, favorite } : item)
@@ -434,11 +463,16 @@ export default function App() {
             sampleHeading={t("experts.sampleHeading")}
             currentWorkLabel={t("experts.currentWork")}
             currentWorkPreviewLabel={t("experts.currentWorkPreview")}
-            ctaLabel={currentRecord ? t("experts.ctaWithRecord") : t("experts.ctaStart")}
+            ctaLabel={
+              currentRecord && currentRecord.status !== "failed"
+                ? productionEnabled ? t("experts.ctaWithRecord") : t("experts.productionUnavailable")
+                : t("experts.ctaStart")
+            }
+            ctaDisabled={Boolean(currentRecord && currentRecord.status !== "failed" && !productionEnabled)}
             currentRecord={currentRecord}
             onCta={() => {
               setActiveTab("studio");
-              if (currentRecord && currentRecord.status !== "failed") {
+              if (currentRecord && currentRecord.status !== "failed" && productionEnabled) {
                 setShowProduction(true);
               }
             }}
@@ -480,6 +514,8 @@ export default function App() {
           wechatLabel={t("production.wechat")}
           confirmLabel={t("production.confirm")}
           contactPendingLabel={t("experts.contactPending")}
+          productionAvailable={productionEnabled}
+          productionUnavailableLabel={t("experts.productionUnavailable")}
           onClose={() => setShowProduction(false)}
         />
       ) : null}

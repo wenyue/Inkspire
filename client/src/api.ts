@@ -46,7 +46,11 @@ export interface ArtworkSize {
 export interface PublicConfig extends QuestionConfig {
   name?: string;
   defaultLocale?: Locale;
+  image?: {
+    maxInputSizeMb?: number;
+  };
   productionContact?: ProductionContact;
+  productionAvailable?: boolean;
   experts: Expert[];
   i18n: Dictionaries;
 }
@@ -109,10 +113,16 @@ export interface ProductionOrder {
   created_at: string;
 }
 
+function hasContact(contact?: ProductionContact): boolean {
+  return Boolean(contact?.phone || contact?.wechat);
+}
+
 export const fallbackConfig: PublicConfig = {
   name: appConfig.name,
   defaultLocale: appConfig.defaultLocale as Locale,
+  image: appConfig.image,
   productionContact: appConfig.productionContact,
+  productionAvailable: hasContact(appConfig.productionContact) || experts.some((expert) => hasContact(expert)),
   questions: questions as QuestionConfig["questions"],
   experts,
   i18n: {

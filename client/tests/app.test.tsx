@@ -130,6 +130,10 @@ const publicConfig = {
     phone: "020-12345678",
     wechat: "InkspireArt"
   },
+  productionAvailable: true,
+  image: {
+    maxInputSizeMb: 10
+  },
   i18n: {
     "zh-Hans": {
       tabs: { studio: "画案", library: "藏卷", experts: "雅匠" },
@@ -315,6 +319,9 @@ describe("App", () => {
           }
         }, { status: 201 });
       }
+      if (url.endsWith("/api/records/missing-record") && (!init || !init.method || init.method === "GET")) {
+        return Response.json({ error: "not found" }, { status: 404 });
+      }
       if (url.endsWith("/api/records/record-1") && (!init || !init.method || init.method === "GET")) {
         return Response.json({
           id: "record-1",
@@ -427,12 +434,13 @@ describe("App", () => {
     expect(screen.queryByLabelText("拍照")).not.toBeInTheDocument();
   });
 
-  it("keeps scrollable content clear of the fixed mobile navigation", async () => {
+  it("keeps scrollable content clear of the mobile navigation without wasting a full nav height", async () => {
     const styles = await readFile(resolve(process.cwd(), "src/styles.css"), "utf8");
 
-    expect(styles).toMatch(/--bottom-nav-clearance:\s*calc\(72px \+ env\(safe-area-inset-bottom\) \+ 24px\)/);
+    expect(styles).toMatch(/--bottom-nav-clearance:\s*calc\(env\(safe-area-inset-bottom\) \+ 16px\)/);
     expect(styles).toMatch(/padding-bottom:\s*var\(--bottom-nav-clearance\)/);
     expect(styles).toMatch(/padding:\s*8px 8px calc\(8px \+ env\(safe-area-inset-bottom\)\)/);
+    expect(styles).toMatch(/@media \(max-width:\s*520px\)[\s\S]*\.language-select-label[\s\S]*clip:\s*rect\(0 0 0 0\)/);
   });
 
   it("shows photo selection as the final explicit step", async () => {
@@ -448,6 +456,24 @@ describe("App", () => {
     expect(screen.getByLabelText("拍照")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "不需要效果图，直接生成" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "生成" })).not.toBeInTheDocument();
+  });
+
+  it("warns before uploading an oversized setup photo", async () => {
+    configResponse = {
+      ...publicConfig,
+      image: { maxInputSizeMb: 1 }
+    };
+    const user = userEvent.setup();
+    render(<App />);
+
+    await completePaintingQuestions(user);
+    await user.upload(
+      screen.getByLabelText("相册"),
+      new File([new Uint8Array(1024 * 1024 + 1)], "too-large.png", { type: "image/png" })
+    );
+
+    expect(await screen.findByText("图片太大了，请换一张 10MB 以内的照片。")).toBeInTheDocument();
+    expect(vi.mocked(fetch).mock.calls.some(([input]) => String(input).endsWith("/api/uploads/photo"))).toBe(false);
   });
 
   it("uses decorative option fallbacks without repeating visible labels", async () => {
@@ -1006,6 +1032,28 @@ describe("App", () => {
     expect(await screen.findByRole("img", { name: "效果图" })).toBeInTheDocument();
   });
 
+  it("warns before attaching an oversized result photo", async () => {
+    configResponse = {
+      ...publicConfig,
+      image: { maxInputSizeMb: 1 }
+    };
+    const user = userEvent.setup();
+    render(<App />);
+
+    await completePaintingWithoutPhoto(user);
+    await user.click(screen.getByRole("button", { name: "生成" }));
+    expect(await screen.findByRole("img", { name: "作品图" })).toBeInTheDocument();
+    vi.mocked(fetch).mockClear();
+
+    await user.upload(
+      screen.getByLabelText("添加摆放照片生成效果图"),
+      new File([new Uint8Array(1024 * 1024 + 1)], "late-large.png", { type: "image/png" })
+    );
+
+    expect(await screen.findByText("图片太大了，请换一张 10MB 以内的照片。")).toBeInTheDocument();
+    expect(vi.mocked(fetch).mock.calls.some(([input]) => String(input).endsWith("/api/uploads/photo"))).toBe(false);
+  });
+
   it("shows an error if attaching a photo for fusion fails", async () => {
     failLateFusion = true;
     const user = userEvent.setup();
@@ -1050,6 +1098,46 @@ describe("App", () => {
     expect(screen.getByText("先调整规格、选择服务和参考程度；估价仅作参考，确认后生成单号和联系方式。")).toBeInTheDocument();
     expect(screen.getByText("专家定制")).toBeInTheDocument();
     expect(screen.getByText("专家指导")).toBeInTheDocument();
+  });
+
+  it("hides production entry points when production contact is unavailable", async () => {
+    configResponse = {
+      ...publicConfig,
+      productionContact: { phone: "", wechat: "" },
+      productionAvailable: false,
+      experts: publicConfig.experts.map((expert) => ({ ...expert, phone: "", wechat: "" }))
+    };
+    const user = userEvent.setup();
+    render(<App />);
+
+    await completePaintingWithoutPhoto(user);
+    await user.click(screen.getByRole("button", { name: "生成" }));
+    expect(await screen.findByRole("img", { name: "作品图" })).toBeInTheDocument();
+
+    expect(screen.queryByRole("button", { name: "制作作品" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "雅匠" }));
+
+    const unavailableCta = await screen.findByRole("button", { name: "暂未开放制作咨询" });
+    expect(unavailableCta).toBeDisabled();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("keeps keyboard focus inside the production dialog and closes with Escape", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await completePaintingWithoutPhoto(user);
+    await user.click(screen.getByRole("button", { name: "生成" }));
+    const makeButton = await screen.findByRole("button", { name: "制作作品" });
+    await user.click(makeButton);
+
+    expect(await screen.findByRole("dialog", { name: "制作作品" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "关闭" })).toHaveFocus();
+
+    await user.keyboard("{Escape}");
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(makeButton).toHaveFocus();
   });
 
   it("shows only the selected artist reference hint in the production dialog", async () => {
@@ -1368,6 +1456,56 @@ describe("App", () => {
     expect(screen.getByRole("button", { name: "制作作品" })).toBeInTheDocument();
     expect(screen.getByLabelText("添加摆放照片生成效果图")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "画案" })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("shows a visible library error when a saved item cannot be opened", async () => {
+    libraryRecords = [{
+      id: "missing-record",
+      type: "painting",
+      title: "旧作",
+      thumbnail_path: "records/missing-record/artwork.webp",
+      artwork_path: "records/missing-record/artwork.webp",
+      status: "succeeded",
+      favorite: true
+    }];
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole("button", { name: "藏卷" }));
+    await user.click(screen.getByRole("button", { name: /查看作品 旧作/ }));
+
+    expect(await screen.findByText("作品暂时无法打开，请稍后再试。")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "藏卷" })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("formats library dates with the selected language", async () => {
+    const createdAt = "2026-06-24T12:00:00.000Z";
+    const expectedDate = new Intl.DateTimeFormat("en-US", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false
+    }).format(new Date(createdAt));
+    libraryRecords = [{
+      id: "dated-record",
+      type: "painting",
+      title: "Dated work",
+      thumbnail_path: "records/dated-record/artwork.webp",
+      artwork_path: "records/dated-record/artwork.webp",
+      created_at: createdAt,
+      status: "succeeded",
+      favorite: true
+    }];
+    const user = userEvent.setup();
+    render(<App />);
+
+    await screen.findByLabelText("语言");
+    await user.selectOptions(screen.getByLabelText("语言"), "en");
+    await user.click(screen.getByRole("button", { name: "Library" }));
+
+    expect(await screen.findByText(`Artwork · ${expectedDate}`)).toBeInTheDocument();
   });
 
   it("can remove a generated artwork from the library", async () => {

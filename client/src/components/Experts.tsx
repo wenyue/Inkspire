@@ -13,6 +13,7 @@ interface ExpertsProps {
   currentWorkLabel: string;
   currentWorkPreviewLabel: string;
   ctaLabel: string;
+  ctaDisabled?: boolean;
   currentRecord?: GenerationRecord | null;
   onCta: () => void;
 }
@@ -42,6 +43,7 @@ export default function Experts({
   currentWorkLabel,
   currentWorkPreviewLabel,
   ctaLabel,
+  ctaDisabled = false,
   currentRecord,
   onCta
 }: ExpertsProps) {
@@ -87,7 +89,7 @@ export default function Experts({
                 <img src={currentRecordImageSrc(currentRecord)} alt={currentWorkPreviewLabel} />
               </div>
             ) : null}
-            <button className="primary-action expert-cta" type="button" onClick={onCta}>
+            <button className="primary-action expert-cta" type="button" onClick={onCta} disabled={ctaDisabled}>
               {ctaLabel}
             </button>
           </div>
