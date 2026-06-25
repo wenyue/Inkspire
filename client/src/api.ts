@@ -157,6 +157,18 @@ export function isGenerationLimitError(error: unknown): error is ApiError {
     && error.payload.code === "user_generation_limit_reached";
 }
 
+export function isPhotoTooLargeError(error: unknown): error is ApiError {
+  return typeof error === "object"
+    && error !== null
+    && "status" in error
+    && error.status === 413
+    && "payload" in error
+    && typeof error.payload === "object"
+    && error.payload !== null
+    && "code" in error.payload
+    && error.payload.code === "photo_too_large";
+}
+
 async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, init);
   if (!response.ok) {

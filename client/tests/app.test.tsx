@@ -4,7 +4,9 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../src/App";
+import type { PublicConfig } from "../src/api";
 import { getProgressLabel } from "../src/components/Studio";
+import type { Question } from "../src/domain";
 
 function generationRequestBodies(): Array<Record<string, unknown>> {
   return vi.mocked(fetch).mock.calls
@@ -12,7 +14,7 @@ function generationRequestBodies(): Array<Record<string, unknown>> {
     .map(([, init]) => init?.body ? JSON.parse(String(init.body)) as Record<string, unknown> : {});
 }
 
-const publicConfig = {
+const publicConfig: PublicConfig = {
   questions: {
     painting: [
       {
@@ -150,7 +152,7 @@ const publicConfig = {
   }
 };
 
-const calligraphyTextQuestion = {
+const calligraphyTextQuestion: Question = {
   id: "text",
   applies_to: ["calligraphy", "fusion"],
   input_type: "textarea",
@@ -199,6 +201,7 @@ async function completePaintingWithPhoto(user: TestUser, file = new File(["sampl
 describe("App", () => {
   let failLateFusion = false;
   let failLateFusionJob = false;
+  let failUploadTooLarge = false;
   let configResponse = publicConfig;
   let libraryRecords: unknown[] = [];
   let activeJobsResponse: unknown[] = [];
@@ -206,6 +209,7 @@ describe("App", () => {
   beforeEach(() => {
     failLateFusion = false;
     failLateFusionJob = false;
+    failUploadTooLarge = false;
     configResponse = publicConfig;
     libraryRecords = [];
     activeJobsResponse = [];
@@ -221,6 +225,9 @@ describe("App", () => {
         return Response.json({ jobs: activeJobsResponse });
       }
       if (url.endsWith("/api/uploads/photo")) {
+        if (failUploadTooLarge) {
+          return Response.json({ error: "Photo is too large.", code: "photo_too_large" }, { status: 413 });
+        }
         return Response.json({
           record_id: "upload-1",
           source_photo_path: "records/upload-1/source-photo.webp"
@@ -472,8 +479,20 @@ describe("App", () => {
       new File([new Uint8Array(1024 * 1024 + 1)], "too-large.png", { type: "image/png" })
     );
 
-    expect(await screen.findByText("图片太大了，请换一张 10MB 以内的照片。")).toBeInTheDocument();
+    expect(await screen.findByText("照片过大，请选择较小图片或先压缩。")).toBeInTheDocument();
     expect(vi.mocked(fetch).mock.calls.some(([input]) => String(input).endsWith("/api/uploads/photo"))).toBe(false);
+  });
+
+  it("shows the same clear upload size message when the API rejects a setup photo as too large", async () => {
+    failUploadTooLarge = true;
+    const user = userEvent.setup();
+    render(<App />);
+
+    await completePaintingQuestions(user);
+    await user.upload(screen.getByLabelText("相册"), new File(["sample"], "server-large.png", { type: "image/png" }));
+
+    expect(await screen.findByText("照片过大，请选择较小图片或先压缩。")).toBeInTheDocument();
+    expect(screen.queryByText("暂时无法完成，请稍后再试。")).not.toBeInTheDocument();
   });
 
   it("uses decorative option fallbacks without repeating visible labels", async () => {
@@ -987,7 +1006,8 @@ describe("App", () => {
     expect(await screen.findByText("作品图暂时无法显示")).toBeInTheDocument();
     expect(screen.getByText("可以补充要求后再生成，或稍后从藏卷重新打开。")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "制作作品" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "按这张图继续调整" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "重新调整要求" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "按这张图继续调整" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "补充要求" })).toBeInTheDocument();
   });
 
@@ -1050,7 +1070,7 @@ describe("App", () => {
       new File([new Uint8Array(1024 * 1024 + 1)], "late-large.png", { type: "image/png" })
     );
 
-    expect(await screen.findByText("图片太大了，请换一张 10MB 以内的照片。")).toBeInTheDocument();
+    expect(await screen.findByText("照片过大，请选择较小图片或先压缩。")).toBeInTheDocument();
     expect(vi.mocked(fetch).mock.calls.some(([input]) => String(input).endsWith("/api/uploads/photo"))).toBe(false);
   });
 
@@ -1065,6 +1085,19 @@ describe("App", () => {
 
     expect(await screen.findByText("暂时无法完成，请稍后再试。")).toBeInTheDocument();
     expect(screen.queryByRole("img", { name: "效果图" })).not.toBeInTheDocument();
+  });
+
+  it("shows the upload size message when attaching a result photo is rejected by the API", async () => {
+    failUploadTooLarge = true;
+    const user = userEvent.setup();
+    render(<App />);
+
+    await completePaintingWithoutPhoto(user);
+    await user.click(screen.getByRole("button", { name: "生成" }));
+    await user.upload(await screen.findByLabelText("添加摆放照片生成效果图"), new File(["sample"], "late-large.png", { type: "image/png" }));
+
+    expect(await screen.findByText("照片过大，请选择较小图片或先压缩。")).toBeInTheDocument();
+    expect(screen.queryByText("暂时无法完成，请稍后再试。")).not.toBeInTheDocument();
   });
 
   it("keeps artwork visible when fusion returns a failed job", async () => {
@@ -1405,7 +1438,7 @@ describe("App", () => {
     ]);
     expect(screen.queryByText("联系方式待确认")).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "先生成作品，再咨询雅匠" }));
+    await user.click(screen.getByRole("button", { name: "去生成作品" }));
 
     expect(screen.getByText("先定作品类型")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "画案" })).toHaveAttribute("aria-pressed", "true");
@@ -1546,6 +1579,7 @@ describe("App", () => {
     expect(await screen.findByText("生成未完成")).toBeInTheDocument();
     expect(screen.getByText("可以补充要求后再试一次，或稍后重新生成。")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "制作作品" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "按这张图继续调整" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "重新调整要求" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "按这张图继续调整" })).not.toBeInTheDocument();
   });
 });

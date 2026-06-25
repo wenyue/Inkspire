@@ -4,17 +4,18 @@ import {
   getInitialQuestion,
   isQuestionFlowComplete,
   nextQuestion,
+  type QuestionConfig,
   resultLayoutForWidth
 } from "../src/domain";
 
-const config = { questions };
+const config: QuestionConfig = { questions: questions as QuestionConfig["questions"] };
 
 describe("domain question flow", () => {
   it("starts with the work type question", () => {
     const question = getInitialQuestion(config);
 
     expect(question.id).toBe("work_type");
-    expect(question.options["zh-Hans"]).toEqual(["国画", "书法"]);
+    expect(question.options?.["zh-Hans"]).toEqual(["国画", "书法"]);
   });
 
   it("shows only painting follow-up questions after choosing painting", () => {

@@ -64,11 +64,10 @@ test("mobile user can complete Inkspire creation flow with mocked generation", a
   await expect(page.getByRole("img", { name: "效果图" })).toBeVisible();
   await expect(page.getByText("作品图", { exact: true })).toBeVisible();
   await expect(page.getByText("效果图", { exact: true })).toBeVisible();
-  await expect(page.getByText(/制作作品/)).toBeVisible({ timeout: 30_000 });
-  await page.getByText("制作作品").click();
-  await expect(page.getByText("专家定制")).toBeVisible();
-  await expect(page.getByText("专家指导")).toBeVisible();
-  await page.getByRole("button", { name: "关闭" }).click();
+  await expect(page.getByRole("button", { name: "制作作品" })).not.toBeVisible();
+  await page.getByRole("button", { name: "雅匠" }).click();
+  await expect(page.getByRole("button", { name: "暂未开放制作咨询" })).toBeDisabled();
+  await page.getByRole("button", { name: "画案" }).click();
 
   await page.getByRole("button", { name: "藏卷" }).click();
   const savedRecord = page.getByRole("button", { name: /查看/ }).first();
@@ -76,7 +75,7 @@ test("mobile user can complete Inkspire creation flow with mocked generation", a
   await savedRecord.click();
   await expect(page.getByRole("button", { name: "画案" })).toHaveAttribute("aria-pressed", "true");
   await expect(page.getByRole("img", { name: "作品图" })).toBeVisible();
-  await expect(page.getByText(/制作作品/)).toBeVisible();
+  await expect(page.getByRole("button", { name: "制作作品" })).not.toBeVisible();
 
   const horizontalOverflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
   expect(horizontalOverflow).toBe(false);

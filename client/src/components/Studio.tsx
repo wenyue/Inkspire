@@ -1,6 +1,13 @@
 import { Camera, ImagePlus, RotateCcw, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { isGenerationLimitError, uploadPhoto, type GenerationJob, type GenerationRecord, type PublicConfig } from "../api";
+import {
+  isGenerationLimitError,
+  isPhotoTooLargeError,
+  uploadPhoto,
+  type GenerationJob,
+  type GenerationRecord,
+  type PublicConfig
+} from "../api";
 import {
   getInitialQuestion,
   isQuestionFlowComplete,
@@ -343,8 +350,8 @@ export default function Studio({
         return previewUrl;
       });
       setRecommendedArtworkSize(upload.recommended_artwork_size ?? null);
-    } catch {
-      setError(t("errors.generic"));
+    } catch (error) {
+      setError(isPhotoTooLargeError(error) ? t("errors.photoTooLarge") : t("errors.generic"));
     } finally {
       input.value = "";
       setIsUploading(false);

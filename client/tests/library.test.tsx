@@ -34,6 +34,7 @@ describe("Library", () => {
             status: "succeeded"
           }
         ]}
+        locale="zh-Hans"
         emptyLabel="暂无作品"
         labels={labels}
       />
@@ -58,6 +59,7 @@ describe("Library", () => {
             status: "succeeded"
           }
         ]}
+        locale="zh-Hans"
         emptyLabel="暂无作品"
         labels={labels}
       />
@@ -82,6 +84,7 @@ describe("Library", () => {
             status: "succeeded"
           }
         ]}
+        locale="zh-Hans"
         emptyLabel="暂无作品"
         labels={labels}
       />
@@ -107,6 +110,7 @@ describe("Library", () => {
             created_at: "2026-06-24T12:30:00.000Z"
           }
         ]}
+        locale="zh-Hans"
         emptyLabel="暂无作品"
         labels={labels}
       />
@@ -128,6 +132,7 @@ describe("Library", () => {
             status: "succeeded"
           }
         ]}
+        locale="zh-Hans"
         emptyLabel="暂无作品"
         labels={labels}
       />
@@ -151,6 +156,7 @@ describe("Library", () => {
             status: "succeeded"
           }
         ]}
+        locale="zh-Hans"
         emptyLabel="暂无作品"
         labels={labels}
         onFavoriteToggle={onFavoriteToggle}
@@ -180,6 +186,7 @@ describe("Library", () => {
             status: "succeeded"
           }
         ]}
+        locale="zh-Hans"
         emptyLabel="暂无作品"
         labels={labels}
       />
@@ -192,6 +199,7 @@ describe("Library", () => {
     render(
       <Library
         records={[{ id: "record-3", type: "calligraphy", title: "失败记录", status: "failed" }]}
+        locale="zh-Hans"
         emptyLabel="暂无作品"
         labels={labels}
       />
@@ -217,6 +225,7 @@ describe("Library", () => {
             status: "succeeded"
           }
         ]}
+        locale="zh-Hans"
         emptyLabel="暂无作品"
         labels={labels}
         onOpen={onOpen}

@@ -9,7 +9,7 @@
     "test": "npm test --workspaces --if-present",
     "test:server": "npm test --workspace server",
     "test:client": "npm test --workspace client",
-    "e2e": "playwright test",
+    "e2e": "node scripts/run-e2e.cjs",
     "verify:real": "node scripts/verify-real-generation.js"
   },
   "devDependencies": {

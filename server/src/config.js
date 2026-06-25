@@ -19,6 +19,15 @@ function productionContact(app) {
   };
 }
 
+function hasContact(contact) {
+  return Boolean(contact?.phone || contact?.wechat);
+}
+
+function productionAvailable(config) {
+  return hasContact(config.app?.productionContact)
+    || (config.experts || []).some((expert) => hasContact(expert));
+}
+
 function loadConfig(projectRoot = path.resolve(__dirname, "../..")) {
   const configDir = path.join(projectRoot, "config");
   const app = readJson(path.join(configDir, "app.json"));
@@ -49,10 +58,11 @@ function publicConfig(config) {
     defaultLocale: config.app.defaultLocale,
     image: config.app.image,
     productionContact: config.app.productionContact,
+    productionAvailable: productionAvailable(config),
     experts: config.experts,
     questions: config.questions,
     i18n: config.i18n
   };
 }
 
-module.exports = { loadConfig, publicConfig };
+module.exports = { loadConfig, publicConfig, productionAvailable };

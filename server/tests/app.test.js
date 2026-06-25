@@ -14,6 +14,7 @@ async function withTempApp(fn, overrides = {}) {
   const temp = await fs.mkdtemp(path.join(os.tmpdir(), "inkspire-app-"));
   const config = loadConfig(root);
   config.app.runtime.codexCommand = process.execPath;
+  overrides.configure?.(config);
   try {
     const app = createApp({
       projectRoot: root,
@@ -86,6 +87,21 @@ test("GET /api/health returns ok and public readiness fields", async () => {
   });
 });
 
+test("GET /api/health reports missing codex command without failing the health endpoint", async () => {
+  await withTempApp(async ({ app }) => {
+    const response = await request(app).get("/api/health").expect(200);
+
+    assert.equal(response.body.ok, false);
+    assert.equal(response.body.runtime.codex, "missing");
+    assert.equal(response.body.runtime.dataDirWritable, "ready");
+    assert.equal(response.body.runtime.webp, "ready");
+  }, {
+    configure: (config) => {
+      config.app.runtime.codexCommand = "__inkspire_missing_codex_command__";
+    }
+  });
+});
+
 test("GET /api/config/public returns tabs/questions/experts without codex internals", async () => {
   await withTempApp(async ({ app }) => {
     const response = await request(app).get("/api/config/public").expect(200);
@@ -93,6 +109,7 @@ test("GET /api/config/public returns tabs/questions/experts without codex intern
     assert.equal(response.body.i18n["zh-Hans"].tabs.studio, "画案");
     assert.ok(response.body.questions.painting.length > 0);
     assert.equal(response.body.experts[0].id, "wu_jiayin");
+    assert.equal(typeof response.body.productionAvailable, "boolean");
     assert.equal(Object.hasOwn(response.body, "runtime"), false);
     assert.equal(Object.hasOwn(response.body, "codexCommand"), false);
   });
@@ -203,6 +220,21 @@ test("POST /api/uploads/photo removes temporary upload files after success and i
       .expect(400);
 
     assert.deepEqual(await fs.readdir(path.join(temp, "uploads")), []);
+  });
+});
+
+test("POST /api/uploads/photo returns photo_too_large instead of a generic server error", async () => {
+  await withTempApp(async ({ app }) => {
+    const response = await request(app)
+      .post("/api/uploads/photo")
+      .attach("photo", Buffer.alloc(1024 * 1024 + 1), { filename: "large.png", contentType: "image/png" })
+      .expect(413);
+
+    assert.equal(response.body.code, "photo_too_large");
+  }, {
+    configure: (config) => {
+      config.app.image.maxInputSizeMb = 1;
+    }
   });
 });
 
@@ -410,6 +442,36 @@ test("POST /api/records/:id/production-estimate scales estimates by selected siz
   });
 });
 
+test("POST /api/records/:id/production-orders rejects orders while production contact is unavailable", async () => {
+  await withTempApp(async ({ app, temp }) => {
+    const agent = request.agent(app);
+    const created = await agent
+      .post("/api/generations")
+      .send({ type: "painting", answers: {} })
+      .expect(201);
+    await waitForJob(agent, created.body.job.id);
+
+    const response = await agent
+      .post(`/api/records/${created.body.record.id}/production-orders`)
+      .send({ expertId: "wu_jiayin", serviceId: "expert_custom", referenceLevel: 3 })
+      .expect(409);
+
+    assert.equal(response.body.code, "production_unavailable");
+    const orderFiles = await fs.readdir(path.join(temp, "orders")).catch((error) => {
+      if (error && error.code === "ENOENT") {
+        return [];
+      }
+      throw error;
+    });
+    assert.deepEqual(orderFiles, []);
+  }, {
+    configure: (config) => {
+      config.app.productionContact = { phone: "", wechat: "" };
+      config.experts = config.experts.map((expert) => ({ ...expert, phone: "", wechat: "" }));
+    }
+  });
+});
+
 test("POST /api/records/:id/production-orders creates retrievable order with size and reference level", async () => {
   await withTempApp(async ({ app }) => {
     const agent = request.agent(app);
@@ -455,5 +517,9 @@ test("POST /api/records/:id/production-orders creates retrievable order with siz
       .expect(200);
 
     assert.deepEqual(lookup.body.order, response.body.order);
+  }, {
+    configure: (config) => {
+      config.app.productionContact = { phone: "020-12345678", wechat: "" };
+    }
   });
 });

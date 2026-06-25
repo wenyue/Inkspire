@@ -10,6 +10,7 @@ interface ResultViewProps {
   makeLabel: string;
   makeHint: string;
   continueLabel: string;
+  retryLabel: string;
   addNotesLabel: string;
   attachPhotoLabel: string;
   busyLabel: string;
@@ -51,6 +52,7 @@ export default function ResultView({
   makeLabel,
   makeHint,
   continueLabel,
+  retryLabel,
   addNotesLabel,
   attachPhotoLabel,
   busyLabel,
@@ -137,7 +139,7 @@ export default function ResultView({
           </button>
         ) : null}
         <button className="secondary-action result-action-button" type="button" onClick={onContinue}>
-          {continueLabel}
+          {failed || artworkFailed ? retryLabel : continueLabel}
         </button>
         <button className="secondary-action result-action-button" type="button" onClick={onAddNotes}>
           <MessageSquareText aria-hidden="true" size={16} />

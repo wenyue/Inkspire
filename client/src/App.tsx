@@ -7,6 +7,7 @@ import {
   getRecord,
   getJob,
   isGenerationLimitError,
+  isPhotoTooLargeError,
   loadActiveJobs,
   loadLibrary,
   loadPublicConfig,
@@ -252,8 +253,7 @@ export default function App() {
     }
   }, [applyFinishedRecord, handleGenerationStart, replaceActiveJobs, startFusionJob]);
 
-  const completeJob = useCallback(async (job: GenerationJob) => {
-    const record = await getRecord(job.recordId);
+  const finishRecordForJob = useCallback(async (job: GenerationJob, record: GenerationRecord) => {
     if (
       job.stage === "artwork"
       && record.status === "succeeded"
@@ -267,6 +267,11 @@ export default function App() {
     }
     applyFinishedRecord(record);
   }, [applyFinishedRecord, startFusionJob]);
+
+  const completeJob = useCallback(async (job: GenerationJob) => {
+    const record = await getRecord(job.recordId);
+    await finishRecordForJob(job, record);
+  }, [finishRecordForJob]);
 
   const pollActiveJobs = useCallback(async () => {
     const currentJobs = activeJobsRef.current;
@@ -286,7 +291,16 @@ export default function App() {
         completedIds.add(nextJob.id);
         await completeJob(nextJob);
       } catch {
-        completedIds.add(job.id);
+        try {
+          const record = await getRecord(job.recordId);
+          if (record.status === "queued" || record.status === "running") {
+            return;
+          }
+          completedIds.add(job.id);
+          await finishRecordForJob(job, record);
+        } catch {
+          completedIds.add(job.id);
+        }
       }
     }));
 
@@ -299,7 +313,7 @@ export default function App() {
       activeJobsRef.current = next;
       return next;
     });
-  }, [completeJob]);
+  }, [completeJob, finishRecordForJob]);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -326,6 +340,7 @@ export default function App() {
       makeLabel={t("buttons.make")}
       makeHint={t("result.makeHint")}
       continueLabel={t("result.continue")}
+      retryLabel={t("result.retry")}
       addNotesLabel={t("result.addNotes")}
       attachPhotoLabel={t("result.attachPhotoFusion")}
       busyLabel={t("studio.generating")}
@@ -360,8 +375,8 @@ export default function App() {
         try {
           const upload = await uploadPhoto(file);
           await startFusionJob(currentRecord.id, upload.source_photo_path);
-        } catch {
-          setResultActionError(t("errors.generic"));
+        } catch (error) {
+          setResultActionError(isPhotoTooLargeError(error) ? t("errors.photoTooLarge") : t("errors.generic"));
         } finally {
           setIsAttachingPhoto(false);
         }

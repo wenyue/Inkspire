@@ -6,7 +6,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { PNG } = require("pngjs");
 const sharp = require("sharp");
-const { loadConfig, publicConfig } = require("./config");
+const { loadConfig, publicConfig, productionAvailable } = require("./config");
 const { runCodexImageGeneration } = require("./codexRunner");
 const { archiveSourcePhoto } = require("./imagePipeline");
 const { createJobManager } = require("./jobs");
@@ -51,6 +51,13 @@ function productionSize(value) {
 function badRequest(message) {
   const error = new Error(message);
   error.status = 400;
+  return error;
+}
+
+function uploadTooLarge(maxBytes) {
+  const error = new Error(`Photo is too large. Max upload size is ${Math.round(maxBytes / 1024 / 1024)} MB.`);
+  error.status = 413;
+  error.code = "photo_too_large";
   return error;
 }
 
@@ -185,11 +192,17 @@ function checkCommandAvailable(command) {
       resolve("missing");
       return;
     }
-    const child = spawn(command, ["--version"], {
-      shell: false,
-      stdio: ["ignore", "ignore", "ignore"],
-      windowsHide: true
-    });
+    let child;
+    try {
+      child = spawn(command, ["--version"], {
+        shell: false,
+        stdio: ["ignore", "ignore", "ignore"],
+        windowsHide: true
+      });
+    } catch {
+      resolve("missing");
+      return;
+    }
     const timeout = setTimeout(() => {
       child.kill();
       resolve("missing");
@@ -276,7 +289,7 @@ function createApp(options = {}) {
     const runtime = options.healthChecks
       ? await options.healthChecks()
       : {
-        codex: await checkCommandAvailable(config.app.runtime.codexCommand),
+        codex: shouldUseDeterministicRunner() ? "ready" : await checkCommandAvailable(config.app.runtime.codexCommand),
         dataDirWritable: await checkDataDirWritable(dataDir),
         webp: await checkWebpAvailable()
       };
@@ -439,6 +452,13 @@ function createApp(options = {}) {
   }));
 
   app.post("/api/records/:id/production-orders", asyncHandler(async (req, res) => {
+    if (!productionAvailable(config)) {
+      res.status(409).json({
+        error: "Production consultation is not available yet.",
+        code: "production_unavailable"
+      });
+      return;
+    }
     const record = await storage.getRecordForUser(req.params.id, req.userId);
     const expert = config.experts.find((entry) => entry.id === req.body.expertId) || config.experts[0];
     const service = (expert.services || []).find((entry) => entry.id === req.body.serviceId) || expert.services?.[0];
@@ -492,8 +512,13 @@ function createApp(options = {}) {
       next(error);
       return;
     }
+    if (error instanceof multer.MulterError && error.code === "LIMIT_FILE_SIZE") {
+      const normalized = uploadTooLarge(maxUploadBytes(config));
+      res.status(normalized.status).json({ error: normalized.message, code: normalized.code });
+      return;
+    }
     const status = error.status || (/not found|ENOENT/i.test(error.message) ? 404 : 500);
-    res.status(status).json({ error: error.message });
+    res.status(status).json(error.code ? { error: error.message, code: error.code } : { error: error.message });
   });
 
   return app;
