@@ -12,6 +12,7 @@ Applies to repository-wide commands, configuration, runtime data, generated asse
 - Use root scripts for cross-workspace workflows:
   - `npm run dev` starts the server and Vite client together.
   - `npm test` runs available workspace tests.
+  - `npm run test:client` and `npm run test:server` run the workspace test aliases.
   - `npm run e2e` runs Playwright from the repository root.
   - `npm run verify:real` runs the real Codex image-generation verification script.
 - Keep root-level configuration in `config/`. The client imports config JSON directly for fallback data,
@@ -24,6 +25,8 @@ Applies to repository-wide commands, configuration, runtime data, generated asse
 - The server data directory defaults to `data/`, with `INKSPIRE_DATA_DIR` as the override.
 - E2E mode uses `INKSPIRE_E2E=1` and deterministic image generation unless
   `INKSPIRE_REAL_CODEX=1` is set.
+- `npm run e2e` manages the E2E dev stack through `scripts/run-e2e.cjs`: Vite stays on `5173`,
+  the API uses `PORT=3101`, and `INKSPIRE_API_TARGET` points the client proxy to that API.
 - Real image generation depends on the configured Codex command in `config/app.json`.
 
 ## Change Discipline

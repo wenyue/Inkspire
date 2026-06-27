@@ -48,9 +48,14 @@ describe("i18n", () => {
   });
 
   it("uses locale-specific default suggestion lists", () => {
+    const zhHansList = createListTranslator("zh-Hans", dictionaries);
     const zhHantList = createListTranslator("zh-Hant", dictionaries);
     const enList = createListTranslator("en", dictionaries);
 
+    expect(zhHansList("suggestions")[0]).toBe("可以开始生成");
+    expect(zhHansList("suggestions")).toContain("更雅");
+    expect(zhHansList("suggestions")).toContain("墨色淡些");
+    expect(zhHansList("suggestions").length).toBeGreaterThan(6);
     expect(zhHantList("suggestions")[0]).toBe("可以開始生成");
     expect(enList("suggestions")[0]).toBe("Start generating");
   });

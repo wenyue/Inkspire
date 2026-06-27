@@ -1,12 +1,12 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import App from "../src/App";
 import type { PublicConfig } from "../src/api";
 import { getProgressLabel } from "../src/components/Studio";
 import type { Question } from "../src/domain";
+import { renderApp } from "./renderApp";
 
 function generationRequestBodies(): Array<Record<string, unknown>> {
   return vi.mocked(fetch).mock.calls
@@ -246,6 +246,18 @@ describe("App", () => {
             }
           }, { status: 201 });
         }
+        if (body.conversationNotes && !body.source_photo_path) {
+          return Response.json({
+            record: {
+              id: "record-2",
+              type: "painting",
+              artwork_path: "records/record-2/artwork.webp",
+              fusion_path: "",
+              source_photo_path: "",
+              status: "succeeded"
+            }
+          }, { status: 201 });
+        }
         return Response.json({
           record: {
             id: "record-1",
@@ -316,7 +328,7 @@ describe("App", () => {
         const body = init?.body ? JSON.parse(String(init.body)) : {};
         return Response.json({
           order: {
-            id: "order-20260624-0001",
+            id: "ord-k8p4x2q9",
             record_id: "record-1",
             expert_id: body.expertId,
             service_id: body.serviceId,
@@ -370,17 +382,32 @@ describe("App", () => {
   afterEach(() => {
     cleanup();
     window.localStorage.clear();
+    window.sessionStorage.clear();
     vi.unstubAllGlobals();
   });
 
   it("renders 墨起 and the three mobile nav buttons", async () => {
-    render(<App />);
+    renderApp({ initialRoute: "/library" });
 
     expect(await screen.findByRole("heading", { name: "墨起" })).toBeInTheDocument();
     expect(screen.getAllByText("园林卷轴里的书画生成")).toHaveLength(1);
     expect(screen.getByRole("button", { name: "画案" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "藏卷" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "雅匠" })).toBeInTheDocument();
+  });
+
+  it("seeds the browser router helper with the requested initial route", async () => {
+    renderApp({ initialRoute: "/library" });
+
+    expect(window.location.pathname).toBe("/library");
+    expect(await screen.findByRole("heading", { name: "墨起" })).toBeInTheDocument();
+  });
+
+  it("highlights tabs from URL routes", async () => {
+    renderApp({ initialRoute: "/library" });
+
+    expect(await screen.findByRole("button", { name: "藏卷" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "画案" })).toHaveAttribute("aria-pressed", "false");
   });
 
   it("aligns the 墨起 title left and the language selector right", async () => {
@@ -401,7 +428,7 @@ describe("App", () => {
       }
     ];
 
-    render(<App />);
+    renderApp();
 
     expect(await screen.findByText("墨色正在铺开，可能需要 2-3 分钟，请耐心等待。")).toBeInTheDocument();
     expect(screen.getByText("山水 作品图")).toBeInTheDocument();
@@ -414,7 +441,7 @@ describe("App", () => {
       { id: "job-b", recordId: "record-b", stage: "fusion_render", title: "花鸟", status: "queued" }
     ];
 
-    render(<App />);
+    renderApp();
 
     await user.click(await screen.findByRole("button", { name: "国画" }));
     await user.click(screen.getByRole("button", { name: "山水" }));
@@ -426,7 +453,7 @@ describe("App", () => {
 
   it("does not show photo controls before the final photo step", async () => {
     const user = userEvent.setup();
-    render(<App />);
+    renderApp();
 
     await screen.findByRole("button", { name: "国画" });
 
@@ -452,7 +479,7 @@ describe("App", () => {
 
   it("shows photo selection as the final explicit step", async () => {
     const user = userEvent.setup();
-    render(<App />);
+    renderApp();
 
     await completePaintingQuestions(user);
 
@@ -471,7 +498,7 @@ describe("App", () => {
       image: { maxInputSizeMb: 1 }
     };
     const user = userEvent.setup();
-    render(<App />);
+    renderApp();
 
     await completePaintingQuestions(user);
     await user.upload(
@@ -486,7 +513,7 @@ describe("App", () => {
   it("shows the same clear upload size message when the API rejects a setup photo as too large", async () => {
     failUploadTooLarge = true;
     const user = userEvent.setup();
-    render(<App />);
+    renderApp();
 
     await completePaintingQuestions(user);
     await user.upload(screen.getByLabelText("相册"), new File(["sample"], "server-large.png", { type: "image/png" }));
@@ -497,7 +524,7 @@ describe("App", () => {
 
   it("uses decorative option fallbacks without repeating visible labels", async () => {
     const user = userEvent.setup();
-    const { container } = render(<App />);
+    const { container } = renderApp();
 
     await screen.findByRole("button", { name: "国画" });
 
@@ -520,7 +547,7 @@ describe("App", () => {
 
   it("requires the photo step after branch questions before showing generation", async () => {
     const user = userEvent.setup();
-    render(<App />);
+    renderApp();
 
     await user.click(await screen.findByRole("button", { name: "国画" }));
 
@@ -537,7 +564,7 @@ describe("App", () => {
 
   it("uses a low-emphasis back action during branch questions", async () => {
     const user = userEvent.setup();
-    render(<App />);
+    renderApp();
 
     await user.click(await screen.findByRole("button", { name: "国画" }));
 
@@ -545,7 +572,7 @@ describe("App", () => {
   });
 
   it("shows the full expected progress on the first step", async () => {
-    render(<App />);
+    renderApp();
 
     await screen.findByRole("heading", { name: "墨起" });
 
@@ -571,7 +598,7 @@ describe("App", () => {
 
   it("updates visible tab text when language changes", async () => {
     const user = userEvent.setup();
-    render(<App />);
+    renderApp();
 
     await screen.findByRole("heading", { name: "墨起" });
     await user.selectOptions(screen.getByLabelText("语言"), "en");
@@ -583,7 +610,7 @@ describe("App", () => {
 
   it("localizes the language selector label itself", async () => {
     const user = userEvent.setup();
-    render(<App />);
+    renderApp();
 
     await screen.findByLabelText("语言");
     await user.selectOptions(screen.getByLabelText("语言"), "en");
@@ -599,14 +626,14 @@ describe("App", () => {
 
   it("persists the selected language across remounts", async () => {
     const user = userEvent.setup();
-    const view = render(<App />);
+    const view = renderApp();
 
     await screen.findByLabelText("语言");
     await user.selectOptions(screen.getByLabelText("语言"), "en");
     expect(screen.getByRole("button", { name: "Studio" })).toBeInTheDocument();
 
     view.unmount();
-    render(<App />);
+    renderApp();
 
     expect(await screen.findByLabelText("Language")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Studio" })).toBeInTheDocument();
@@ -614,7 +641,7 @@ describe("App", () => {
 
   it("renders visual previews for options without leaking Chinese preview text in English", async () => {
     const user = userEvent.setup();
-    const { container } = render(<App />);
+    const { container } = renderApp();
 
     await screen.findByLabelText("语言");
     await user.selectOptions(screen.getByLabelText("语言"), "en");
@@ -637,7 +664,7 @@ describe("App", () => {
 
   it("shows decorative fallback marks for calligraphy option previews before images decode", async () => {
     const user = userEvent.setup();
-    const { container } = render(<App />);
+    const { container } = renderApp();
 
     await user.click(await screen.findByRole("button", { name: "书法" }));
 
@@ -649,7 +676,7 @@ describe("App", () => {
 
   it("advances the question flow after clicking 国画", async () => {
     const user = userEvent.setup();
-    render(<App />);
+    renderApp();
 
     await user.click(await screen.findByRole("button", { name: "国画" }));
 
@@ -665,7 +692,7 @@ describe("App", () => {
       }
     };
     const user = userEvent.setup();
-    render(<App />);
+    renderApp();
 
     await user.click(await screen.findByRole("button", { name: "书法" }));
 
@@ -686,19 +713,19 @@ describe("App", () => {
 
   it("persists answered questions across remounts", async () => {
     const user = userEvent.setup();
-    const view = render(<App />);
+    const view = renderApp();
 
     await user.click(await screen.findByRole("button", { name: "国画" }));
     expect(screen.getByText("想画什么主题？")).toBeInTheDocument();
 
     view.unmount();
-    render(<App />);
+    renderApp();
 
     expect(await screen.findByText("想画什么主题？")).toBeInTheDocument();
     expect(screen.queryByText("先定作品类型")).not.toBeInTheDocument();
   });
 
-  it("keeps the restored library tab when a current record is restored", async () => {
+  it("keeps the library tab selected when opened from the library URL", async () => {
     libraryRecords = [{
       id: "record-1",
       type: "painting",
@@ -708,14 +735,8 @@ describe("App", () => {
       status: "succeeded",
       favorite: true
     }];
-    window.localStorage.setItem("inkspire.activeTab", "library");
-    window.localStorage.setItem("inkspire.currentRecordId", "record-1");
 
-    render(<App />);
-
-    await waitFor(() => {
-      expect(fetch).toHaveBeenCalledWith("/api/records/record-1", undefined);
-    });
+    renderApp({ initialRoute: "/library" });
 
     expect(await screen.findByRole("button", { name: "藏卷" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("img", { name: "藏卷山水" })).toBeInTheDocument();
@@ -724,7 +745,7 @@ describe("App", () => {
 
   it("shows question progress and can go back without losing the uploaded photo", async () => {
     const user = userEvent.setup();
-    render(<App />);
+    renderApp();
 
     await completePaintingQuestions(user);
     await user.upload(screen.getByLabelText("相册"), new File(["sample"], "sample.png", { type: "image/png" }));
@@ -738,15 +759,41 @@ describe("App", () => {
     expect(screen.getByText("已提供环境图，将用于生成效果图。")).toBeInTheDocument();
   });
 
+  it("moves to the previous studio step when the browser back action is used", async () => {
+    const user = userEvent.setup();
+    renderApp({ initialRoute: "/studio" });
+
+    await completePaintingWithoutPhoto(user);
+    expect(screen.getByRole("button", { name: "生成" })).toBeInTheDocument();
+
+    await act(async () => {
+      window.history.back();
+    });
+
+    expect(await screen.findByRole("heading", { name: "可选：添加摆放环境照片" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "生成" })).not.toBeInTheDocument();
+  });
+
   it("keeps generation as the only submit action after questions complete", async () => {
     const user = userEvent.setup();
-    render(<App />);
+    renderApp();
 
     await completePaintingWithoutPhoto(user);
 
+    expect(screen.getByText("将生成作品图。")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "可以开始生成" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "更清雅一点" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "更雅" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "墨色淡些" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "生成" })).toBeInTheDocument();
+  });
+
+  it("summarizes when generation will include a placement preview", async () => {
+    const user = userEvent.setup();
+    renderApp();
+
+    await completePaintingWithPhoto(user);
+
+    expect(screen.getByText("将生成作品图和摆放效果图。")).toBeInTheDocument();
   });
 
   it("restores active generation status from the server", async () => {
@@ -759,7 +806,7 @@ describe("App", () => {
       status: "running"
     }];
 
-    render(<App />);
+    renderApp();
 
     expect(await screen.findByText("墨色正在铺开，可能需要 2-3 分钟，请耐心等待。")).toBeInTheDocument();
     expect(screen.getByText("藏卷山水 作品图")).toBeInTheDocument();
@@ -775,7 +822,7 @@ describe("App", () => {
       status: "queued"
     }];
     const user = userEvent.setup();
-    render(<App />);
+    renderApp();
 
     expect(await screen.findByText("墨色正在铺开，可能需要 2-3 分钟，请耐心等待。")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "藏卷" }));
@@ -801,7 +848,7 @@ describe("App", () => {
       status: "queued"
     }];
     const user = userEvent.setup();
-    render(<App />);
+    renderApp();
 
     await user.click(await screen.findByRole("button", { name: "国画" }));
     await user.click(screen.getByRole("button", { name: "山水" }));
@@ -812,7 +859,7 @@ describe("App", () => {
 
   it("generates from empty notes with the primary generate button", async () => {
     const user = userEvent.setup();
-    render(<App />);
+    renderApp();
 
     await completePaintingWithoutPhoto(user);
     await user.click(screen.getByRole("button", { name: "生成" }));
@@ -826,30 +873,44 @@ describe("App", () => {
 
   it("puts refinement suggestions into notes before generating", async () => {
     const user = userEvent.setup();
-    render(<App />);
+    renderApp();
 
     await completePaintingWithoutPhoto(user);
-    await user.click(screen.getByRole("button", { name: "更清雅一点" }));
+    await user.click(screen.getByRole("button", { name: "更雅" }));
 
-    expect(screen.getByLabelText("也可以补一句想法")).toHaveValue("更清雅一点");
+    expect(screen.getByLabelText("也可以补一句想法")).toHaveValue("更雅");
     expect(generationRequestBodies()).toHaveLength(0);
     await user.click(screen.getByRole("button", { name: "生成" }));
 
     await waitFor(() => {
       expect(generationRequestBodies()).toHaveLength(1);
     });
-    expect(generationRequestBodies()[0].conversationNotes).toBe("更清雅一点");
+    expect(generationRequestBodies()[0].conversationNotes).toBe("更雅");
+  });
+
+  it("shows a clear action inside the notes field and clears the draft", async () => {
+    const user = userEvent.setup();
+    renderApp();
+
+    await completePaintingWithoutPhoto(user);
+    await user.click(screen.getByRole("button", { name: "更有气韵" }));
+
+    expect(screen.getByLabelText("也可以补一句想法")).toHaveValue("更有气韵");
+    await user.click(screen.getByRole("button", { name: "清除想法" }));
+
+    expect(screen.getByLabelText("也可以补一句想法")).toHaveValue("");
+    expect(screen.queryByRole("button", { name: "清除想法" })).not.toBeInTheDocument();
   });
 
   it("persists notes and uploaded photo path across remounts", async () => {
     const user = userEvent.setup();
-    const view = render(<App />);
+    const view = renderApp();
 
     await completePaintingWithPhoto(user);
     await user.type(screen.getByPlaceholderText("也可以补一句想法"), "更像家里玄关");
 
     view.unmount();
-    render(<App />);
+    renderApp();
 
     expect(await screen.findByDisplayValue("更像家里玄关")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "上一步" }));
@@ -860,7 +921,7 @@ describe("App", () => {
 
   it("shows when an optional photo is ready for fusion", async () => {
     const user = userEvent.setup();
-    render(<App />);
+    renderApp();
 
     await completePaintingQuestions(user);
     await user.upload(screen.getByLabelText("相册"), new File(["sample"], "sample.png", { type: "image/png" }));
@@ -875,7 +936,7 @@ describe("App", () => {
 
   it("uses a clean placeholder when the selected photo preview cannot load", async () => {
     const user = userEvent.setup();
-    render(<App />);
+    renderApp();
 
     await completePaintingQuestions(user);
     await user.upload(screen.getByLabelText("相册"), new File(["sample"], "sample.png", { type: "image/png" }));
@@ -891,7 +952,7 @@ describe("App", () => {
 
   it("clears the optional photo ready state when removing the photo", async () => {
     const user = userEvent.setup();
-    render(<App />);
+    renderApp();
 
     await completePaintingQuestions(user);
     await user.upload(screen.getByLabelText("相册"), new File(["sample"], "sample.png", { type: "image/png" }));
@@ -905,7 +966,7 @@ describe("App", () => {
 
   it("creates a fusion render after generating from an uploaded photo", async () => {
     const user = userEvent.setup();
-    render(<App />);
+    renderApp();
 
     const photo = new File(["sample"], "sample.png", { type: "image/png" });
     await completePaintingWithPhoto(user, photo);
@@ -916,13 +977,78 @@ describe("App", () => {
     });
     expect(await screen.findByRole("img", { name: "作品图" })).toBeInTheDocument();
     expect(await screen.findByRole("img", { name: "效果图" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "按这张图继续调整" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "调整作品" })).toBeInTheDocument();
+  });
+
+  it("keeps a captured camera photo selected when the browser reports it through input", async () => {
+    const user = userEvent.setup();
+    renderApp();
+
+    await completePaintingQuestions(user);
+    const cameraInput = screen.getByLabelText("拍照");
+    const photo = new File(["camera"], "camera.png", { type: "image/png" });
+
+    fireEvent.input(cameraInput, { target: { files: [photo] } });
+
+    await waitFor(() => {
+      expect(fetch).toHaveBeenCalledWith("/api/uploads/photo", expect.objectContaining({ method: "POST" }));
+    });
+    expect(await screen.findByText("已提供环境图，将用于生成效果图。")).toBeInTheDocument();
+    expect(screen.getByText("camera.png")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "继续" })).toBeInTheDocument();
+  });
+
+  it("keeps a captured camera photo when the input file list is only reliable during the event", async () => {
+    const user = userEvent.setup();
+    renderApp();
+
+    await completePaintingQuestions(user);
+    const cameraInput = screen.getByLabelText("拍照") as HTMLInputElement;
+    const photo = new File(["camera"], "camera-mobile.png", { type: "image/png" });
+    let currentFiles: File[] = [photo];
+    Object.defineProperty(cameraInput, "files", {
+      configurable: true,
+      get: () => currentFiles
+    });
+
+    fireEvent.input(cameraInput);
+    currentFiles = [];
+
+    await waitFor(() => {
+      expect(fetch).toHaveBeenCalledWith("/api/uploads/photo", expect.objectContaining({ method: "POST" }));
+    });
+    expect(await screen.findByText("已提供环境图，将用于生成效果图。")).toBeInTheDocument();
+    expect(screen.getByText("camera-mobile.png")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "继续" })).toBeInTheDocument();
+  });
+
+  it("applies a captured camera photo when both input and change fire", async () => {
+    const user = userEvent.setup();
+    renderApp();
+
+    await completePaintingQuestions(user);
+    const cameraInput = screen.getByLabelText("拍照");
+    const photo = new File(["camera"], "camera.png", { type: "image/png" });
+
+    fireEvent.input(cameraInput, { target: { files: [photo] } });
+    fireEvent.change(cameraInput, { target: { files: [photo] } });
+
+    await waitFor(() => {
+      expect(fetch).toHaveBeenCalledWith("/api/uploads/photo", expect.objectContaining({ method: "POST" }));
+    });
+    const uploadCalls = (fetch as ReturnType<typeof vi.fn>).mock.calls
+      .map(([request]) => String(request))
+      .filter((request) => request.endsWith("/api/uploads/photo"));
+
+    expect(uploadCalls).toHaveLength(1);
+    expect(await screen.findByText("已提供环境图，将用于生成效果图。")).toBeInTheDocument();
+    expect(screen.getByText("camera.png")).toBeInTheDocument();
   });
 
   it("puts result actions before the fusion image on narrow screens", async () => {
     Object.defineProperty(window, "innerWidth", { configurable: true, value: 390 });
     const user = userEvent.setup();
-    const { container } = render(<App />);
+    const { container } = renderApp();
 
     await completePaintingWithPhoto(user);
     await user.click(screen.getByRole("button", { name: "生成" }));
@@ -939,7 +1065,7 @@ describe("App", () => {
   it("uses compact square result media on narrow screens only", async () => {
     Object.defineProperty(window, "innerWidth", { configurable: true, value: 390 });
     const user = userEvent.setup();
-    render(<App />);
+    renderApp();
 
     await completePaintingWithoutPhoto(user);
     await user.click(screen.getByRole("button", { name: "生成" }));
@@ -950,7 +1076,7 @@ describe("App", () => {
   it("keeps the taller result media treatment on wide screens", async () => {
     Object.defineProperty(window, "innerWidth", { configurable: true, value: 900 });
     const user = userEvent.setup();
-    render(<App />);
+    renderApp();
 
     await completePaintingWithoutPhoto(user);
     await user.click(screen.getByRole("button", { name: "生成" }));
@@ -960,22 +1086,23 @@ describe("App", () => {
 
   it("restores the current record after remounting", async () => {
     const user = userEvent.setup();
-    const view = render(<App />);
+    const view = renderApp();
 
     await completePaintingWithoutPhoto(user);
     await user.click(screen.getByRole("button", { name: "生成" }));
     expect(await screen.findByRole("img", { name: "作品图" })).toBeInTheDocument();
 
+    const currentRoute = `${window.location.pathname}${window.location.search}`;
     view.unmount();
-    render(<App />);
+    renderApp({ initialRoute: currentRoute });
 
     expect(await screen.findByRole("img", { name: "作品图" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "制作作品" })).toBeInTheDocument();
   });
 
-  it("focuses the generated result by hiding pre-generation controls until notes are requested", async () => {
+  it("hides pre-generation controls and opens an adjust page from the result", async () => {
     const user = userEvent.setup();
-    const { container } = render(<App />);
+    const { container } = renderApp();
 
     await completePaintingWithoutPhoto(user);
     await user.click(screen.getByRole("button", { name: "生成" }));
@@ -987,15 +1114,16 @@ describe("App", () => {
     expect(screen.getByText("可先看尺寸和估价，确认意向后再联系制作。")).toBeInTheDocument();
     expect(container.querySelector(".result-actions")?.firstElementChild).toHaveTextContent("制作作品");
 
-    await user.click(screen.getByRole("button", { name: "补充要求" }));
+    await user.click(screen.getByRole("button", { name: "调整作品" }));
 
-    expect(screen.getByRole("img", { name: "作品图" })).toBeInTheDocument();
-    expect(screen.getByPlaceholderText("也可以补一句想法")).toHaveFocus();
+    expect(screen.getByRole("heading", { name: "调整这张作品" })).toBeInTheDocument();
+    expect(screen.getByLabelText("调整这张作品")).toHaveFocus();
+    expect(screen.queryByRole("img", { name: "作品图" })).not.toBeInTheDocument();
   });
 
   it("uses a polished failure state when the artwork image cannot load", async () => {
     const user = userEvent.setup();
-    render(<App />);
+    renderApp();
 
     await completePaintingWithoutPhoto(user);
     await user.click(screen.getByRole("button", { name: "生成" }));
@@ -1006,16 +1134,15 @@ describe("App", () => {
     expect(await screen.findByText("作品图暂时无法显示")).toBeInTheDocument();
     expect(screen.getByText("可以补充要求后再生成，或稍后从藏卷重新打开。")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "制作作品" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "重新调整要求" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "按这张图继续调整" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "补充要求" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "重新生成" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "调整作品" })).not.toBeInTheDocument();
   });
 
   it("scrolls the generated result into view", async () => {
     const scrollIntoView = vi.fn();
     Element.prototype.scrollIntoView = scrollIntoView;
     const user = userEvent.setup();
-    render(<App />);
+    renderApp();
 
     await completePaintingWithoutPhoto(user);
     await user.click(screen.getByRole("button", { name: "生成" }));
@@ -1028,7 +1155,7 @@ describe("App", () => {
 
   it("can attach a photo after artwork generation and then create a fusion render", async () => {
     const user = userEvent.setup();
-    render(<App />);
+    renderApp();
 
     await completePaintingWithoutPhoto(user);
     await user.click(screen.getByRole("button", { name: "生成" }));
@@ -1037,7 +1164,7 @@ describe("App", () => {
     expect(screen.queryByRole("img", { name: "效果图" })).not.toBeInTheDocument();
 
     const photo = new File(["late sample"], "late.png", { type: "image/png" });
-    await user.upload(screen.getByLabelText("添加摆放照片生成效果图"), photo);
+    await user.upload(screen.getByLabelText("添加照片生成效果图"), photo);
 
     await waitFor(() => {
       expect(fetch).toHaveBeenCalledWith("/api/uploads/photo", expect.objectContaining({ method: "POST" }));
@@ -1058,7 +1185,7 @@ describe("App", () => {
       image: { maxInputSizeMb: 1 }
     };
     const user = userEvent.setup();
-    render(<App />);
+    renderApp();
 
     await completePaintingWithoutPhoto(user);
     await user.click(screen.getByRole("button", { name: "生成" }));
@@ -1066,7 +1193,7 @@ describe("App", () => {
     vi.mocked(fetch).mockClear();
 
     await user.upload(
-      screen.getByLabelText("添加摆放照片生成效果图"),
+      screen.getByLabelText("添加照片生成效果图"),
       new File([new Uint8Array(1024 * 1024 + 1)], "late-large.png", { type: "image/png" })
     );
 
@@ -1077,11 +1204,11 @@ describe("App", () => {
   it("shows an error if attaching a photo for fusion fails", async () => {
     failLateFusion = true;
     const user = userEvent.setup();
-    render(<App />);
+    renderApp();
 
     await completePaintingWithoutPhoto(user);
     await user.click(screen.getByRole("button", { name: "生成" }));
-    await user.upload(screen.getByLabelText("添加摆放照片生成效果图"), new File(["sample"], "late.png", { type: "image/png" }));
+    await user.upload(screen.getByLabelText("添加照片生成效果图"), new File(["sample"], "late.png", { type: "image/png" }));
 
     expect(await screen.findByText("暂时无法完成，请稍后再试。")).toBeInTheDocument();
     expect(screen.queryByRole("img", { name: "效果图" })).not.toBeInTheDocument();
@@ -1090,11 +1217,11 @@ describe("App", () => {
   it("shows the upload size message when attaching a result photo is rejected by the API", async () => {
     failUploadTooLarge = true;
     const user = userEvent.setup();
-    render(<App />);
+    renderApp();
 
     await completePaintingWithoutPhoto(user);
     await user.click(screen.getByRole("button", { name: "生成" }));
-    await user.upload(await screen.findByLabelText("添加摆放照片生成效果图"), new File(["sample"], "late-large.png", { type: "image/png" }));
+    await user.upload(await screen.findByLabelText("添加照片生成效果图"), new File(["sample"], "late-large.png", { type: "image/png" }));
 
     expect(await screen.findByText("照片过大，请选择较小图片或先压缩。")).toBeInTheDocument();
     expect(screen.queryByText("暂时无法完成，请稍后再试。")).not.toBeInTheDocument();
@@ -1103,23 +1230,23 @@ describe("App", () => {
   it("keeps artwork visible when fusion returns a failed job", async () => {
     failLateFusionJob = true;
     const user = userEvent.setup();
-    render(<App />);
+    renderApp();
 
     await completePaintingWithoutPhoto(user);
     await user.click(screen.getByRole("button", { name: "生成" }));
-    await user.upload(screen.getByLabelText("添加摆放照片生成效果图"), new File(["sample"], "late.png", { type: "image/png" }));
+    await user.upload(screen.getByLabelText("添加照片生成效果图"), new File(["sample"], "late.png", { type: "image/png" }));
 
     expect(await screen.findByText("暂时无法完成，请稍后再试。")).toBeInTheDocument();
     expect(screen.getByRole("img", { name: "作品图" })).toBeInTheDocument();
     expect(screen.queryByRole("img", { name: "效果图" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "制作作品" })).toBeInTheDocument();
-    expect(screen.getByLabelText("添加摆放照片生成效果图")).toBeInTheDocument();
+    expect(screen.getByLabelText("添加照片生成效果图")).toBeInTheDocument();
     expect(screen.queryByText("生成未完成")).not.toBeInTheDocument();
   });
 
   it("opens the production dialog with both service tiers after generation", async () => {
     const user = userEvent.setup();
-    render(<App />);
+    renderApp();
 
     await completePaintingWithoutPhoto(user);
     await user.click(screen.getByRole("button", { name: "生成" }));
@@ -1141,7 +1268,7 @@ describe("App", () => {
       experts: publicConfig.experts.map((expert) => ({ ...expert, phone: "", wechat: "" }))
     };
     const user = userEvent.setup();
-    render(<App />);
+    renderApp();
 
     await completePaintingWithoutPhoto(user);
     await user.click(screen.getByRole("button", { name: "生成" }));
@@ -1157,7 +1284,7 @@ describe("App", () => {
 
   it("keeps keyboard focus inside the production dialog and closes with Escape", async () => {
     const user = userEvent.setup();
-    render(<App />);
+    renderApp();
 
     await completePaintingWithoutPhoto(user);
     await user.click(screen.getByRole("button", { name: "生成" }));
@@ -1170,12 +1297,22 @@ describe("App", () => {
     await user.keyboard("{Escape}");
 
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    expect(makeButton).toHaveFocus();
+    expect(window.location.pathname).toBe("/records/record-1");
+    expect(window.location.search).toBe("?from=studio");
+    expect(screen.getByRole("button", { name: "制作作品" })).toBeInTheDocument();
+  });
+
+  it("restores the production dialog from a production URL", async () => {
+    renderApp({ initialRoute: "/records/record-1/production?from=library" });
+
+    expect(await screen.findByRole("dialog", { name: "制作作品" })).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "作品图" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "藏卷" })).toHaveAttribute("aria-pressed", "true");
   });
 
   it("shows only the selected artist reference hint in the production dialog", async () => {
     const user = userEvent.setup();
-    render(<App />);
+    renderApp();
 
     await completePaintingWithoutPhoto(user);
     await user.click(screen.getByRole("button", { name: "生成" }));
@@ -1193,7 +1330,7 @@ describe("App", () => {
 
   it("uses short visible labels for artist reference choices on mobile", async () => {
     const user = userEvent.setup();
-    render(<App />);
+    renderApp();
 
     await completePaintingWithoutPhoto(user);
     await user.click(screen.getByRole("button", { name: "生成" }));
@@ -1210,7 +1347,7 @@ describe("App", () => {
 
   it("updates production estimates when selecting a larger size", async () => {
     const user = userEvent.setup();
-    render(<App />);
+    renderApp();
 
     await completePaintingWithoutPhoto(user);
     await user.click(screen.getByRole("button", { name: "生成" }));
@@ -1235,8 +1372,13 @@ describe("App", () => {
   it("reveals contact details only after confirming production intent", async () => {
     const user = userEvent.setup();
     const scrollIntoView = vi.fn();
+    const writeText = vi.fn().mockResolvedValue(undefined);
     Element.prototype.scrollIntoView = scrollIntoView;
-    render(<App />);
+    Object.defineProperty(globalThis.navigator, "clipboard", {
+      configurable: true,
+      value: { writeText }
+    });
+    renderApp();
 
     await completePaintingWithoutPhoto(user);
     await user.click(screen.getByRole("button", { name: "生成" }));
@@ -1248,16 +1390,33 @@ describe("App", () => {
 
     await user.click(screen.getByRole("button", { name: "确认制作意向" }));
 
-    expect(screen.getByText("已记录制作意向")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "制作意向已记录" })).toBeInTheDocument();
     expect(screen.getByText(/电话：020-12345678/)).toBeInTheDocument();
-    expect(screen.getByText(/微信：InkspireArt/)).toBeInTheDocument();
-    expect(screen.getByText(/单号：order-20260624-0001/)).toBeInTheDocument();
+    expect(screen.getByText(/微信：InkspireArt（点击拷贝）/)).toBeInTheDocument();
+    expect(screen.getByText(/单号：ord-k8p4x2q9（点击拷贝）/)).toBeInTheDocument();
+    expect(screen.getByText("参考总体布局，细节可自由发挥，提升艺术性。")).toBeInTheDocument();
+    expect(screen.queryByText("第3级 布局参考")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "调整尺寸" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "确认制作意向" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("radio", { name: /第3级/ })).not.toBeInTheDocument();
+    const wechatButton = screen.getByRole("button", { name: /微信：InkspireArt（点击拷贝）/ });
+    const orderButton = screen.getByRole("button", { name: /单号：ord-k8p4x2q9（点击拷贝）/ });
+
+    expect(wechatButton.compareDocumentPosition(orderButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    await user.click(orderButton);
+    expect(screen.getByRole("status")).toHaveTextContent("已拷贝单号");
+    await user.click(wechatButton);
+    expect(screen.getByRole("status")).toHaveTextContent("已拷贝微信");
+
+    expect(writeText).toHaveBeenNthCalledWith(1, "ord-k8p4x2q9");
+    expect(writeText).toHaveBeenNthCalledWith(2, "InkspireArt");
     expect(scrollIntoView).toHaveBeenCalledWith({ behavior: "smooth", block: "start" });
   });
 
   it("prefills inferred artwork size, supports friendly size adjustment, and submits reference level", async () => {
     const user = userEvent.setup();
-    render(<App />);
+    renderApp();
 
     await completePaintingWithoutPhoto(user);
     await user.click(screen.getByRole("button", { name: "生成" }));
@@ -1309,7 +1468,12 @@ describe("App", () => {
 
   it("localizes production contact labels in English", async () => {
     const user = userEvent.setup();
-    render(<App />);
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(globalThis.navigator, "clipboard", {
+      configurable: true,
+      value: { writeText }
+    });
+    renderApp();
 
     await completePaintingWithoutPhoto(user);
     await user.click(screen.getByRole("button", { name: "生成" }));
@@ -1317,15 +1481,29 @@ describe("App", () => {
     await user.click(await screen.findByRole("button", { name: "Make Artwork" }));
     await user.click(await screen.findByRole("button", { name: "Confirm production" }));
 
+    expect(screen.getByRole("heading", { name: "Production request recorded" })).toBeInTheDocument();
     expect(screen.getByText(/Phone: 020-12345678/)).toBeInTheDocument();
-    expect(screen.getByText(/WeChat: InkspireArt/)).toBeInTheDocument();
+    expect(screen.getByText(/WeChat: InkspireArt \(click to copy\)/)).toBeInTheDocument();
+    expect(screen.getByText(/Order: ord-k8p4x2q9 \(click to copy\)/)).toBeInTheDocument();
+    expect(screen.getByText("Use the overall layout, while improving details freely.")).toBeInTheDocument();
+    expect(screen.queryByText("Level 3 Layout")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Adjust" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Confirm production" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("radio", { name: /Level 3/ })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /Order: ord-k8p4x2q9 \(click to copy\)/ }));
+    expect(screen.getByRole("status")).toHaveTextContent("Copied order number");
+    await user.click(screen.getByRole("button", { name: /WeChat: InkspireArt \(click to copy\)/ }));
+    expect(screen.getByRole("status")).toHaveTextContent("Copied WeChat");
+
+    expect(writeText).toHaveBeenNthCalledWith(1, "ord-k8p4x2q9");
+    expect(writeText).toHaveBeenNthCalledWith(2, "InkspireArt");
     expect(screen.queryByText(/电话：/)).not.toBeInTheDocument();
     expect(screen.queryByText(/微信：/)).not.toBeInTheDocument();
   });
 
   it("localizes production size copy and custom size fields in English", async () => {
     const user = userEvent.setup();
-    render(<App />);
+    renderApp();
 
     await completePaintingWithoutPhoto(user);
     await user.click(screen.getByRole("button", { name: "生成" }));
@@ -1346,50 +1524,95 @@ describe("App", () => {
     expect(screen.queryByLabelText("高度 cm")).not.toBeInTheDocument();
   });
 
-  it("returns to the conversation panel when continuing after a result", async () => {
+  it("creates a brand-new artwork from the adjust page and returns to the base on back", async () => {
+    libraryRecords = [{
+      id: "record-1",
+      type: "painting",
+      title: "藏卷山水",
+      thumbnail_path: "records/record-1/artwork.webp",
+      artwork_path: "records/record-1/artwork.webp",
+      status: "succeeded",
+      favorite: true
+    }];
     const user = userEvent.setup();
-    render(<App />);
+    renderApp();
 
-    await completePaintingWithoutPhoto(user);
-    await user.click(screen.getByRole("button", { name: "生成" }));
-    await user.click(await screen.findByRole("button", { name: "按这张图继续调整" }));
+    await user.click(await screen.findByRole("button", { name: "藏卷" }));
+    await user.click(screen.getByRole("button", { name: /查看作品 藏卷山水/ }));
+    expect(await screen.findByRole("img", { name: "作品图" })).toHaveAttribute(
+      "src",
+      "/api/records/record-1/images/artwork"
+    );
 
-    expect(screen.queryByRole("img", { name: "作品图" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "基于上次生成" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "调整作品" }));
+    await user.type(screen.getByLabelText("调整这张作品"), "换成竖幅");
+    await user.click(screen.getByRole("button", { name: "生成调整后的作品" }));
+
+    expect(await screen.findByRole("img", { name: "作品图" })).toHaveAttribute(
+      "src",
+      "/api/records/record-2/images/artwork"
+    );
+
+    await act(async () => {
+      window.history.back();
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole("img", { name: "作品图" })).toHaveAttribute(
+        "src",
+        "/api/records/record-1/images/artwork"
+      );
+    });
   });
 
-  it("explains continued generation and lets users start a fresh studio flow", async () => {
+  it("starts a fresh studio flow when re-tapping the active 画案 tab on a result", async () => {
     const user = userEvent.setup();
-    render(<App />);
+    renderApp();
 
     await completePaintingWithoutPhoto(user);
     await user.click(screen.getByRole("button", { name: "生成" }));
-    await user.click(await screen.findByRole("button", { name: "按这张图继续调整" }));
+    expect(await screen.findByRole("img", { name: "作品图" })).toBeInTheDocument();
 
-    expect(screen.getByText("将基于上次的主题、风格和选择继续生成，可补一句新想法。")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "重开画案" }));
+    await user.click(screen.getByRole("button", { name: "画案" }));
 
     expect(screen.getByText("先定作品类型")).toBeInTheDocument();
-    expect(screen.queryByText("将基于上次的主题、风格和选择继续生成，可补一句新想法。")).not.toBeInTheDocument();
+    expect(screen.queryByRole("img", { name: "作品图" })).not.toBeInTheDocument();
   });
 
-  it("focuses the notes box from the result add-notes action without hiding the result", async () => {
+  it("returns to the result when leaving the adjust page via back", async () => {
     const user = userEvent.setup();
-    render(<App />);
+    renderApp();
 
     await completePaintingWithoutPhoto(user);
     await user.click(screen.getByRole("button", { name: "生成" }));
+    expect(await screen.findByRole("img", { name: "作品图" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "调整作品" }));
+    expect(screen.getByRole("heading", { name: "调整这张作品" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "返回作品" }));
 
     expect(await screen.findByRole("img", { name: "作品图" })).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "补充要求" }));
+    expect(screen.queryByRole("heading", { name: "调整这张作品" })).not.toBeInTheDocument();
+  });
 
+  it("returns to the source record route when opening adjust from a deep link", async () => {
+    const user = userEvent.setup();
+    renderApp({ initialRoute: "/records/record-1/adjust?from=library" });
+
+    expect(await screen.findByRole("heading", { name: "调整这张作品" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "返回作品" }));
+
+    await waitFor(() => {
+      expect(window.location.pathname).toBe("/records/record-1");
+      expect(window.location.search).toBe("?from=library");
+    });
     expect(screen.getByRole("img", { name: "作品图" })).toBeInTheDocument();
-    expect(screen.getByPlaceholderText("也可以补一句想法")).toHaveFocus();
   });
 
   it("shows the generated artwork thumbnail in the library without reloading", async () => {
     const user = userEvent.setup();
-    render(<App />);
+    renderApp();
 
     await completePaintingWithoutPhoto(user);
     await user.click(screen.getByRole("button", { name: "生成" }));
@@ -1403,7 +1626,7 @@ describe("App", () => {
 
   it("shows a guided empty library state for first-time users", async () => {
     const user = userEvent.setup();
-    render(<App />);
+    renderApp();
 
     await user.click(await screen.findByRole("button", { name: "藏卷" }));
 
@@ -1419,7 +1642,7 @@ describe("App", () => {
 
   it("presents artisans as a service entry instead of a static contact card", async () => {
     const user = userEvent.setup();
-    const { container } = render(<App />);
+    const { container } = renderApp();
 
     await user.click(await screen.findByRole("button", { name: "雅匠" }));
 
@@ -1446,7 +1669,7 @@ describe("App", () => {
 
   it("lets users consult artisans with the current generated artwork", async () => {
     const user = userEvent.setup();
-    render(<App />);
+    renderApp();
 
     await completePaintingWithoutPhoto(user);
     await user.click(screen.getByRole("button", { name: "生成" }));
@@ -1466,12 +1689,14 @@ describe("App", () => {
 
     expect(screen.getByRole("img", { name: "作品图" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "制作作品" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "画案" })).toHaveAttribute("aria-pressed", "true");
+    expect(window.location.pathname).toBe("/records/record-1/production");
+    expect(window.location.search).toBe("?from=experts");
+    expect(screen.getByRole("button", { name: "雅匠" })).toHaveAttribute("aria-pressed", "true");
   });
 
   it("opens a saved library item as the current result", async () => {
     const user = userEvent.setup();
-    render(<App />);
+    renderApp();
 
     await completePaintingWithoutPhoto(user);
     await user.click(screen.getByRole("button", { name: "生成" }));
@@ -1487,8 +1712,256 @@ describe("App", () => {
       "/api/records/record-1/images/artwork"
     );
     expect(screen.getByRole("button", { name: "制作作品" })).toBeInTheDocument();
-    expect(screen.getByLabelText("添加摆放照片生成效果图")).toBeInTheDocument();
+    expect(screen.getByLabelText("添加照片生成效果图")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "藏卷" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "画案" })).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("returns to a fresh studio flow after opening a record from the library", async () => {
+    libraryRecords = [{
+      id: "record-1",
+      type: "painting",
+      title: "藏卷山水",
+      thumbnail_path: "records/record-1/artwork.webp",
+      artwork_path: "records/record-1/artwork.webp",
+      status: "succeeded",
+      favorite: true
+    }];
+    const user = userEvent.setup();
+    renderApp({ initialRoute: "/library" });
+
+    await user.click(await screen.findByRole("button", { name: /查看作品 藏卷山水/ }));
+    expect(await screen.findByRole("img", { name: "作品图" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "画案" }));
+
+    expect(await screen.findByText("先定作品类型")).toBeInTheDocument();
+    expect(screen.queryByRole("img", { name: "作品图" })).not.toBeInTheDocument();
+    expect(window.location.pathname).toBe("/studio");
+
+    await user.click(screen.getByRole("button", { name: "藏卷" }));
+
+    expect(await screen.findByRole("img", { name: "作品图" })).toBeInTheDocument();
+    expect(window.location.pathname).toBe("/records/record-1");
+    expect(window.location.search).toBe("?from=library");
+  });
+
+  it("returns to the library grid when navigating back from a library-opened record", async () => {
+    libraryRecords = [{
+      id: "record-1",
+      type: "painting",
+      title: "藏卷山水",
+      thumbnail_path: "records/record-1/artwork.webp",
+      artwork_path: "records/record-1/artwork.webp",
+      status: "succeeded",
+      favorite: true
+    }];
+    const user = userEvent.setup();
+    renderApp({ initialRoute: "/library" });
+
+    await user.click(await screen.findByRole("button", { name: /查看作品 藏卷山水/ }));
+    expect(await screen.findByRole("img", { name: "作品图" })).toBeInTheDocument();
+
+    await act(async () => {
+      window.history.back();
+    });
+
+    await waitFor(() => {
+      expect(window.location.pathname).toBe("/library");
+    });
+    expect(screen.getByRole("button", { name: /查看作品 藏卷山水/ })).toBeInTheDocument();
+    expect(screen.queryByRole("img", { name: "作品图" })).not.toBeInTheDocument();
+  });
+
+  it("navigates to a studio record URL after generation", async () => {
+    const user = userEvent.setup();
+    renderApp({ initialRoute: "/studio" });
+
+    await completePaintingWithoutPhoto(user);
+    await user.click(screen.getByRole("button", { name: "生成" }));
+
+    expect(await screen.findByRole("img", { name: "作品图" })).toBeInTheDocument();
+    expect(window.location.pathname).toBe("/records/record-1");
+    expect(window.location.search).toBe("?from=studio");
+  });
+
+  it("keeps browser back inside the studio tab after generation", async () => {
+    const user = userEvent.setup();
+    renderApp({ initialRoute: "/studio" });
+
+    await completePaintingWithoutPhoto(user);
+    await user.click(screen.getByRole("button", { name: "生成" }));
+    expect(await screen.findByRole("img", { name: "作品图" })).toBeInTheDocument();
+
+    await act(async () => {
+      window.history.back();
+    });
+
+    await waitFor(() => {
+      expect(window.location.pathname).toBe("/studio");
+    });
+    expect(screen.getByText("先定作品类型")).toBeInTheDocument();
+    expect(screen.queryByRole("img", { name: "作品图" })).not.toBeInTheDocument();
+  });
+
+  it("restores a library record page from the URL", async () => {
+    renderApp({ initialRoute: "/records/record-1?from=library" });
+
+    expect(await screen.findByRole("img", { name: "作品图" })).toHaveAttribute(
+      "src",
+      "/api/records/record-1/images/artwork"
+    );
+    expect(screen.getByRole("button", { name: "藏卷" })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("falls back to the source tab when a record URL is missing", async () => {
+    renderApp({ initialRoute: "/records/missing-record?from=library" });
+
+    expect(await screen.findByRole("heading", { name: "藏卷还空着" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "藏卷" })).toHaveAttribute("aria-pressed", "true");
+    expect(window.location.pathname).toBe("/library");
+  });
+
+  it("canonicalizes unknown URLs back to the studio route", async () => {
+    renderApp({ initialRoute: "/unknown/path" });
+
+    expect(await screen.findByText("先定作品类型")).toBeInTheDocument();
+    expect(window.location.pathname).toBe("/studio");
+  });
+
+  it("migrates legacy activeTab and currentRecordId into the router URL once", async () => {
+    window.localStorage.setItem("inkspire.activeTab", "library");
+    window.localStorage.setItem("inkspire.currentRecordId", "record-1");
+
+    renderApp({ initialRoute: "/" });
+
+    expect(await screen.findByRole("img", { name: "作品图" })).toBeInTheDocument();
+    expect(window.location.pathname).toBe("/records/record-1");
+    expect(window.location.search).toBe("?from=library");
+    expect(window.localStorage.getItem("inkspire.activeTab")).toBeNull();
+    expect(window.localStorage.getItem("inkspire.currentRecordId")).toBeNull();
+  });
+
+  it("returns to the library record page when switching away and back to the library tab", async () => {
+    libraryRecords = [{
+      id: "record-1",
+      type: "painting",
+      title: "藏卷山水",
+      thumbnail_path: "records/record-1/artwork.webp",
+      artwork_path: "records/record-1/artwork.webp",
+      status: "succeeded",
+      favorite: true
+    }];
+    const user = userEvent.setup();
+    renderApp({ initialRoute: "/library" });
+
+    await user.click(await screen.findByRole("button", { name: /查看作品 藏卷山水/ }));
+    expect(await screen.findByRole("img", { name: "作品图" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "雅匠" }));
+    expect(await screen.findByText("可咨询方向")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "藏卷" }));
+    expect(await screen.findByRole("img", { name: "作品图" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "藏卷" })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("keeps browser back at the current tab root instead of crossing tabs", async () => {
+    renderApp({ historyEntries: ["/library", "/studio"] });
+
+    expect(await screen.findByText("先定作品类型")).toBeInTheDocument();
+
+    await act(async () => {
+      window.history.back();
+    });
+
+    await waitFor(() => {
+      expect(window.location.pathname).toBe("/studio");
+    });
     expect(screen.getByRole("button", { name: "画案" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.queryByRole("heading", { name: "藏卷还空着" })).not.toBeInTheDocument();
+  });
+
+  it("keeps production browser back inside the source tab", async () => {
+    libraryRecords = [{
+      id: "record-1",
+      type: "painting",
+      title: "藏卷山水",
+      thumbnail_path: "records/record-1/artwork.webp",
+      artwork_path: "records/record-1/artwork.webp",
+      status: "succeeded",
+      favorite: true
+    }];
+    const user = userEvent.setup();
+    renderApp({ initialRoute: "/library" });
+
+    await user.click(await screen.findByRole("button", { name: /查看作品 藏卷山水/ }));
+    await user.click(await screen.findByRole("button", { name: "制作作品" }));
+    expect(await screen.findByRole("dialog", { name: "制作作品" })).toBeInTheDocument();
+
+    await act(async () => {
+      window.history.back();
+    });
+
+    await waitFor(() => {
+      expect(window.location.pathname).toBe("/records/record-1");
+      expect(window.location.search).toBe("?from=library");
+    });
+    expect(screen.queryByRole("dialog", { name: "制作作品" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "藏卷" })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("opens the adjust page from a saved result even when the studio draft is still on the photo step", async () => {
+    const user = userEvent.setup();
+    window.localStorage.setItem("inkspire.studioDraft.v1", JSON.stringify({
+      answers: { work_type: "painting", painting_subject: "山水" },
+      photoStepComplete: false
+    }));
+    libraryRecords = [{
+      id: "record-1",
+      type: "painting",
+      title: "藏卷山水",
+      thumbnail_path: "records/record-1/artwork.webp",
+      artwork_path: "records/record-1/artwork.webp",
+      status: "succeeded",
+      favorite: true
+    }];
+    renderApp();
+
+    await user.click(await screen.findByRole("button", { name: "藏卷" }));
+    await user.click(screen.getByRole("button", { name: /查看作品 藏卷山水/ }));
+    await user.click(await screen.findByRole("button", { name: "调整作品" }));
+
+    expect(screen.getByRole("heading", { name: "调整这张作品" })).toBeInTheDocument();
+    expect(screen.getByLabelText("调整这张作品")).toHaveFocus();
+    expect(screen.queryByRole("heading", { name: "可选：添加摆放环境照片" })).not.toBeInTheDocument();
+  });
+
+  it("keeps the adjust submit disabled until a direction is written", async () => {
+    const user = userEvent.setup();
+    window.localStorage.setItem("inkspire.studioDraft.v1", JSON.stringify({
+      answers: { work_type: "painting", painting_subject: "山水" },
+      photoStepComplete: false
+    }));
+    libraryRecords = [{
+      id: "record-1",
+      type: "painting",
+      title: "藏卷山水",
+      thumbnail_path: "records/record-1/artwork.webp",
+      artwork_path: "records/record-1/artwork.webp",
+      status: "succeeded",
+      favorite: true
+    }];
+    renderApp();
+
+    await user.click(await screen.findByRole("button", { name: "藏卷" }));
+    await user.click(screen.getByRole("button", { name: /查看作品 藏卷山水/ }));
+    await user.click(await screen.findByRole("button", { name: "调整作品" }));
+
+    const submit = screen.getByRole("button", { name: "生成调整后的作品" });
+    expect(submit).toBeDisabled();
+    await user.type(screen.getByLabelText("调整这张作品"), "留白更多");
+    expect(submit).toBeEnabled();
   });
 
   it("shows a visible library error when a saved item cannot be opened", async () => {
@@ -1502,7 +1975,7 @@ describe("App", () => {
       favorite: true
     }];
     const user = userEvent.setup();
-    render(<App />);
+    renderApp();
 
     await user.click(await screen.findByRole("button", { name: "藏卷" }));
     await user.click(screen.getByRole("button", { name: /查看作品 旧作/ }));
@@ -1532,7 +2005,7 @@ describe("App", () => {
       favorite: true
     }];
     const user = userEvent.setup();
-    render(<App />);
+    renderApp();
 
     await screen.findByLabelText("语言");
     await user.selectOptions(screen.getByLabelText("语言"), "en");
@@ -1543,7 +2016,7 @@ describe("App", () => {
 
   it("can remove a generated artwork from the library", async () => {
     const user = userEvent.setup();
-    render(<App />);
+    renderApp();
 
     await completePaintingWithoutPhoto(user);
     await user.click(screen.getByRole("button", { name: "生成" }));
@@ -1570,7 +2043,7 @@ describe("App", () => {
 
   it("shows a failed-result state without production actions when generation fails", async () => {
     const user = userEvent.setup();
-    render(<App />);
+    renderApp();
 
     await completePaintingWithoutPhoto(user);
     await user.type(screen.getByPlaceholderText("也可以补一句想法"), "fail");
@@ -1579,7 +2052,7 @@ describe("App", () => {
     expect(await screen.findByText("生成未完成")).toBeInTheDocument();
     expect(screen.getByText("可以补充要求后再试一次，或稍后重新生成。")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "制作作品" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "重新调整要求" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "按这张图继续调整" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "重新生成" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "调整作品" })).not.toBeInTheDocument();
   });
 });

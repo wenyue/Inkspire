@@ -21,6 +21,7 @@ const CLIENT_OVERRIDES: Dictionaries = {
       selectedPhotoPreview: "已选照片预览",
       removePhoto: "移除照片",
       notesPlaceholder: "也可以补一句想法",
+      clearNotes: "清除想法",
       iterationHint: "将基于上次的主题、风格和选择继续生成，可补一句新想法。",
       continueGenerate: "基于上次生成",
       startOver: "重开画案",
@@ -28,9 +29,11 @@ const CLIENT_OVERRIDES: Dictionaries = {
       generating: "墨色正在铺开",
       generatingWait: "墨色正在铺开，可能需要 2-3 分钟，请耐心等待。",
       generationLimit: "当前已有 2 个生成任务，请等其中一个完成后再开始。",
-      back: "上一步"
+      back: "上一步",
+      generationSummaryArtwork: "将生成作品图。",
+      generationSummaryWithPreview: "将生成作品图和摆放效果图。"
     },
-    suggestions: ["可以开始生成", "更清雅一点", "留白更多", "更适合挂在客厅", "更适合送礼", "加一点诗意"],
+    suggestions: ["可以开始生成", "更雅", "留白多些", "更适合客厅", "更适合送礼", "更有诗意", "墨色淡些", "层次更丰富", "更安静", "更有气韵"],
     errors: {
       generic: "暂时无法完成，请稍后再试。",
       photoTooLarge: "照片过大，请选择较小图片或先压缩。",
@@ -41,7 +44,9 @@ const CLIENT_OVERRIDES: Dictionaries = {
       fusion: "效果图",
       continue: "按这张图继续调整",
       retry: "重新调整要求",
-      attachPhotoFusion: "添加摆放照片生成效果图",
+      adjust: "调整作品",
+      adjustRetry: "重新生成",
+      attachPhotoFusion: "添加照片生成效果图",
       addNotes: "补充要求",
       makeHint: "可先看尺寸和估价，确认意向后再联系制作。",
       failedTitle: "生成未完成",
@@ -50,6 +55,16 @@ const CLIENT_OVERRIDES: Dictionaries = {
       imageUnavailableHint: "可以补充要求后再生成，或稍后从藏卷重新打开。",
       fusionUnavailableTitle: "效果图暂时无法显示",
       fusionUnavailableHint: "作品图仍可继续查看，也可以稍后重新提供环境图。"
+    },
+    adjust: {
+      title: "调整这张作品",
+      intro: "描述想调整的方向，会基于这张作品的设定重新生成一张全新作品。",
+      placeholder: "例如：更清雅一点、留白更多、换成竖幅……",
+      submit: "生成调整后的作品",
+      submitting: "墨色正在铺开",
+      back: "返回作品",
+      baseLabel: "当前作品",
+      emptyHint: "先写一句调整方向再生成。"
     },
     library: {
       artwork: "作品",
@@ -90,6 +105,14 @@ const CLIENT_OVERRIDES: Dictionaries = {
       contact: "联系后沟通具体事项",
       phone: "电话：",
       wechat: "微信：",
+      copyHint: "（点击拷贝）",
+      copiedOrder: "已拷贝单号",
+      copiedWechat: "已拷贝微信",
+      successTitle: "制作意向已记录",
+      successIntro: "已保存当前规格与参考要求，接下来可直接联系沟通制作细节。",
+      summaryService: "制作方式",
+      summarySize: "制作规格",
+      summaryReference: "参考程度",
       close: "关闭",
       confirm: "确认制作意向"
     }
@@ -111,6 +134,7 @@ const CLIENT_OVERRIDES: Dictionaries = {
       selectedPhotoPreview: "已選照片預覽",
       removePhoto: "移除照片",
       notesPlaceholder: "也可以補一句想法",
+      clearNotes: "清除想法",
       iterationHint: "將基於上次的主題、風格和選擇繼續生成，可補一句新想法。",
       continueGenerate: "基於上次生成",
       startOver: "重開畫案",
@@ -118,9 +142,11 @@ const CLIENT_OVERRIDES: Dictionaries = {
       generating: "墨色正在鋪開",
       generatingWait: "墨色正在鋪開，可能需要 2-3 分鐘，請耐心等待。",
       generationLimit: "目前已有 2 個生成任務，請等其中一個完成後再開始。",
-      back: "上一步"
+      back: "上一步",
+      generationSummaryArtwork: "將生成作品圖。",
+      generationSummaryWithPreview: "將生成作品圖和擺放效果圖。"
     },
-    suggestions: ["可以開始生成", "更清雅一點", "留白更多", "更適合掛在客廳", "更適合送禮", "加一點詩意"],
+    suggestions: ["可以開始生成", "更雅", "留白多些", "更適合客廳", "更適合送禮", "更有詩意", "墨色淡些", "層次更豐富", "更安靜", "更有氣韻"],
     errors: {
       generic: "暫時無法完成，請稍後再試。",
       photoTooLarge: "照片過大，請選擇較小圖片或先壓縮。",
@@ -131,6 +157,8 @@ const CLIENT_OVERRIDES: Dictionaries = {
       fusion: "效果圖",
       continue: "按這張圖繼續調整",
       retry: "重新調整要求",
+      adjust: "調整作品",
+      adjustRetry: "重新生成",
       attachPhotoFusion: "加入擺放照片生成效果圖",
       addNotes: "補充要求",
       makeHint: "可先看尺寸和估價，確認意向後再聯絡製作。",
@@ -140,6 +168,16 @@ const CLIENT_OVERRIDES: Dictionaries = {
       imageUnavailableHint: "可以補充要求後再生成，或稍後從藏卷重新打開。",
       fusionUnavailableTitle: "效果圖暫時無法顯示",
       fusionUnavailableHint: "作品圖仍可繼續查看，也可以稍後重新提供環境圖。"
+    },
+    adjust: {
+      title: "調整這張作品",
+      intro: "描述想調整的方向，會基於這張作品的設定重新生成一張全新作品。",
+      placeholder: "例如：更清雅一點、留白更多、換成豎幅……",
+      submit: "生成調整後的作品",
+      submitting: "墨色正在鋪開",
+      back: "返回作品",
+      baseLabel: "目前作品",
+      emptyHint: "先寫一句調整方向再生成。"
     },
     library: {
       artwork: "作品",
@@ -180,6 +218,14 @@ const CLIENT_OVERRIDES: Dictionaries = {
       contact: "聯絡後溝通具體事項",
       phone: "電話：",
       wechat: "微信：",
+      copyHint: "（點擊拷貝）",
+      copiedOrder: "已拷貝單號",
+      copiedWechat: "已拷貝微信",
+      successTitle: "製作意向已記錄",
+      successIntro: "已保存目前規格與參考要求，接下來可直接聯絡溝通製作細節。",
+      summaryService: "製作方式",
+      summarySize: "製作規格",
+      summaryReference: "參考程度",
       close: "關閉",
       confirm: "確認製作意向"
     }
@@ -200,6 +246,7 @@ const CLIENT_OVERRIDES: Dictionaries = {
       selectedPhotoPreview: "Selected photo preview",
       removePhoto: "Remove photo",
       notesPlaceholder: "Add one more direction",
+      clearNotes: "Clear notes",
       iterationHint: "Generate from your last subject, style, and choices. Add one new direction if needed.",
       continueGenerate: "Generate from last choices",
       startOver: "Start over",
@@ -207,9 +254,11 @@ const CLIENT_OVERRIDES: Dictionaries = {
       generating: "Ink is unfolding",
       generatingWait: "Ink is unfolding. This may take 2-3 minutes. Please wait.",
       generationLimit: "You already have 2 generation tasks. Please wait for one to finish.",
-      back: "Back"
+      back: "Back",
+      generationSummaryArtwork: "Artwork image will be generated.",
+      generationSummaryWithPreview: "Artwork and placement preview will be generated."
     },
-    suggestions: ["Start generating", "Make it more refined", "Add more blank space", "Fit a living room", "Better for gifting", "Add poetic feeling"],
+    suggestions: ["Start generating", "More refined", "More blank space", "For living room", "For gifting", "More poetic", "Lighter ink", "Richer layers", "Calmer", "More lively energy"],
     errors: {
       generic: "Unable to complete this right now. Please try again.",
       photoTooLarge: "Photo is too large. Choose a smaller image or compress it first.",
@@ -220,6 +269,8 @@ const CLIENT_OVERRIDES: Dictionaries = {
       fusion: "Preview",
       continue: "Adjust from this artwork",
       retry: "Adjust request again",
+      adjust: "Adjust artwork",
+      adjustRetry: "Generate again",
       attachPhotoFusion: "Add a placement photo for preview",
       addNotes: "Add notes",
       makeHint: "Preview size and estimate first; contact follows after confirming intent.",
@@ -229,6 +280,16 @@ const CLIENT_OVERRIDES: Dictionaries = {
       imageUnavailableHint: "Add notes and generate again, or reopen it from Library later.",
       fusionUnavailableTitle: "Preview cannot be shown right now",
       fusionUnavailableHint: "The artwork can still be viewed. You can add a room photo again later."
+    },
+    adjust: {
+      title: "Adjust this artwork",
+      intro: "Describe the direction you want. A brand-new artwork is generated from this one's settings.",
+      placeholder: "e.g. more refined, more blank space, switch to a vertical format…",
+      submit: "Generate the adjusted artwork",
+      submitting: "Ink is unfolding",
+      back: "Back to artwork",
+      baseLabel: "Current artwork",
+      emptyHint: "Write an adjustment direction first."
     },
     library: {
       artwork: "Artwork",
@@ -269,6 +330,14 @@ const CLIENT_OVERRIDES: Dictionaries = {
       contact: "Contact the artisan to confirm details",
       phone: "Phone: ",
       wechat: "WeChat: ",
+      copyHint: "(click to copy)",
+      copiedOrder: "Copied order number",
+      copiedWechat: "Copied WeChat",
+      successTitle: "Production request recorded",
+      successIntro: "Your selected size and reference direction are saved. You can now contact the artisan directly.",
+      summaryService: "Service",
+      summarySize: "Size",
+      summaryReference: "Reference level",
       close: "Close",
       confirm: "Confirm production"
     }

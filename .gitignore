@@ -1,12 +1,34 @@
+# Dependencies
 node_modules/
+
+# Local environment
+.env
+.env.*
+!.env.example
+
+# Runtime data
 data/
 .e2e-data/
+.fulltest-data/
 .manual-data/
 .real-data*/
+
+# Local tooling/runtime output
+.runtime/
 .superpowers/
+.tmp-codex/
+.VSCodeCounter/
 .worktrees/
+
+# Test and build output
 test-results/
 playwright-report/
 coverage/
 dist/
+
+# Logs and local backups
+*.log
+*.bak
+
+# OS files
 .DS_Store

@@ -1,5 +1,6 @@
 import { BookOpen, Brush, Languages, Users } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useLocation, useNavigate, useNavigationType } from "react-router-dom";
 import {
   fallbackConfig,
   createFusion,
@@ -24,15 +25,58 @@ import Library from "./components/Library";
 import ParticleBackdrop from "./components/ParticleBackdrop";
 import ProductionDialog from "./components/ProductionDialog";
 import ResultView from "./components/ResultView";
+import AdjustView from "./components/AdjustView";
 import Studio from "./components/Studio";
 import type { Locale } from "./domain";
 import { createListTranslator, createTranslator } from "./i18n";
+import {
+  backCurrentTab,
+  fallbackPathForSource,
+  migrateLegacyNavigationPath,
+  pathForRecord,
+  pushTabRoute,
+  readSourceTab,
+  readTabHistoryState,
+  replaceTabRoute,
+  switchTabRoute,
+  tabFromPath,
+  writeTabHistoryState,
+  type Tab
+} from "./navigation";
 
-type Tab = "studio" | "library" | "experts";
+type RecordRouteMode = "result" | "adjust" | "production";
+
+function decodePathSegment(value: string): string | null {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return null;
+  }
+}
+
+function isKnownTopLevelPath(pathname: string): boolean {
+  return pathname === "/" || pathname === "/studio" || pathname === "/library" || pathname === "/experts";
+}
+
+function parseRecordRoute(pathname: string): { recordId: string; mode: RecordRouteMode } | null {
+  const parts = pathname.split("/").filter(Boolean);
+  if (parts[0] !== "records" || !parts[1]) {
+    return null;
+  }
+  const decodedRecordId = decodePathSegment(parts[1]);
+  if (!decodedRecordId) {
+    return null;
+  }
+  if (parts.length === 2) {
+    return { recordId: decodedRecordId, mode: "result" };
+  }
+  if (parts.length === 3 && (parts[2] === "adjust" || parts[2] === "production")) {
+    return { recordId: decodedRecordId, mode: parts[2] };
+  }
+  return null;
+}
 
 const LOCALE_KEY = "inkspire.locale";
-const ACTIVE_TAB_KEY = "inkspire.activeTab";
-const CURRENT_RECORD_KEY = "inkspire.currentRecordId";
 
 const tabIcons = {
   studio: Brush,
@@ -40,8 +84,15 @@ const tabIcons = {
   experts: Users
 };
 
+function generationTime(record: LibraryRecord): number {
+  const time = record.created_at ? new Date(record.created_at).getTime() : NaN;
+  return Number.isNaN(time) ? -Infinity : time;
+}
+
 function visibleLibraryRecords(records: LibraryRecord[]): LibraryRecord[] {
-  return records.filter((record) => record.favorite !== false);
+  return records
+    .filter((record) => record.favorite !== false)
+    .sort((a, b) => generationTime(b) - generationTime(a));
 }
 
 function maxInputBytes(config: PublicConfig): number {
@@ -62,10 +113,6 @@ function isLocale(value: string | null): value is Locale {
   return value === "zh-Hans" || value === "zh-Hant" || value === "en";
 }
 
-function isTab(value: string | null): value is Tab {
-  return value === "studio" || value === "library" || value === "experts";
-}
-
 function readStoredLocale(defaultLocale: Locale): Locale {
   if (typeof window === "undefined") {
     return defaultLocale;
@@ -74,36 +121,37 @@ function readStoredLocale(defaultLocale: Locale): Locale {
   return isLocale(stored) ? stored : defaultLocale;
 }
 
-function readStoredTab(): Tab {
-  if (typeof window === "undefined") {
-    return "studio";
-  }
-  const stored = window.localStorage.getItem(ACTIVE_TAB_KEY);
-  return isTab(stored) ? stored : "studio";
-}
-
-function readStoredRecordId(): string {
-  if (typeof window === "undefined") {
-    return "";
-  }
-  return window.localStorage.getItem(CURRENT_RECORD_KEY) ?? "";
-}
-
 export default function App() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const navigationType = useNavigationType();
+  const pathWithSearch = `${location.pathname}${location.search}`;
+  const activeTab = tabFromPath(pathWithSearch);
+  const recordRoute = parseRecordRoute(location.pathname);
   const [config, setConfig] = useState<PublicConfig>(fallbackConfig);
   const [locale, setLocale] = useState<Locale>(() => readStoredLocale(fallbackConfig.defaultLocale ?? "zh-Hans"));
-  const [activeTab, setActiveTab] = useState<Tab>(() => readStoredTab());
   const [library, setLibrary] = useState<LibraryRecord[]>([]);
   const [currentRecord, setCurrentRecord] = useState<GenerationRecord | null>(null);
+  const [recordViewOpen, setRecordViewOpen] = useState(false);
   const [activeJobs, setActiveJobs] = useState<GenerationJob[]>([]);
-  const [restoringRecordId, setRestoringRecordId] = useState(() => readStoredRecordId());
+  const [restoringRecordId, setRestoringRecordId] = useState("");
   const [showProduction, setShowProduction] = useState(false);
   const [isAttachingPhoto, setIsAttachingPhoto] = useState(false);
   const [resultActionError, setResultActionError] = useState("");
   const [libraryActionError, setLibraryActionError] = useState("");
-  const [notesFocusRequest, setNotesFocusRequest] = useState(0);
+  const [adjustOpen, setAdjustOpen] = useState(false);
+  const [isAdjusting, setIsAdjusting] = useState(false);
+  const [adjustError, setAdjustError] = useState("");
+  const [studioResetRequest, setStudioResetRequest] = useState(0);
+  const [tabHistory, setTabHistory] = useState(() => readTabHistoryState(
+    typeof window === "undefined" ? "/studio" : `${window.location.pathname}${window.location.search}`
+  ));
   const activeJobsRef = useRef<GenerationJob[]>([]);
   const autoFusionRecordIds = useRef<Set<string>>(new Set());
+  const recordCacheRef = useRef<Map<string, GenerationRecord>>(new Map());
+  const adjustSubmitRef = useRef(false);
+  const tabHistoryRef = useRef(tabHistory);
+  const skipNextPopSyncRef = useRef(false);
 
   useEffect(() => {
     loadPublicConfig().then((nextConfig) => {
@@ -122,50 +170,123 @@ export default function App() {
   }, [activeJobs]);
 
   useEffect(() => {
+    tabHistoryRef.current = tabHistory;
+    writeTabHistoryState(tabHistory);
+  }, [tabHistory]);
+
+  useEffect(() => {
     window.localStorage.setItem(LOCALE_KEY, locale);
   }, [locale]);
 
   useEffect(() => {
-    window.localStorage.setItem(ACTIVE_TAB_KEY, activeTab);
-  }, [activeTab]);
+    const onPopState = () => {
+      skipNextPopSyncRef.current = true;
+      const next = backCurrentTab(tabHistoryRef.current);
+      setTabHistory(next.state);
+      if (next.didGoBack && next.path === "/studio") {
+        if (currentRecord?.id) {
+          recordCacheRef.current.delete(currentRecord.id);
+        }
+        setCurrentRecord(null);
+        setRestoringRecordId("");
+        setShowProduction(false);
+        setAdjustOpen(false);
+        setRecordViewOpen(false);
+        setResultActionError("");
+        setLibraryActionError("");
+        setStudioResetRequest((request) => request + 1);
+      }
+      navigate(next.path, { replace: true });
+    };
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, [currentRecord?.id, navigate]);
 
   useEffect(() => {
-    if (!restoringRecordId) {
+    if (location.pathname === "/") {
+      navigate(migrateLegacyNavigationPath(), { replace: true });
+    }
+  }, [location.pathname, navigate]);
+
+  useEffect(() => {
+    if (isKnownTopLevelPath(location.pathname) || recordRoute) {
       return;
     }
+    navigate("/studio", { replace: true });
+  }, [location.pathname, navigate, recordRoute]);
+
+  useEffect(() => {
+    if (!isKnownTopLevelPath(location.pathname) && !recordRoute) {
+      return;
+    }
+    if (skipNextPopSyncRef.current && navigationType === "POP") {
+      skipNextPopSyncRef.current = false;
+      return;
+    }
+    setTabHistory((current) => (
+      navigationType === "REPLACE"
+        ? replaceTabRoute(current, pathWithSearch)
+        : pushTabRoute(current, pathWithSearch)
+    ));
+  }, [location.pathname, navigationType, pathWithSearch, recordRoute?.mode, recordRoute?.recordId]);
+
+  useEffect(() => {
+    if (!recordRoute) {
+      setAdjustOpen(false);
+      setShowProduction(false);
+      setRecordViewOpen(false);
+      return;
+    }
+    const { recordId, mode } = recordRoute;
+    const source = readSourceTab(location.search);
+    setResultActionError("");
+    setLibraryActionError("");
+    setAdjustError("");
+    setRecordViewOpen(true);
+    setAdjustOpen(mode === "adjust");
+    setShowProduction(mode === "production");
+
+    const cached = recordCacheRef.current.get(recordId);
+    if (cached) {
+      setCurrentRecord(cached);
+      setRestoringRecordId("");
+      return;
+    }
+
     let active = true;
-    getRecord(restoringRecordId)
+    setRestoringRecordId(recordId);
+    getRecord(recordId)
       .then((record) => {
         if (!active) {
           return;
         }
+        recordCacheRef.current.set(record.id, record);
         setCurrentRecord(record);
+        setRestoringRecordId("");
       })
       .catch(() => {
-        if (typeof window !== "undefined") {
-          window.localStorage.removeItem(CURRENT_RECORD_KEY);
+        if (!active) {
+          return;
         }
-      })
-      .finally(() => {
-        if (active) {
-          setRestoringRecordId("");
-        }
+        setCurrentRecord(null);
+        setRecordViewOpen(false);
+        setAdjustOpen(false);
+        setShowProduction(false);
+        setRestoringRecordId("");
+        navigate(fallbackPathForSource(source), { replace: true });
       });
     return () => {
       active = false;
     };
-  }, [restoringRecordId]);
+  }, [activeTab, location.search, navigate, recordRoute?.mode, recordRoute?.recordId]);
 
   const t = useMemo(() => createTranslator(locale, config.i18n), [config.i18n, locale]);
   const list = useMemo(() => createListTranslator(locale, config.i18n), [config.i18n, locale]);
   const productionEnabled = hasProductionContact(config);
 
   const onResult = useCallback((record: GenerationRecord) => {
+    recordCacheRef.current.set(record.id, record);
     setCurrentRecord(record);
-    setNotesFocusRequest(0);
-    if (record.id) {
-      window.localStorage.setItem(CURRENT_RECORD_KEY, record.id);
-    }
     setLibrary((records) => {
       const withoutDuplicate = records.filter((item) => item.id !== record.id);
       return visibleLibraryRecords([record, ...withoutDuplicate]);
@@ -207,7 +328,19 @@ export default function App() {
 
   const applyFinishedRecord = useCallback((record: GenerationRecord) => {
     onResult(record);
-  }, [onResult]);
+    const finishingAdjustment = adjustSubmitRef.current;
+    const shouldOpenResult = activeTab === "studio" || finishingAdjustment;
+    setRecordViewOpen(shouldOpenResult);
+    const source = readSourceTab(location.search);
+    if (finishingAdjustment) {
+      adjustSubmitRef.current = false;
+      setAdjustOpen(false);
+      navigate(pathForRecord(record.id, source), { replace: true });
+      return;
+    }
+    const nextSource = recordRoute?.recordId === record.id ? source : "studio";
+    navigate(pathForRecord(record.id, nextSource), { replace: recordRoute?.recordId === record.id });
+  }, [activeTab, location.search, navigate, onResult, recordRoute?.recordId]);
 
   const startFusionJob = useCallback(async (recordId: string, sourcePhotoPath = "") => {
     try {
@@ -323,13 +456,106 @@ export default function App() {
     return () => window.clearInterval(timer);
   }, [pollActiveJobs]);
 
-  const clearCurrentRecord = () => {
+  const startNewArtwork = () => {
+    if (currentRecord?.id) {
+      recordCacheRef.current.delete(currentRecord.id);
+    }
     setCurrentRecord(null);
-    window.localStorage.removeItem(CURRENT_RECORD_KEY);
     setRestoringRecordId("");
     setShowProduction(false);
+    setAdjustOpen(false);
+    setRecordViewOpen(false);
+    navigate("/studio");
     setResultActionError("");
     setLibraryActionError("");
+    setStudioResetRequest((request) => request + 1);
+  };
+
+  const goToTab = (tab: Tab) => {
+    if (tab === "studio" && activeTab === "studio" && currentRecord && !adjustOpen && !showProduction) {
+      startNewArtwork();
+      return;
+    }
+    if (tab === activeTab && !showProduction && !adjustOpen) {
+      return;
+    }
+    setShowProduction(false);
+    setAdjustOpen(false);
+    const target = switchTabRoute(tabHistoryRef.current, tab);
+    setTabHistory(target.state);
+    setResultActionError("");
+    setLibraryActionError("");
+    navigate(target.path);
+  };
+
+  const openRecordFromLibrary = async (record: LibraryRecord) => {
+    setResultActionError("");
+    setLibraryActionError("");
+    try {
+      const fullRecord = await getRecord(record.id);
+      recordCacheRef.current.set(fullRecord.id, fullRecord);
+      onResult(fullRecord);
+      setRecordViewOpen(true);
+      setAdjustOpen(false);
+      setShowProduction(false);
+      navigate(pathForRecord(fullRecord.id, "library"));
+    } catch {
+      setLibraryActionError(t("errors.libraryOpenFailed"));
+    }
+  };
+
+  const openAdjust = () => {
+    if (!currentRecord) {
+      return;
+    }
+    setAdjustError("");
+    navigate(pathForRecord(currentRecord.id, readSourceTab(location.search), "adjust"));
+  };
+
+  const openProduction = () => {
+    if (!currentRecord || currentRecord.status === "failed") {
+      return;
+    }
+    navigate(pathForRecord(currentRecord.id, readSourceTab(location.search), "production"));
+  };
+
+  const closeProduction = () => {
+    if (!currentRecord) {
+      navigate(fallbackPathForSource(activeTab), { replace: true });
+      return;
+    }
+    navigate(pathForRecord(currentRecord.id, readSourceTab(location.search)), { replace: true });
+  };
+
+  const navigateBack = () => {
+    if (!currentRecord) {
+      navigate(fallbackPathForSource(activeTab), { replace: true });
+      return;
+    }
+    navigate(pathForRecord(currentRecord.id, readSourceTab(location.search)), { replace: true });
+  };
+
+  const submitAdjustment = async (note: string) => {
+    if (!currentRecord) {
+      return;
+    }
+    setIsAdjusting(true);
+    setAdjustError("");
+    adjustSubmitRef.current = true;
+    try {
+      await startGenerationJob({
+        type: currentRecord.type,
+        answers: currentRecord.answers ?? {},
+        conversationNotes: note,
+        source_photo_path: currentRecord.source_photo_path,
+        recommended_artwork_size: currentRecord.recommended_artwork_size ?? null
+      });
+    } catch (error) {
+      adjustSubmitRef.current = false;
+      setAdjustError(isGenerationLimitError(error) ? t("studio.generationLimit") : t("errors.generic"));
+    } finally {
+      setIsAdjusting(false);
+    }
   };
 
   const resultSlot = currentRecord ? (
@@ -339,9 +565,8 @@ export default function App() {
       fusionLabel={t("result.fusion")}
       makeLabel={t("buttons.make")}
       makeHint={t("result.makeHint")}
-      continueLabel={t("result.continue")}
-      retryLabel={t("result.retry")}
-      addNotesLabel={t("result.addNotes")}
+      adjustLabel={t("result.adjust")}
+      adjustRetryLabel={t("result.adjustRetry")}
       attachPhotoLabel={t("result.attachPhotoFusion")}
       busyLabel={t("studio.generating")}
       failedTitle={t("result.failedTitle")}
@@ -353,15 +578,8 @@ export default function App() {
       actionError={resultActionError}
       isAttachingPhoto={isAttachingPhoto}
       canMake={productionEnabled}
-      onMake={() => setShowProduction(true)}
-      onContinue={() => {
-        clearCurrentRecord();
-        setNotesFocusRequest((request) => request + 1);
-      }}
-      onAddNotes={() => {
-        setActiveTab("studio");
-        setNotesFocusRequest((request) => request + 1);
-      }}
+      onMake={openProduction}
+      onAdjust={openAdjust}
       onAttachPhoto={async (file) => {
         if (!currentRecord?.id) {
           return;
@@ -383,6 +601,25 @@ export default function App() {
       }}
     />
   ) : null;
+
+  const recordView = currentRecord && adjustOpen ? (
+    <AdjustView
+      record={currentRecord}
+      title={t("adjust.title")}
+      intro={t("adjust.intro")}
+      placeholder={t("adjust.placeholder")}
+      submitLabel={t("adjust.submit")}
+      submittingLabel={t("adjust.submitting")}
+      backLabel={t("adjust.back")}
+      baseLabel={t("adjust.baseLabel")}
+      artworkLabel={t("result.artwork")}
+      suggestions={list("suggestions").slice(1)}
+      isSubmitting={isAdjusting}
+      error={adjustError}
+      onBack={navigateBack}
+      onSubmit={submitAdjustment}
+    />
+  ) : recordRoute && activeTab !== "studio" && recordViewOpen ? resultSlot : null;
 
   return (
     <div className="app-shell">
@@ -408,91 +645,88 @@ export default function App() {
       </header>
 
       <main className="main-surface">
-        {activeTab === "studio" ? (
-          <Studio
-            config={config}
-            locale={locale}
-            t={t}
-            list={list}
-            onStartGeneration={startGenerationJob}
-            activeJobs={activeJobs}
-            resultSlot={resultSlot}
-            notesFocusRequest={notesFocusRequest}
-            hasResult={Boolean(currentRecord)}
-            onStartOver={clearCurrentRecord}
-          />
-        ) : null}
-        {activeTab === "library" ? (
-          <Library
-            records={library}
-            locale={locale}
-            emptyLabel={t("empty.library")}
-            emptyHint={t("empty.libraryHint")}
-            emptyActionLabel={t("empty.libraryAction")}
-            actionError={libraryActionError}
-            labels={{
-              artwork: t("library.artwork"),
-              fusion: t("library.fusion"),
-              failed: t("library.failed"),
-              openRecord: t("library.openRecord"),
-              removeFavorite: t("library.removeFavorite"),
-              removeFavoriteShort: t("library.removeFavoriteShort"),
-              removeConfirmTitle: t("library.removeConfirmTitle"),
-              removeConfirmHint: t("library.removeConfirmHint"),
-              removeConfirmCancel: t("library.removeConfirmCancel"),
-              removeConfirmAction: t("library.removeConfirmAction")
-            }}
-            onEmptyAction={() => {
-              setLibraryActionError("");
-              setActiveTab("studio");
-            }}
-            onOpen={async (record) => {
-              setResultActionError("");
-              setLibraryActionError("");
-              try {
-                const fullRecord = await getRecord(record.id);
-                onResult(fullRecord);
-                setActiveTab("studio");
-              } catch {
-                setLibraryActionError(t("errors.libraryOpenFailed"));
-              }
-            }}
-            onFavoriteToggle={async (record, favorite) => {
-              setLibraryActionError("");
-              await updateFavorite(record.id, favorite);
-              setLibrary((records) => visibleLibraryRecords(
-                records.map((item) => item.id === record.id ? { ...item, favorite } : item)
-              ));
-            }}
-          />
-        ) : null}
-        {activeTab === "experts" ? (
-          <Experts
-            experts={config.experts}
-            title={t("experts.title")}
-            locale={locale}
-            serviceHeading={t("experts.serviceHeading")}
-            extraServiceName={t("experts.extraServiceName")}
-            extraServiceDescription={t("experts.extraServiceDescription")}
-            expectationLabel={t("experts.expectation")}
-            sampleHeading={t("experts.sampleHeading")}
-            currentWorkLabel={t("experts.currentWork")}
-            currentWorkPreviewLabel={t("experts.currentWorkPreview")}
-            ctaLabel={
-              currentRecord && currentRecord.status !== "failed"
-                ? productionEnabled ? t("experts.ctaWithRecord") : t("experts.productionUnavailable")
-                : t("experts.ctaStart")
-            }
-            ctaDisabled={Boolean(currentRecord && currentRecord.status !== "failed" && !productionEnabled)}
-            currentRecord={currentRecord}
-            onCta={() => {
-              setActiveTab("studio");
-              if (currentRecord && currentRecord.status !== "failed" && productionEnabled) {
-                setShowProduction(true);
-              }
-            }}
-          />
-        ) : null}
+        {recordView ?? (
+          <>
+            {activeTab === "studio" ? (
+            <Studio
+              config={config}
+              locale={locale}
+              t={t}
+              list={list}
+              onStartGeneration={startGenerationJob}
+              activeJobs={activeJobs}
+              resultSlot={recordViewOpen ? resultSlot : null}
+              studioResetRequest={studioResetRequest}
+              hasResult={recordViewOpen && Boolean(currentRecord)}
+            />
+            ) : null}
+            {activeTab === "library" ? (
+              <Library
+                records={library}
+                locale={locale}
+                emptyLabel={t("empty.library")}
+                emptyHint={t("empty.libraryHint")}
+                emptyActionLabel={t("empty.libraryAction")}
+                actionError={libraryActionError}
+                labels={{
+                  artwork: t("library.artwork"),
+                  fusion: t("library.fusion"),
+                  failed: t("library.failed"),
+                  openRecord: t("library.openRecord"),
+                  removeFavorite: t("library.removeFavorite"),
+                  removeFavoriteShort: t("library.removeFavoriteShort"),
+                  removeConfirmTitle: t("library.removeConfirmTitle"),
+                  removeConfirmHint: t("library.removeConfirmHint"),
+                  removeConfirmCancel: t("library.removeConfirmCancel"),
+                  removeConfirmAction: t("library.removeConfirmAction")
+                }}
+                onEmptyAction={() => {
+                  setLibraryActionError("");
+                  goToTab("studio");
+                }}
+                onOpen={openRecordFromLibrary}
+                onFavoriteToggle={async (record, favorite) => {
+                  setLibraryActionError("");
+                  await updateFavorite(record.id, favorite);
+                  setLibrary((records) => visibleLibraryRecords(
+                    records.map((item) => item.id === record.id ? { ...item, favorite } : item)
+                  ));
+                }}
+              />
+            ) : null}
+            {activeTab === "experts" ? (
+              <Experts
+                experts={config.experts}
+                title={t("experts.title")}
+                locale={locale}
+                serviceHeading={t("experts.serviceHeading")}
+                extraServiceName={t("experts.extraServiceName")}
+                extraServiceDescription={t("experts.extraServiceDescription")}
+                expectationLabel={t("experts.expectation")}
+                sampleHeading={t("experts.sampleHeading")}
+                currentWorkLabel={t("experts.currentWork")}
+                currentWorkPreviewLabel={t("experts.currentWorkPreview")}
+                ctaLabel={
+                  currentRecord && currentRecord.status !== "failed"
+                    ? productionEnabled ? t("experts.ctaWithRecord") : t("experts.productionUnavailable")
+                    : t("experts.ctaStart")
+                }
+                ctaDisabled={Boolean(currentRecord && currentRecord.status !== "failed" && !productionEnabled)}
+                currentRecord={currentRecord}
+                onCta={() => {
+                  if (currentRecord && currentRecord.status !== "failed" && productionEnabled) {
+                    setAdjustOpen(false);
+                    setRecordViewOpen(true);
+                    setShowProduction(true);
+                    navigate(pathForRecord(currentRecord.id, "experts", "production"));
+                  } else {
+                    goToTab("studio");
+                  }
+                }}
+              />
+            ) : null}
+          </>
+        )}
       </main>
 
       <nav className="bottom-tabs" aria-label="Inkspire">
@@ -504,7 +738,7 @@ export default function App() {
               type="button"
               aria-pressed={activeTab === tab}
               className={activeTab === tab ? "active" : ""}
-              onClick={() => setActiveTab(tab)}
+              onClick={() => goToTab(tab)}
             >
               <Icon aria-hidden="true" size={18} />
               {t(`tabs.${tab}`)}
@@ -527,11 +761,19 @@ export default function App() {
           contactLabel={t("production.contact")}
           phoneLabel={t("production.phone")}
           wechatLabel={t("production.wechat")}
+          copyHintLabel={t("production.copyHint")}
+          copiedOrderLabel={t("production.copiedOrder")}
+          copiedWechatLabel={t("production.copiedWechat")}
+          successTitleLabel={t("production.successTitle")}
+          successIntroLabel={t("production.successIntro")}
+          summaryServiceLabel={t("production.summaryService")}
+          summarySizeLabel={t("production.summarySize")}
+          summaryReferenceLabel={t("production.summaryReference")}
           confirmLabel={t("production.confirm")}
           contactPendingLabel={t("experts.contactPending")}
           productionAvailable={productionEnabled}
           productionUnavailableLabel={t("experts.productionUnavailable")}
-          onClose={() => setShowProduction(false)}
+          onClose={closeProduction}
         />
       ) : null}
     </div>

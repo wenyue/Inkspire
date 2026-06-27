@@ -1,5 +1,5 @@
 import { Camera, ImagePlus, RotateCcw, X } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   isGenerationLimitError,
   isPhotoTooLargeError,
@@ -46,8 +46,10 @@ interface StudioProps {
   activeJobs?: GenerationJob[];
   resultSlot: React.ReactNode;
   notesFocusRequest?: number;
+  iterationRecord?: GenerationRecord | null;
   hasResult?: boolean;
   onStartOver?: () => void;
+  studioResetRequest?: number;
 }
 
 function localizedText(value: Record<string, string>, locale: Locale): string {
@@ -184,6 +186,14 @@ function generationJobLabel(job: GenerationJob, locale: Locale): string {
   return job.title ? `${job.title} ${stage}` : stage;
 }
 
+function answersFromRecord(record: GenerationRecord, fallback: Answers): Answers {
+  return {
+    ...fallback,
+    ...(record.answers ?? {}),
+    work_type: record.type
+  };
+}
+
 export function getProgressLabel(config: PublicConfig, answers: Answers, locale: Locale): string {
   const workType = answers.work_type;
   if (!workType) {
@@ -208,8 +218,10 @@ export default function Studio({
   activeJobs = [],
   resultSlot,
   notesFocusRequest = 0,
+  iterationRecord = null,
   hasResult = false,
-  onStartOver
+  onStartOver,
+  studioResetRequest = 0
 }: StudioProps) {
   const [answers, setAnswers] = useState<Answers>(() => readStudioDraft().answers ?? {});
   const [conversationNotes, setConversationNotes] = useState(() => readStudioDraft().conversationNotes ?? "");
@@ -228,6 +240,10 @@ export default function Studio({
   const [isSubmittingGeneration, setIsSubmittingGeneration] = useState(false);
   const [error, setError] = useState("");
   const notesRef = useRef<HTMLTextAreaElement | null>(null);
+  const pendingPhotoSelection = useRef<{ file: File; input: HTMLInputElement } | null>(null);
+  const pendingPhotoTimer = useRef<number | null>(null);
+  const studioBackGuardActive = useRef(false);
+  const studioBackActionAvailable = useRef(false);
 
   const question = useMemo(() => {
     if (!answers.work_type) {
@@ -244,6 +260,9 @@ export default function Studio({
   const showCreationPanel = !hasResult || notesFocusRequest > 0;
   const isIteratingResult = showConversationStep && notesFocusRequest > 0;
   const generationLimitReached = activeJobs.length >= 2;
+  const generationSummary = sourcePhotoPath
+    ? t("studio.generationSummaryWithPreview")
+    : t("studio.generationSummaryArtwork");
 
   useEffect(() => {
     writeStudioDraft({
@@ -266,6 +285,43 @@ export default function Studio({
   useEffect(() => () => {
     revokePhotoPreview(photoPreviewUrl);
   }, [photoPreviewUrl]);
+
+  useEffect(() => {
+    if (studioResetRequest <= 0) {
+      return;
+    }
+    setAnswers({});
+    setConversationNotes("");
+    setSourcePhotoPath("");
+    setSelectedPhotoName("");
+    setTextQuestionDraft("");
+    setRecommendedArtworkSize(null);
+    setPhotoStepComplete(false);
+    setPhotoPreviewFailed(false);
+    setPhotoPreviewUrl((current) => {
+      revokePhotoPreview(current);
+      return "";
+    });
+    setError("");
+  }, [studioResetRequest]);
+
+  useEffect(() => {
+    if (notesFocusRequest <= 0 || !iterationRecord) {
+      return;
+    }
+    setAnswers((current) => answersFromRecord(iterationRecord, current));
+    setConversationNotes("");
+    setSourcePhotoPath(iterationRecord.source_photo_path ?? "");
+    setSelectedPhotoName("");
+    setPhotoPreviewFailed(false);
+    setPhotoPreviewUrl((current) => {
+      revokePhotoPreview(current);
+      return "";
+    });
+    setRecommendedArtworkSize(iterationRecord.recommended_artwork_size ?? null);
+    setPhotoStepComplete(true);
+    setError("");
+  }, [iterationRecord, notesFocusRequest]);
 
   useEffect(() => {
     if (notesFocusRequest <= 0 || !showConversationStep) {
@@ -304,7 +360,7 @@ export default function Studio({
     setAnswers((current) => ({ ...current, [question.id]: value }));
   };
 
-  const goBack = () => {
+  const goToPreviousStudioStep = useCallback(() => {
     if (photoStepComplete) {
       setPhotoStepComplete(false);
       setError("");
@@ -321,14 +377,52 @@ export default function Studio({
       return nextAnswers;
     });
     setError("");
-  };
+  }, [config, photoStepComplete]);
 
-  const onPhotoChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const input = event.currentTarget;
-    const file = event.target.files?.[0];
-    if (!file) {
+  const goBack = () => {
+    if (typeof window !== "undefined" && studioBackGuardActive.current) {
+      window.history.back();
       return;
     }
+    goToPreviousStudioStep();
+  };
+
+  const canUseStudioBackAction = showCreationPanel && canGoBack;
+
+  useEffect(() => {
+    studioBackActionAvailable.current = canUseStudioBackAction;
+    if (!canUseStudioBackAction) {
+      studioBackGuardActive.current = false;
+    }
+  }, [canUseStudioBackAction]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !canUseStudioBackAction || studioBackGuardActive.current) {
+      return;
+    }
+    window.history.pushState(window.history.state, "", window.location.href);
+    studioBackGuardActive.current = true;
+  }, [answers, canUseStudioBackAction, photoStepComplete]);
+
+  useEffect(() => {
+    const onPopState = () => {
+      if (!studioBackActionAvailable.current || !studioBackGuardActive.current) {
+        return;
+      }
+      studioBackGuardActive.current = false;
+      goToPreviousStudioStep();
+    };
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, [goToPreviousStudioStep]);
+
+  useEffect(() => () => {
+    if (pendingPhotoTimer.current !== null && typeof window !== "undefined") {
+      window.clearTimeout(pendingPhotoTimer.current);
+    }
+  }, []);
+
+  const applySelectedPhoto = async (file: File, input: HTMLInputElement) => {
     if (file.size > maxInputBytes(config)) {
       input.value = "";
       setError(t("errors.photoTooLarge"));
@@ -356,6 +450,30 @@ export default function Studio({
       input.value = "";
       setIsUploading(false);
     }
+  };
+
+  const onPhotoChange = (event: React.ChangeEvent<HTMLInputElement> | React.FormEvent<HTMLInputElement>) => {
+    const input = event.currentTarget;
+    const file = input.files?.[0];
+    if (!file) {
+      return;
+    }
+    pendingPhotoSelection.current = { file, input };
+    if (pendingPhotoTimer.current !== null && typeof window !== "undefined") {
+      window.clearTimeout(pendingPhotoTimer.current);
+    }
+    if (typeof window === "undefined") {
+      void applySelectedPhoto(file, input);
+      return;
+    }
+    pendingPhotoTimer.current = window.setTimeout(() => {
+      pendingPhotoTimer.current = null;
+      const selection = pendingPhotoSelection.current;
+      pendingPhotoSelection.current = null;
+      if (selection) {
+        void applySelectedPhoto(selection.file, selection.input);
+      }
+    }, 0);
   };
 
   const removePhoto = () => {
@@ -584,6 +702,7 @@ export default function Studio({
                         accept="image/*"
                         capture="environment"
                         tabIndex={-1}
+                        onInput={onPhotoChange}
                         onChange={onPhotoChange}
                       />
                     </label>
@@ -604,13 +723,26 @@ export default function Studio({
                 {isIteratingResult ? (
                   <p className="iteration-hint">{t("studio.iterationHint")}</p>
                 ) : null}
-                <textarea
-                  ref={notesRef}
-                  aria-label={t("studio.notesPlaceholder")}
-                  value={conversationNotes}
-                  onChange={(event) => setConversationNotes(event.target.value)}
-                  placeholder={t("studio.notesPlaceholder")}
-                />
+                <div className="conversation-note-shell">
+                  <textarea
+                    ref={notesRef}
+                    aria-label={t("studio.notesPlaceholder")}
+                    value={conversationNotes}
+                    onChange={(event) => setConversationNotes(event.target.value)}
+                    placeholder={t("studio.notesPlaceholder")}
+                  />
+                  {conversationNotes ? (
+                    <button
+                      type="button"
+                      className="conversation-note-clear surface-clear-button"
+                      aria-label={t("studio.clearNotes")}
+                      onClick={() => setConversationNotes("")}
+                    >
+                      <X aria-hidden="true" size={14} />
+                    </button>
+                  ) : null}
+                </div>
+                <p className="generation-summary">{generationSummary}</p>
                 <div className="suggestion-row">
                   {noteSuggestions.map((suggestion) => (
                     <button

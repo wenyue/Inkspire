@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ImagePlus, MessageSquareText } from "lucide-react";
+import { Brush, ImagePlus, Wand2 } from "lucide-react";
 import type { GenerationRecord } from "../api";
 import { resultLayoutForWidth } from "../domain";
 
@@ -9,9 +9,8 @@ interface ResultViewProps {
   fusionLabel: string;
   makeLabel: string;
   makeHint: string;
-  continueLabel: string;
-  retryLabel: string;
-  addNotesLabel: string;
+  adjustLabel: string;
+  adjustRetryLabel: string;
   attachPhotoLabel: string;
   busyLabel: string;
   failedTitle: string;
@@ -24,8 +23,7 @@ interface ResultViewProps {
   isAttachingPhoto?: boolean;
   canMake?: boolean;
   onMake: () => void;
-  onContinue: () => void;
-  onAddNotes: () => void;
+  onAdjust: () => void;
   onAttachPhoto: (file: File) => void;
 }
 
@@ -51,9 +49,8 @@ export default function ResultView({
   fusionLabel,
   makeLabel,
   makeHint,
-  continueLabel,
-  retryLabel,
-  addNotesLabel,
+  adjustLabel,
+  adjustRetryLabel,
   attachPhotoLabel,
   busyLabel,
   failedTitle,
@@ -66,8 +63,7 @@ export default function ResultView({
   isAttachingPhoto = false,
   canMake = true,
   onMake,
-  onContinue,
-  onAddNotes,
+  onAdjust,
   onAttachPhoto
 }: ResultViewProps) {
   const [layout, setLayout] = useState(resultLayoutForWidth(window.innerWidth));
@@ -135,15 +131,13 @@ export default function ResultView({
       <div className="result-actions">
         {canMake && !failed && !artworkFailed ? (
           <button className="primary-action result-action-button" type="button" onClick={onMake}>
+            <Brush aria-hidden="true" size={16} />
             {makeLabel}
           </button>
         ) : null}
-        <button className="secondary-action result-action-button" type="button" onClick={onContinue}>
-          {failed || artworkFailed ? retryLabel : continueLabel}
-        </button>
-        <button className="secondary-action result-action-button" type="button" onClick={onAddNotes}>
-          <MessageSquareText aria-hidden="true" size={16} />
-          {addNotesLabel}
+        <button className="secondary-action result-action-button" type="button" onClick={onAdjust}>
+          <Wand2 aria-hidden="true" size={16} />
+          {failed || artworkFailed ? adjustRetryLabel : adjustLabel}
         </button>
         {!failed && !fusion ? (
           <label className="secondary-action result-upload-action" tabIndex={0} onKeyDown={openNestedFileInput}>

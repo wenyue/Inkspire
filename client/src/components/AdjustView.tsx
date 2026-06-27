@@ -1,0 +1,106 @@
+import { useEffect, useRef, useState } from "react";
+import { ArrowLeft } from "lucide-react";
+import type { GenerationRecord } from "../api";
+
+interface AdjustViewProps {
+  record: GenerationRecord;
+  title: string;
+  intro: string;
+  placeholder: string;
+  submitLabel: string;
+  submittingLabel: string;
+  backLabel: string;
+  baseLabel: string;
+  artworkLabel: string;
+  suggestions: string[];
+  isSubmitting?: boolean;
+  error?: string;
+  onBack: () => void;
+  onSubmit: (note: string) => void;
+}
+
+function recordImage(record: GenerationRecord): string {
+  const path = record.artwork_path || record.thumbnail_path;
+  return path ? `/api/records/${record.id}/images/artwork` : "";
+}
+
+export default function AdjustView({
+  record,
+  title,
+  intro,
+  placeholder,
+  submitLabel,
+  submittingLabel,
+  backLabel,
+  baseLabel,
+  artworkLabel,
+  suggestions,
+  isSubmitting = false,
+  error = "",
+  onBack,
+  onSubmit
+}: AdjustViewProps) {
+  const [note, setNote] = useState("");
+  const [imageFailed, setImageFailed] = useState(false);
+  const noteRef = useRef<HTMLTextAreaElement | null>(null);
+  const image = recordImage(record);
+
+  useEffect(() => {
+    noteRef.current?.focus();
+  }, []);
+
+  const trimmed = note.trim();
+  const canSubmit = trimmed.length > 0 && !isSubmitting;
+
+  return (
+    <section className="adjust-view">
+      <div className="adjust-toolbar">
+        <button className="back-action" type="button" onClick={onBack}>
+          <ArrowLeft aria-hidden="true" size={16} />
+          {backLabel}
+        </button>
+      </div>
+      <h2>{title}</h2>
+      <div className="adjust-base">
+        {image && !imageFailed ? (
+          <img
+            className="adjust-base-image"
+            src={image}
+            alt={`${baseLabel} ${artworkLabel}`}
+            onError={() => setImageFailed(true)}
+          />
+        ) : (
+          <div className="adjust-base-placeholder" aria-hidden="true">
+            {record.type === "painting" ? "画" : "书"}
+          </div>
+        )}
+        <span className="adjust-base-label">{baseLabel}</span>
+      </div>
+      <p className="adjust-intro">{intro}</p>
+      <textarea
+        ref={noteRef}
+        className="adjust-note"
+        aria-label={title}
+        value={note}
+        onChange={(event) => setNote(event.target.value)}
+        placeholder={placeholder}
+      />
+      <div className="suggestion-row">
+        {suggestions.map((suggestion) => (
+          <button key={suggestion} type="button" onClick={() => setNote(suggestion)}>
+            {suggestion}
+          </button>
+        ))}
+      </div>
+      <button
+        className="primary-action"
+        type="button"
+        disabled={!canSubmit}
+        onClick={() => onSubmit(trimmed)}
+      >
+        {isSubmitting ? submittingLabel : submitLabel}
+      </button>
+      {error ? <p className="error-line" role="status">{error}</p> : null}
+    </section>
+  );
+}

@@ -229,6 +229,12 @@ function createStorage(dataDir) {
     await writeJsonAtomic(path.join(ordersDir, `${nextOrder.id}.json`), nextOrder);
   }
 
+  async function productionOrderExists(id) {
+    validateRecordId(id);
+    await ensureStore();
+    return fileExists(path.join(ordersDir, `${id}.json`));
+  }
+
   async function getProductionOrder(id) {
     validateRecordId(id);
     return JSON.parse(await fs.readFile(path.join(ordersDir, `${id}.json`), "utf8"));
@@ -242,6 +248,7 @@ function createStorage(dataDir) {
     getRecordForUser,
     listLibrary,
     saveProductionOrder,
+    productionOrderExists,
     getProductionOrder
   };
 }

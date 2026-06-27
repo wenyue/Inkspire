@@ -19,8 +19,9 @@ async function completePaintingFlow(page) {
   await expect(page.getByRole("button", { name: "生成", exact: true })).not.toBeVisible();
 }
 
-async function addPhotoAndContinue(page) {
-  await page.getByLabel("相册").setInputFiles(samplePng);
+async function addPhotoAndContinue(page, entry: "album" | "camera" = "album") {
+  const inputLabel = entry === "camera" ? "拍照" : "相册";
+  await page.getByLabel(inputLabel).setInputFiles(samplePng);
   await expect(page.getByText("已提供环境图，将用于生成效果图。")).toBeVisible();
   await page.getByRole("button", { name: "继续" }).click();
   await expect(page.getByRole("button", { name: "生成", exact: true })).toBeVisible();
@@ -64,18 +65,40 @@ test("mobile user can complete Inkspire creation flow with mocked generation", a
   await expect(page.getByRole("img", { name: "效果图" })).toBeVisible();
   await expect(page.getByText("作品图", { exact: true })).toBeVisible();
   await expect(page.getByText("效果图", { exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "制作作品" })).not.toBeVisible();
-  await page.getByRole("button", { name: "雅匠" }).click();
-  await expect(page.getByRole("button", { name: "暂未开放制作咨询" })).toBeDisabled();
-  await page.getByRole("button", { name: "画案" }).click();
+  await expect(page.getByRole("button", { name: "制作作品" })).toBeVisible();
+
+  // Production dialog opens from the result and browser back closes it without losing the artwork.
+  await page.getByRole("button", { name: "制作作品" }).click();
+  await expect(page).toHaveURL(/\/records\/[^/]+\/production\?from=studio/);
+  await expect(page.getByRole("dialog", { name: "制作作品" })).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole("dialog", { name: "制作作品" })).toBeVisible();
+  await expect(page.getByRole("img", { name: "作品图" })).toBeVisible();
+  await page.goBack();
+  await expect(page.getByRole("dialog", { name: "制作作品" })).toBeHidden();
+  await expect(page.getByRole("img", { name: "作品图" })).toBeVisible();
+
+  // Adjust page is a separate pushed view; back returns to the same artwork.
+  await page.getByRole("button", { name: "调整作品" }).click();
+  await expect(page.getByRole("heading", { name: "调整这张作品" })).toBeVisible();
+  await expect(page.getByLabel("调整这张作品")).toBeFocused();
+  await page.getByRole("button", { name: "返回作品" }).click();
+  await expect(page.getByRole("heading", { name: "调整这张作品" })).toBeHidden();
+  await expect(page.getByRole("img", { name: "作品图" })).toBeVisible();
 
   await page.getByRole("button", { name: "藏卷" }).click();
   const savedRecord = page.getByRole("button", { name: /查看/ }).first();
   await expect(savedRecord).toBeVisible();
   await savedRecord.click();
-  await expect(page.getByRole("button", { name: "画案" })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("button", { name: "藏卷", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("button", { name: "画案", exact: true })).toHaveAttribute("aria-pressed", "false");
   await expect(page.getByRole("img", { name: "作品图" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "制作作品" })).not.toBeVisible();
+  await expect(page.getByRole("button", { name: "制作作品" })).toBeVisible();
+  await page.getByRole("button", { name: "雅匠" }).click();
+  await expect(page.getByText("可咨询方向")).toBeVisible();
+  await page.getByRole("button", { name: "藏卷", exact: true }).click();
+  await expect(page.getByRole("img", { name: "作品图" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "藏卷", exact: true })).toHaveAttribute("aria-pressed", "true");
 
   const horizontalOverflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
   expect(horizontalOverflow).toBe(false);
@@ -101,4 +124,17 @@ test("wide viewport shows artwork and fusion side by side", async ({ page }) => 
     return window.getComputedStyle(element).gridTemplateColumns.split(" ").length;
   });
   expect(resultColumns).toBeGreaterThan(1);
+});
+
+test("camera photo entry applies and generates fusion output", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+
+  await completePaintingFlow(page);
+  await addPhotoAndContinue(page, "camera");
+  await page.getByRole("button", { name: "生成", exact: true }).click();
+
+  await expect(page.getByText("墨色正在铺开，可能需要 2-3 分钟，请耐心等待。")).toBeVisible();
+  await expect(page.getByRole("img", { name: "作品图" })).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByRole("img", { name: "效果图" })).toBeVisible();
 });

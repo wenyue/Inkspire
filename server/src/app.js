@@ -36,12 +36,34 @@ const PRODUCTION_SIZE_MULTIPLIERS = {
   medium: 1,
   large: 1.5
 };
+const ORDER_ID_ALPHABET = "abcdefghijklmnopqrstuvwxyz0123456789";
+const ORDER_ID_PATTERN = /^ord-[a-z0-9]{8}$/;
+const ORDER_ID_MAX_ATTEMPTS = 8;
 const SOURCE_PHOTO_FILES = new Set(["source-photo.webp"]);
 const ARTWORK_FILES = new Set(["artwork.webp"]);
 const FUSION_FILES = new Set(["fusion.webp"]);
 
 function newId(prefix) {
   return `${prefix}-${Date.now().toString(36)}-${crypto.randomBytes(4).toString("hex")}`;
+}
+
+function newProductionOrderId() {
+  let suffix = "";
+  for (let index = 0; index < 8; index += 1) {
+    suffix += ORDER_ID_ALPHABET[crypto.randomInt(ORDER_ID_ALPHABET.length)];
+  }
+  return `ord-${suffix}`;
+}
+
+async function allocateProductionOrderId(storage, orderIdGenerator = newProductionOrderId) {
+  for (let attempt = 0; attempt < ORDER_ID_MAX_ATTEMPTS; attempt += 1) {
+    const candidate = orderIdGenerator();
+    if (!ORDER_ID_PATTERN.test(candidate) || await storage.productionOrderExists(candidate)) {
+      continue;
+    }
+    return candidate;
+  }
+  throw new Error("Unable to generate a unique production order id");
 }
 
 function productionSize(value) {
@@ -464,8 +486,9 @@ function createApp(options = {}) {
     const service = (expert.services || []).find((entry) => entry.id === req.body.serviceId) || expert.services?.[0];
     const size = req.body.size || record.recommended_artwork_size || inferArtworkSizeFromScene();
     const referenceLevel = Math.max(1, Math.min(5, Number(req.body.referenceLevel || 3)));
+    const orderId = await allocateProductionOrderId(storage, options.orderIdGenerator);
     const order = {
-      id: newId("order"),
+      id: orderId,
       user_id: req.userId,
       created_at: new Date().toISOString(),
       record_id: record.id,

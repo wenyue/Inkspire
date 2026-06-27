@@ -2,6 +2,8 @@
 
 Strength: `Mandatory`
 
+Scope: Rule strength, precedence, source-of-truth, wrapper hygiene, and rule-source hygiene.
+
 ## Strength Levels
 
 - `Mandatory`: Follow unless a higher-priority instruction overrides it.

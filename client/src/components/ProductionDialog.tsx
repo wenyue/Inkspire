@@ -1,6 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
-import { ArrowLeft, Ruler, X } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Ruler, X } from "lucide-react";
 import {
   createProductionOrder,
   getProductionEstimate,
@@ -121,6 +121,14 @@ interface ProductionDialogProps {
   contactLabel: string;
   phoneLabel: string;
   wechatLabel: string;
+  copyHintLabel: string;
+  copiedOrderLabel: string;
+  copiedWechatLabel: string;
+  successTitleLabel: string;
+  successIntroLabel: string;
+  summaryServiceLabel: string;
+  summarySizeLabel: string;
+  summaryReferenceLabel: string;
   confirmLabel: string;
   contactPendingLabel: string;
   productionAvailable?: boolean;
@@ -192,6 +200,14 @@ export default function ProductionDialog({
   contactLabel,
   phoneLabel,
   wechatLabel,
+  copyHintLabel,
+  copiedOrderLabel,
+  copiedWechatLabel,
+  successTitleLabel,
+  successIntroLabel,
+  summaryServiceLabel,
+  summarySizeLabel,
+  summaryReferenceLabel,
   confirmLabel,
   contactPendingLabel,
   productionAvailable = true,
@@ -209,12 +225,33 @@ export default function ProductionDialog({
   const [order, setOrder] = useState<ProductionOrder | null>(null);
   const [page, setPage] = useState<"main" | "size">("main");
   const [error, setError] = useState("");
+  const [copyToast, setCopyToast] = useState("");
   const dialogTitleId = useId();
   const dialogRef = useRef<HTMLElement | null>(null);
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
   const contactPanelRef = useRef<HTMLDivElement | null>(null);
   const customSizeRef = useRef<HTMLDivElement | null>(null);
+  const copyToastTimerRef = useRef<number | null>(null);
   const selectedReference = REFERENCE_LEVELS.find((level) => level.value === referenceLevel) ?? REFERENCE_LEVELS[2];
+  const copyHintSuffix = locale === "en" ? ` ${copyHintLabel}` : copyHintLabel;
+  const copyToClipboard = async (value: string, toastLabel: string) => {
+    if (!navigator.clipboard?.writeText) {
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(value);
+      if (copyToastTimerRef.current !== null) {
+        window.clearTimeout(copyToastTimerRef.current);
+      }
+      setCopyToast(toastLabel);
+      copyToastTimerRef.current = window.setTimeout(() => {
+        setCopyToast("");
+        copyToastTimerRef.current = null;
+      }, 1600);
+    } catch {
+      // Ignore clipboard failures; the hint remains best-effort.
+    }
+  };
   const contact = {
     phone: expert.phone || supportContact?.phone || "",
     wechat: expert.wechat || supportContact?.wechat || ""
@@ -238,6 +275,7 @@ export default function ProductionDialog({
   const customSizeError = customSelected && !customSizeValid
     ? (locale === "en" ? "Enter valid width and height." : "请输入有效的宽高尺寸")
     : "";
+  const selectedServiceDetails = expert.services.find((service) => service.id === selectedService) ?? expert.services[0];
 
   useEffect(() => {
     getProductionEstimate(record.id, expert.id, estimateSizeKey(selectedSize))
@@ -263,6 +301,9 @@ export default function ProductionDialog({
     const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     closeButtonRef.current?.focus();
     return () => {
+      if (copyToastTimerRef.current !== null) {
+        window.clearTimeout(copyToastTimerRef.current);
+      }
       previousFocus?.focus();
     };
   }, []);
@@ -359,8 +400,7 @@ export default function ProductionDialog({
       >
         <div className="dialog-heading">
           <div>
-            <p>{expert.name}</p>
-            <h2 id={dialogTitleId}>{page === "size" ? (locale === "en" ? "Adjust Artwork Size" : "调整作品尺寸") : title}</h2>
+            <h2 id={dialogTitleId}>{page === "size" ? (locale === "en" ? "Adjust Artwork Size" : "调整作品尺寸") : order ? successTitleLabel : title}</h2>
           </div>
           <button ref={closeButtonRef} className="icon-button" type="button" onClick={onClose} aria-label={closeLabel}>
             <X aria-hidden="true" size={18} />
@@ -421,6 +461,52 @@ export default function ProductionDialog({
             <button className="primary-action" type="button" disabled={customSelected && !customSizeValid} onClick={applySize}>
               {locale === "en" ? "Use this size" : "用这个尺寸"}
             </button>
+          </div>
+        ) : order ? (
+          <div className="production-success">
+            <div className="production-success-hero">
+              <CheckCircle2 aria-hidden="true" size={26} />
+              <strong>{successTitleLabel}</strong>
+              <p>{successIntroLabel}</p>
+            </div>
+
+            <div className="production-summary-grid">
+              <div className="production-summary-card">
+                <span>{summaryServiceLabel}</span>
+                <strong>{selectedServiceDetails?.name[locale] ?? selectedServiceDetails?.name["zh-Hans"]}</strong>
+              </div>
+              <div className="production-summary-card">
+                <span>{summarySizeLabel}</span>
+                <strong>{sizeLabel(selectedSize, locale)}</strong>
+              </div>
+              <div className="production-summary-card">
+                <span>{summaryReferenceLabel}</span>
+                <strong>{text(selectedReference.hint, locale)}</strong>
+              </div>
+            </div>
+
+            <div className="contact-panel" ref={contactPanelRef}>
+              <strong>{contactLabel}</strong>
+              {contact.phone ? <span>{phoneLabel}{contact.phone}</span> : null}
+              {contact.wechat ? (
+                <button
+                  type="button"
+                  className="contact-copy-action surface-clear-button"
+                  onClick={() => void copyToClipboard(contact.wechat, copiedWechatLabel)}
+                >
+                  {wechatLabel}{contact.wechat}{copyHintSuffix}
+                </button>
+              ) : null}
+              <button
+                type="button"
+                className="contact-copy-action surface-clear-button"
+                onClick={() => void copyToClipboard(order.id, copiedOrderLabel)}
+              >
+                {locale === "en" ? `Order: ${order.id}${copyHintSuffix}` : `单号：${order.id}${copyHintSuffix}`}
+              </button>
+              {copyToast ? <p className="status-line copy-toast" role="status">{copyToast}</p> : null}
+              {!contact.phone && !contact.wechat ? <span>{contactPendingLabel}</span> : null}
+            </div>
           </div>
         ) : (
           <>
@@ -496,16 +582,7 @@ export default function ProductionDialog({
               </div>
             </div>
 
-            {order ? (
-              <div className="contact-panel" ref={contactPanelRef}>
-                <strong>{locale === "en" ? "Production intent recorded" : "已记录制作意向"}</strong>
-                <strong>{contactLabel}</strong>
-                <span>{locale === "en" ? `Order: ${order.id}` : `单号：${order.id}`}</span>
-                {contact.phone ? <span>{phoneLabel}{contact.phone}</span> : null}
-                {contact.wechat ? <span>{wechatLabel}{contact.wechat}</span> : null}
-                {!contact.phone && !contact.wechat ? <span>{contactPendingLabel}</span> : null}
-              </div>
-            ) : !productionOpen ? (
+            {!productionOpen ? (
               <div className="contact-panel" role="status">
                 <strong>{productionUnavailableLabel}</strong>
                 <span>{contactPendingLabel}</span>

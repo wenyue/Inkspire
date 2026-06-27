@@ -133,7 +133,7 @@ function LibraryItem({
         </span>
       </button>
       <div className="library-actions">
-        {onFavoriteToggle && record.status !== "failed" ? (
+        {onFavoriteToggle ? (
           <>
             <button
               className="library-remove-action"

@@ -3,12 +3,14 @@ const http = require("node:http");
 const path = require("node:path");
 
 const root = path.resolve(__dirname, "..");
+const apiPort = process.env.PORT || "3101";
+const apiTarget = process.env.INKSPIRE_API_TARGET || `http://127.0.0.1:${apiPort}`;
 const env = {
   ...process.env,
   INKSPIRE_E2E: "1",
   INKSPIRE_DATA_DIR: ".e2e-data",
-  PORT: "3101",
-  INKSPIRE_API_TARGET: "http://127.0.0.1:3101",
+  PORT: apiPort,
+  INKSPIRE_API_TARGET: apiTarget,
   INKSPIRE_MANAGED_E2E_SERVER: "1"
 };
 
@@ -100,7 +102,7 @@ async function main() {
   try {
     await Promise.all([
       waitForUrl("http://127.0.0.1:5173", "Vite dev server"),
-      waitForUrl("http://127.0.0.1:3101/api/health", "API health", 120000, (status, body) => {
+      waitForUrl(`${apiTarget}/api/health`, "API health", 120000, (status, body) => {
         if (status < 200 || status >= 300) {
           return false;
         }

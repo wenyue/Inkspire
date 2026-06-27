@@ -14,8 +14,10 @@ Applies to test selection and completion reporting for code, config, docs, and a
   - `npm test`
 - Frontend:
   - `npm test --workspace client`
+  - `npm run test:client`
 - Backend:
   - `npm test --workspace server`
+  - `npm run test:server`
 - End-to-end:
   - `npm run e2e`
 - Real Codex generation:

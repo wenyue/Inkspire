@@ -20,6 +20,7 @@ async function withTempApp(fn, overrides = {}) {
       projectRoot: root,
       dataDir: temp,
       config,
+      orderIdGenerator: overrides.orderIdGenerator,
       runner: overrides.runner || (async ({ outputPngPath }) => {
         await fs.mkdir(path.dirname(outputPngPath), { recursive: true });
         await fs.writeFile(outputPngPath, pngBuffer());
@@ -500,7 +501,7 @@ test("POST /api/records/:id/production-orders creates retrievable order with siz
       })
       .expect(201);
 
-    assert.match(response.body.order.id, /^order-/);
+    assert.match(response.body.order.id, /^ord-[a-z0-9]{8}$/);
     assert.equal(response.body.order.record_id, created.body.record.id);
     assert.equal(response.body.order.service_id, "expert_custom");
     assert.equal(response.body.order.reference_level, 3);
@@ -521,5 +522,36 @@ test("POST /api/records/:id/production-orders creates retrievable order with siz
     configure: (config) => {
       config.app.productionContact = { phone: "020-12345678", wechat: "" };
     }
+  });
+});
+
+test("POST /api/records/:id/production-orders retries when a short order id already exists", async () => {
+  const candidates = ["ord-aaaaaaaa", "ord-bbbbbbbb"];
+  await withTempApp(async ({ app, temp }) => {
+    await fs.mkdir(path.join(temp, "orders"), { recursive: true });
+    await fs.writeFile(path.join(temp, "orders", "ord-aaaaaaaa.json"), "{}\n");
+
+    const agent = request.agent(app);
+    const created = await agent
+      .post("/api/generations")
+      .send({ type: "painting", answers: {} })
+      .expect(201);
+    await waitForJob(agent, created.body.job.id);
+
+    const response = await agent
+      .post(`/api/records/${created.body.record.id}/production-orders`)
+      .send({ expertId: "wu_jiayin", serviceId: "expert_custom", referenceLevel: 3 })
+      .expect(201);
+
+    assert.equal(response.body.order.id, "ord-bbbbbbbb");
+    assert.deepEqual(await fs.readdir(path.join(temp, "orders")).then((items) => items.sort()), [
+      "ord-aaaaaaaa.json",
+      "ord-bbbbbbbb.json"
+    ]);
+  }, {
+    configure: (config) => {
+      config.app.productionContact = { phone: "020-12345678", wechat: "" };
+    },
+    orderIdGenerator: () => candidates.shift()
   });
 });
