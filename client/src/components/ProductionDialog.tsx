@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 import { ArrowLeft, CheckCircle2, Ruler, X } from "lucide-react";
 import {
@@ -16,6 +16,16 @@ import type { Locale } from "../domain";
 type ProductionSize = ArtworkSize & {
   labelText: Record<Locale, string>;
   hint: Record<Locale, string>;
+};
+
+type ReferenceTone = "recommended" | "neutral" | "caution";
+
+type ReferenceLevel = {
+  value: number;
+  title: Record<Locale, string>;
+  shortTitle: Record<Locale, string>;
+  hint: Record<Locale, string>;
+  tone: ReferenceTone;
 };
 
 const DEFAULT_SIZE: ArtworkSize & { labelText: Record<Locale, string>; reasonText: Record<Locale, string> } = {
@@ -75,36 +85,41 @@ const SIZE_OPTIONS: ProductionSize[] = [
   }
 ];
 
-const REFERENCE_LEVELS = [
+const REFERENCE_LEVELS: ReferenceLevel[] = [
   {
     value: 1,
     title: { "zh-Hans": "第1级 严格参考", "zh-Hant": "第1級 嚴格參考", en: "Level 1 Strict" },
     shortTitle: { "zh-Hans": "严格", "zh-Hant": "嚴格", en: "Strict" },
-    hint: { "zh-Hans": "尽量贴近 AI 图的构图、色调和细节。", "zh-Hant": "盡量貼近 AI 圖的構圖、色調和細節。", en: "Stay close to the AI layout, palette, and detail." }
+    hint: { "zh-Hans": "几乎照搬 AI 图的构图与细节，艺术家发挥空间较小，不太推荐。", "zh-Hant": "幾乎照搬 AI 圖的構圖與細節，藝術家發揮空間較小，不太推薦。", en: "Mirrors the AI work, leaving little artistic room — not advised." },
+    tone: "caution"
   },
   {
     value: 2,
     title: { "zh-Hans": "第2级 主要参考", "zh-Hant": "第2級 主要參考", en: "Level 2 Close" },
     shortTitle: { "zh-Hans": "主要", "zh-Hant": "主要", en: "Close" },
-    hint: { "zh-Hans": "整体接近 AI 图，局部允许艺术处理。", "zh-Hant": "整體接近 AI 圖，局部允許藝術處理。", en: "Mostly follow the AI work, with local artistic changes." }
+    hint: { "zh-Hans": "整体贴近 AI 图，构图与色调一致，局部留给艺术家自由处理。", "zh-Hant": "整體貼近 AI 圖，構圖與色調一致，局部留給藝術家自由處理。", en: "Stays close to the AI work, with local room for artistic choices." },
+    tone: "neutral"
   },
   {
     value: 3,
     title: { "zh-Hans": "第3级 布局参考", "zh-Hant": "第3級 章法參考", en: "Level 3 Layout" },
     shortTitle: { "zh-Hans": "布局", "zh-Hant": "章法", en: "Layout" },
-    hint: { "zh-Hans": "参考总体布局，细节可自由发挥，提升艺术性。", "zh-Hant": "參考總體布局，細節可自由發揮，提升藝術性。", en: "Use the overall layout, while improving details freely." }
+    hint: { "zh-Hans": "保留整体布局与气势，细节交由艺术家自由发挥与提升。", "zh-Hant": "保留整體章法與氣勢，細節交由藝術家自由發揮與提升。", en: "Keeps the overall layout while artists refine the details freely." },
+    tone: "recommended"
   },
   {
     value: 4,
     title: { "zh-Hans": "第4级 气质参考", "zh-Hant": "第4級 氣質參考", en: "Level 4 Mood" },
     shortTitle: { "zh-Hans": "气质", "zh-Hant": "氣質", en: "Mood" },
-    hint: { "zh-Hans": "只参考气质和主题，画面可明显重构。", "zh-Hant": "只參考氣質和主題，畫面可明顯重構。", en: "Only preserve mood and theme; composition can change." }
+    hint: { "zh-Hans": "只保留画面的气质与主题，构图可由艺术家重新组织安排。", "zh-Hant": "只保留畫面的氣質與主題，構圖可由藝術家重新組織安排。", en: "Keeps only the mood and theme; artists may recompose the scene." },
+    tone: "neutral"
   },
   {
     value: 5,
     title: { "zh-Hans": "第5级 自由创作", "zh-Hant": "第5級 自由創作", en: "Level 5 Free" },
     shortTitle: { "zh-Hans": "自由", "zh-Hant": "自由", en: "Free" },
-    hint: { "zh-Hans": "AI 图只作灵感，主要交给艺术家判断。", "zh-Hant": "AI 圖只作靈感，主要交給藝術家判斷。", en: "Treat the AI work as inspiration only." }
+    hint: { "zh-Hans": "AI 图仅作灵感参考，画面主要交给艺术家自由发挥与创作。", "zh-Hant": "AI 圖僅作靈感參考，畫面主要交給藝術家自由發揮與創作。", en: "Treats the AI work as inspiration; artists mostly create freely." },
+    tone: "neutral"
   }
 ];
 
@@ -129,6 +144,8 @@ interface ProductionDialogProps {
   summaryServiceLabel: string;
   summarySizeLabel: string;
   summaryReferenceLabel: string;
+  referenceRecommendedBadgeLabel: string;
+  referenceCautionBadgeLabel: string;
   confirmLabel: string;
   contactPendingLabel: string;
   productionAvailable?: boolean;
@@ -208,6 +225,8 @@ export default function ProductionDialog({
   summaryServiceLabel,
   summarySizeLabel,
   summaryReferenceLabel,
+  referenceRecommendedBadgeLabel,
+  referenceCautionBadgeLabel,
   confirmLabel,
   contactPendingLabel,
   productionAvailable = true,
@@ -226,11 +245,14 @@ export default function ProductionDialog({
   const [page, setPage] = useState<"main" | "size">("main");
   const [error, setError] = useState("");
   const [copyToast, setCopyToast] = useState("");
+  const [referenceHintMinHeight, setReferenceHintMinHeight] = useState(0);
   const dialogTitleId = useId();
   const dialogRef = useRef<HTMLElement | null>(null);
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
   const contactPanelRef = useRef<HTMLDivElement | null>(null);
   const customSizeRef = useRef<HTMLDivElement | null>(null);
+  const referenceHintRef = useRef<HTMLDivElement | null>(null);
+  const referenceHintMeasureRef = useRef<HTMLDivElement | null>(null);
   const copyToastTimerRef = useRef<number | null>(null);
   const selectedReference = REFERENCE_LEVELS.find((level) => level.value === referenceLevel) ?? REFERENCE_LEVELS[2];
   const copyHintSuffix = locale === "en" ? ` ${copyHintLabel}` : copyHintLabel;
@@ -296,6 +318,38 @@ export default function ProductionDialog({
     }
     scrollIntoViewIfAvailable(customSizeRef.current, { behavior: "smooth", block: "nearest" });
   }, [customSelected, page]);
+
+  useLayoutEffect(() => {
+    if (page !== "main" || order) {
+      return;
+    }
+    const measureMaxReferenceHintHeight = () => {
+      const measure = referenceHintMeasureRef.current;
+      const hint = referenceHintRef.current;
+      if (!measure || !hint) {
+        return;
+      }
+      const width = hint.offsetWidth;
+      if (width <= 0) {
+        return;
+      }
+      measure.style.width = `${width}px`;
+      let maxHeight = 0;
+      for (const level of REFERENCE_LEVELS) {
+        const strong = document.createElement("strong");
+        strong.textContent = text(level.title, locale);
+        const span = document.createElement("span");
+        span.textContent = text(level.hint, locale);
+        measure.replaceChildren(strong, span);
+        maxHeight = Math.max(maxHeight, measure.offsetHeight);
+      }
+      measure.replaceChildren();
+      setReferenceHintMinHeight(maxHeight);
+    };
+    measureMaxReferenceHintHeight();
+    window.addEventListener("resize", measureMaxReferenceHintHeight);
+    return () => window.removeEventListener("resize", measureMaxReferenceHintHeight);
+  }, [locale, page, order]);
 
   useEffect(() => {
     const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -563,23 +617,30 @@ export default function ProductionDialog({
                   <button
                     key={level.value}
                     type="button"
-                  role="radio"
-                  aria-checked={referenceLevel === level.value}
-                  aria-label={text(level.title, locale)}
-                  className={referenceLevel === level.value ? "reference-card selected" : "reference-card"}
-                  onClick={() => {
-                    setReferenceLevel(level.value);
-                    setOrder(null);
-                  }}
-                >
+                    role="radio"
+                    aria-checked={referenceLevel === level.value}
+                    aria-label={text(level.title, locale)}
+                    className={`reference-card reference-card-${level.tone}${referenceLevel === level.value ? " selected" : ""}`}
+                    onClick={() => {
+                      setReferenceLevel(level.value);
+                      setOrder(null);
+                    }}
+                  >
                     <strong>{text(level.shortTitle, locale)}</strong>
+                    {level.tone === "recommended" ? <span className="reference-badge reference-badge-recommended">{referenceRecommendedBadgeLabel}</span> : null}
+                    {level.tone === "caution" ? <span className="reference-badge reference-badge-caution">{referenceCautionBadgeLabel}</span> : null}
                   </button>
                 ))}
               </div>
-              <div className="reference-hint">
+              <div
+                className="reference-hint"
+                ref={referenceHintRef}
+                style={referenceHintMinHeight ? { minHeight: referenceHintMinHeight } : undefined}
+              >
                 <strong>{text(selectedReference.title, locale)}</strong>
                 <span>{text(selectedReference.hint, locale)}</span>
               </div>
+              <div className="reference-hint reference-hint-measure" ref={referenceHintMeasureRef} aria-hidden="true" />
             </div>
 
             {!productionOpen ? (

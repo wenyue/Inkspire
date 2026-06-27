@@ -16,7 +16,7 @@ const CLIENT_OVERRIDES: Dictionaries = {
       album: "相册",
       skipPhoto: "不需要效果图，直接生成",
       uploadingPhoto: "正在整理照片",
-      photoReady: "已提供环境图，将用于生成效果图。",
+      photoReady: "已提供环境图片，将用于生成效果图。",
       photoUploaded: "已选照片",
       selectedPhotoPreview: "已选照片预览",
       removePhoto: "移除照片",
@@ -28,10 +28,34 @@ const CLIENT_OVERRIDES: Dictionaries = {
       suggestionStart: "可以开始生成",
       generating: "墨色正在铺开",
       generatingWait: "墨色正在铺开，可能需要 2-3 分钟，请耐心等待。",
-      generationLimit: "当前已有 2 个生成任务，请等其中一个完成后再开始。",
+      generationLimit: "画案已有生成任务，请等它完成后再开始。",
       back: "上一步",
       generationSummaryArtwork: "将生成作品图。",
       generationSummaryWithPreview: "将生成作品图和摆放效果图。"
+    },
+    generationLoading: {
+      estimate: "通常约 30 秒，请稍候。",
+      retry: "重新尝试",
+      failedTitle: "生成没有完成",
+      failedHint: "可以重新尝试，或先切到其他页面。",
+      backConfirm: "离开结果并返回当前页面？",
+      tabBusy: {
+        studio: "画案正在生成中",
+        library: "藏卷正在生成中",
+        experts: "雅匠正在生成中"
+      },
+      create: {
+        thinking: "艺术家正在构思",
+        paper: "艺术家正在张开纸张",
+        painting: "艺术家正在绘画",
+        details: "艺术家正在完善细节"
+      },
+      adjust: {
+        understanding: "艺术家正在理解原作",
+        direction: "艺术家正在推敲调整方向",
+        repainting: "艺术家正在重绘笔墨",
+        adjustDetails: "艺术家正在修整细节"
+      }
     },
     suggestions: ["可以开始生成", "更雅", "留白多些", "更适合客厅", "更适合送礼", "更有诗意", "墨色淡些", "层次更丰富", "更安静", "更有气韵"],
     errors: {
@@ -46,7 +70,8 @@ const CLIENT_OVERRIDES: Dictionaries = {
       retry: "重新调整要求",
       adjust: "调整作品",
       adjustRetry: "重新生成",
-      attachPhotoFusion: "添加照片生成效果图",
+      attachPhotoFusion: "添加环境照片生成效果图",
+      generateFusion: "生成效果图",
       addNotes: "补充要求",
       makeHint: "可先看尺寸和估价，确认意向后再联系制作。",
       failedTitle: "生成未完成",
@@ -54,7 +79,13 @@ const CLIENT_OVERRIDES: Dictionaries = {
       imageUnavailableTitle: "作品图暂时无法显示",
       imageUnavailableHint: "可以补充要求后再生成，或稍后从藏卷重新打开。",
       fusionUnavailableTitle: "效果图暂时无法显示",
-      fusionUnavailableHint: "作品图仍可继续查看，也可以稍后重新提供环境图。"
+      fusionUnavailableHint: "作品图仍可继续查看，也可以稍后重新提供环境图。",
+      back: "返回藏卷",
+      backStudio: "返回画案",
+      backConfirmTitle: "确定要退出制作作品吗？",
+      backConfirmBody: "您仍可在藏卷中找回当前作品。",
+      backConfirmConfirm: "确定返回",
+      backConfirmCancel: "继续查看"
     },
     adjust: {
       title: "调整这张作品",
@@ -63,6 +94,7 @@ const CLIENT_OVERRIDES: Dictionaries = {
       submit: "生成调整后的作品",
       submitting: "墨色正在铺开",
       back: "返回作品",
+      clearNote: "清除想法",
       baseLabel: "当前作品",
       emptyHint: "先写一句调整方向再生成。"
     },
@@ -91,10 +123,6 @@ const CLIENT_OVERRIDES: Dictionaries = {
       extraServiceDescription: "确认尺寸、材质和制作路径，适合送礼或空间陈设。",
       expectation: "价格按需求评估",
       sampleHeading: "风格样张",
-      currentWork: "当前作品",
-      currentWorkPreview: "当前作品预览",
-      ctaStart: "去生成作品",
-      ctaWithRecord: "用当前作品咨询雅匠",
       productionUnavailable: "暂未开放制作咨询"
     },
     production: {
@@ -113,6 +141,8 @@ const CLIENT_OVERRIDES: Dictionaries = {
       summaryService: "制作方式",
       summarySize: "制作规格",
       summaryReference: "参考程度",
+      referenceRecommendedBadge: "推荐",
+      referenceCautionBadge: "慎选",
       close: "关闭",
       confirm: "确认制作意向"
     }
@@ -129,7 +159,7 @@ const CLIENT_OVERRIDES: Dictionaries = {
       album: "相簿",
       skipPhoto: "不需要效果圖，直接生成",
       uploadingPhoto: "正在整理照片",
-      photoReady: "已提供環境圖，將用於生成效果圖。",
+      photoReady: "已提供環境圖片，將用於生成效果圖。",
       photoUploaded: "已選照片",
       selectedPhotoPreview: "已選照片預覽",
       removePhoto: "移除照片",
@@ -141,10 +171,34 @@ const CLIENT_OVERRIDES: Dictionaries = {
       suggestionStart: "可以開始生成",
       generating: "墨色正在鋪開",
       generatingWait: "墨色正在鋪開，可能需要 2-3 分鐘，請耐心等待。",
-      generationLimit: "目前已有 2 個生成任務，請等其中一個完成後再開始。",
+      generationLimit: "畫案已有生成任務，請等它完成後再開始。",
       back: "上一步",
       generationSummaryArtwork: "將生成作品圖。",
       generationSummaryWithPreview: "將生成作品圖和擺放效果圖。"
+    },
+    generationLoading: {
+      estimate: "通常約 30 秒，請稍候。",
+      retry: "重新嘗試",
+      failedTitle: "生成沒有完成",
+      failedHint: "可以重新嘗試，或先切到其他頁面。",
+      backConfirm: "離開結果並返回目前頁面？",
+      tabBusy: {
+        studio: "畫案正在生成中",
+        library: "藏卷正在生成中",
+        experts: "雅匠正在生成中"
+      },
+      create: {
+        thinking: "藝術家正在構思",
+        paper: "藝術家正在張開紙張",
+        painting: "藝術家正在繪畫",
+        details: "藝術家正在完善細節"
+      },
+      adjust: {
+        understanding: "藝術家正在理解原作",
+        direction: "藝術家正在推敲調整方向",
+        repainting: "藝術家正在重繪筆墨",
+        adjustDetails: "藝術家正在修整細節"
+      }
     },
     suggestions: ["可以開始生成", "更雅", "留白多些", "更適合客廳", "更適合送禮", "更有詩意", "墨色淡些", "層次更豐富", "更安靜", "更有氣韻"],
     errors: {
@@ -159,7 +213,8 @@ const CLIENT_OVERRIDES: Dictionaries = {
       retry: "重新調整要求",
       adjust: "調整作品",
       adjustRetry: "重新生成",
-      attachPhotoFusion: "加入擺放照片生成效果圖",
+      attachPhotoFusion: "加入環境照片生成效果圖",
+      generateFusion: "生成效果圖",
       addNotes: "補充要求",
       makeHint: "可先看尺寸和估價，確認意向後再聯絡製作。",
       failedTitle: "生成未完成",
@@ -167,7 +222,13 @@ const CLIENT_OVERRIDES: Dictionaries = {
       imageUnavailableTitle: "作品圖暫時無法顯示",
       imageUnavailableHint: "可以補充要求後再生成，或稍後從藏卷重新打開。",
       fusionUnavailableTitle: "效果圖暫時無法顯示",
-      fusionUnavailableHint: "作品圖仍可繼續查看，也可以稍後重新提供環境圖。"
+      fusionUnavailableHint: "作品圖仍可繼續查看，也可以稍後重新提供環境圖。",
+      back: "返回藏卷",
+      backStudio: "返回畫案",
+      backConfirmTitle: "確定要退出製作作品嗎？",
+      backConfirmBody: "您仍可在藏卷中找回目前作品。",
+      backConfirmConfirm: "確定返回",
+      backConfirmCancel: "繼續查看"
     },
     adjust: {
       title: "調整這張作品",
@@ -176,6 +237,7 @@ const CLIENT_OVERRIDES: Dictionaries = {
       submit: "生成調整後的作品",
       submitting: "墨色正在鋪開",
       back: "返回作品",
+      clearNote: "清除想法",
       baseLabel: "目前作品",
       emptyHint: "先寫一句調整方向再生成。"
     },
@@ -204,10 +266,6 @@ const CLIENT_OVERRIDES: Dictionaries = {
       extraServiceDescription: "確認尺寸、材質和製作路徑，適合送禮或空間陳設。",
       expectation: "價格按需求評估",
       sampleHeading: "風格樣張",
-      currentWork: "目前作品",
-      currentWorkPreview: "目前作品預覽",
-      ctaStart: "去生成作品",
-      ctaWithRecord: "用目前作品諮詢雅匠",
       productionUnavailable: "暫未開放製作諮詢"
     },
     production: {
@@ -226,6 +284,8 @@ const CLIENT_OVERRIDES: Dictionaries = {
       summaryService: "製作方式",
       summarySize: "製作規格",
       summaryReference: "參考程度",
+      referenceRecommendedBadge: "推薦",
+      referenceCautionBadge: "慎選",
       close: "關閉",
       confirm: "確認製作意向"
     }
@@ -253,10 +313,34 @@ const CLIENT_OVERRIDES: Dictionaries = {
       suggestionStart: "Start generating",
       generating: "Ink is unfolding",
       generatingWait: "Ink is unfolding. This may take 2-3 minutes. Please wait.",
-      generationLimit: "You already have 2 generation tasks. Please wait for one to finish.",
+      generationLimit: "Studio already has a generation task. Please wait for it to finish.",
       back: "Back",
       generationSummaryArtwork: "Artwork image will be generated.",
       generationSummaryWithPreview: "Artwork and placement preview will be generated."
+    },
+    generationLoading: {
+      estimate: "Usually about 30 seconds. Please wait.",
+      retry: "Try again",
+      failedTitle: "Generation did not finish",
+      failedHint: "Try again, or switch to another page first.",
+      backConfirm: "Leave this result and return to this tab?",
+      tabBusy: {
+        studio: "Studio is generating",
+        library: "Library is generating",
+        experts: "Artisans are generating"
+      },
+      create: {
+        thinking: "The artist is shaping the idea",
+        paper: "The artist is opening the paper",
+        painting: "The artist is painting",
+        details: "The artist is refining details"
+      },
+      adjust: {
+        understanding: "The artist is reading the original",
+        direction: "The artist is planning the adjustment",
+        repainting: "The artist is repainting the inkwork",
+        adjustDetails: "The artist is refining the new draft"
+      }
     },
     suggestions: ["Start generating", "More refined", "More blank space", "For living room", "For gifting", "More poetic", "Lighter ink", "Richer layers", "Calmer", "More lively energy"],
     errors: {
@@ -272,6 +356,7 @@ const CLIENT_OVERRIDES: Dictionaries = {
       adjust: "Adjust artwork",
       adjustRetry: "Generate again",
       attachPhotoFusion: "Add a placement photo for preview",
+      generateFusion: "Generate preview",
       addNotes: "Add notes",
       makeHint: "Preview size and estimate first; contact follows after confirming intent.",
       failedTitle: "Generation did not finish",
@@ -279,7 +364,13 @@ const CLIENT_OVERRIDES: Dictionaries = {
       imageUnavailableTitle: "Artwork cannot be shown right now",
       imageUnavailableHint: "Add notes and generate again, or reopen it from Library later.",
       fusionUnavailableTitle: "Preview cannot be shown right now",
-      fusionUnavailableHint: "The artwork can still be viewed. You can add a room photo again later."
+      fusionUnavailableHint: "The artwork can still be viewed. You can add a room photo again later.",
+      back: "Back to library",
+      backStudio: "Back to studio",
+      backConfirmTitle: "Leave artwork creation?",
+      backConfirmBody: "You can still find this artwork in your library.",
+      backConfirmConfirm: "Go back",
+      backConfirmCancel: "Keep viewing"
     },
     adjust: {
       title: "Adjust this artwork",
@@ -288,6 +379,7 @@ const CLIENT_OVERRIDES: Dictionaries = {
       submit: "Generate the adjusted artwork",
       submitting: "Ink is unfolding",
       back: "Back to artwork",
+      clearNote: "Clear notes",
       baseLabel: "Current artwork",
       emptyHint: "Write an adjustment direction first."
     },
@@ -316,10 +408,6 @@ const CLIENT_OVERRIDES: Dictionaries = {
       extraServiceDescription: "Clarify size, material, and production path for gifting or interiors.",
       expectation: "Pricing is assessed by request",
       sampleHeading: "Style samples",
-      currentWork: "Current artwork",
-      currentWorkPreview: "Current artwork preview",
-      ctaStart: "Create artwork",
-      ctaWithRecord: "Consult with current artwork",
       productionUnavailable: "Production consultation is not open yet"
     },
     production: {
@@ -338,6 +426,8 @@ const CLIENT_OVERRIDES: Dictionaries = {
       summaryService: "Service",
       summarySize: "Size",
       summaryReference: "Reference level",
+      referenceRecommendedBadge: "Best",
+      referenceCautionBadge: "Caution",
       close: "Close",
       confirm: "Confirm production"
     }

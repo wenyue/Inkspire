@@ -15,19 +15,29 @@ import {
   uploadPhoto,
   updateFavorite,
   type GenerationJob,
+  type GenerationOperation,
   type GenerationRecord,
   type GenerationStartResult,
   type LibraryRecord,
+  type OriginTab,
   type PublicConfig
 } from "./api";
 import Experts from "./components/Experts";
+import GeneratingView from "./components/GeneratingView";
 import Library from "./components/Library";
 import ParticleBackdrop from "./components/ParticleBackdrop";
 import ProductionDialog from "./components/ProductionDialog";
+import ConfirmDialog from "./components/ConfirmDialog";
 import ResultView from "./components/ResultView";
 import AdjustView from "./components/AdjustView";
 import Studio from "./components/Studio";
 import type { Locale } from "./domain";
+import {
+  readGenerationSessions,
+  writeGenerationSessions,
+  type GenerationSession,
+  type GenerationSessionMap
+} from "./generationSession";
 import { createListTranslator, createTranslator } from "./i18n";
 import {
   backCurrentTab,
@@ -45,6 +55,7 @@ import {
 } from "./navigation";
 
 type RecordRouteMode = "result" | "adjust" | "production";
+type GenerationPayload = Parameters<typeof createGeneration>[0];
 
 function decodePathSegment(value: string): string | null {
   try {
@@ -95,6 +106,67 @@ function visibleLibraryRecords(records: LibraryRecord[]): LibraryRecord[] {
     .sort((a, b) => generationTime(b) - generationTime(a));
 }
 
+function isKnownJobStatus(status: unknown): status is GenerationJob["status"] {
+  return status === "queued" || status === "running" || status === "succeeded" || status === "failed";
+}
+
+function hasUsableJobPayload(job: GenerationJob): boolean {
+  return typeof job.id === "string" && job.id.length > 0
+    && typeof job.recordId === "string" && job.recordId.length > 0
+    && isKnownJobStatus(job.status);
+}
+
+function hasUsableRecordPayload(record: GenerationRecord): boolean {
+  return typeof record.id === "string" && record.id.length > 0
+    && (record.status === undefined || typeof record.status === "string");
+}
+
+function tabToOriginTab(tab: Tab): OriginTab {
+  return tab;
+}
+
+function jobOriginTab(job: GenerationJob): OriginTab {
+  return job.origin_tab ?? "studio";
+}
+
+function jobOperation(job: GenerationJob): GenerationOperation {
+  return job.operation ?? "create";
+}
+
+function jobStartedAt(job: GenerationJob): number {
+  const createdAt = job.created_at ? new Date(job.created_at).getTime() : NaN;
+  return Number.isNaN(createdAt) ? Date.now() : createdAt;
+}
+
+function generationPayloadForSession(payload: GenerationPayload): GenerationSession["payload"] {
+  return {
+    type: payload.type,
+    answers: payload.answers,
+    conversationNotes: payload.conversationNotes,
+    source_photo_path: payload.source_photo_path,
+    recommended_artwork_size: payload.recommended_artwork_size
+  };
+}
+
+function runningSessionFromJob(
+  job: GenerationJob,
+  payload: GenerationSession["payload"] = {}
+): GenerationSession {
+  return {
+    originTab: jobOriginTab(job),
+    operation: jobOperation(job),
+    jobId: job.id,
+    resultRecordId: job.recordId,
+    startedAt: jobStartedAt(job),
+    status: "running",
+    payload
+  };
+}
+
+function isRetryableGenerationSession(session: GenerationSession): boolean {
+  return Boolean(session.payload.type && session.payload.answers);
+}
+
 function maxInputBytes(config: PublicConfig): number {
   return Math.max(1, config.image?.maxInputSizeMb ?? 10) * 1024 * 1024;
 }
@@ -134,6 +206,7 @@ export default function App() {
   const [currentRecord, setCurrentRecord] = useState<GenerationRecord | null>(null);
   const [recordViewOpen, setRecordViewOpen] = useState(false);
   const [activeJobs, setActiveJobs] = useState<GenerationJob[]>([]);
+  const [generationSessions, setGenerationSessions] = useState<GenerationSessionMap>(() => readGenerationSessions());
   const [restoringRecordId, setRestoringRecordId] = useState("");
   const [showProduction, setShowProduction] = useState(false);
   const [isAttachingPhoto, setIsAttachingPhoto] = useState(false);
@@ -143,15 +216,64 @@ export default function App() {
   const [isAdjusting, setIsAdjusting] = useState(false);
   const [adjustError, setAdjustError] = useState("");
   const [studioResetRequest, setStudioResetRequest] = useState(0);
+  const [pendingBackExit, setPendingBackExit] = useState(false);
   const [tabHistory, setTabHistory] = useState(() => readTabHistoryState(
     typeof window === "undefined" ? "/studio" : `${window.location.pathname}${window.location.search}`
   ));
   const activeJobsRef = useRef<GenerationJob[]>([]);
+  const generationSessionsRef = useRef<GenerationSessionMap>(generationSessions);
   const autoFusionRecordIds = useRef<Set<string>>(new Set());
   const recordCacheRef = useRef<Map<string, GenerationRecord>>(new Map());
   const adjustSubmitRef = useRef(false);
   const tabHistoryRef = useRef(tabHistory);
   const skipNextPopSyncRef = useRef(false);
+  const studioResultGuardRef = useRef(false);
+  const studioResultPathRef = useRef("/studio");
+
+  const updateGenerationSessions = useCallback((updater: (sessions: GenerationSessionMap) => GenerationSessionMap) => {
+    setGenerationSessions((current) => {
+      const next = updater(current);
+      generationSessionsRef.current = next;
+      return next;
+    });
+  }, []);
+
+  const upsertGenerationSession = useCallback((session: GenerationSession) => {
+    updateGenerationSessions((sessions) => ({
+      ...sessions,
+      [session.originTab]: session
+    }));
+  }, [updateGenerationSessions]);
+
+  const clearGenerationSession = useCallback((originTab: OriginTab) => {
+    updateGenerationSessions((sessions) => {
+      if (!sessions[originTab]) {
+        return sessions;
+      }
+      const next = { ...sessions };
+      delete next[originTab];
+      return next;
+    });
+  }, [updateGenerationSessions]);
+
+  const markGenerationSessionFailed = useCallback((job: GenerationJob, error?: string) => {
+    const originTab = jobOriginTab(job);
+    updateGenerationSessions((sessions) => {
+      const current = sessions[originTab];
+      return {
+        ...sessions,
+        [originTab]: {
+          ...(current ?? runningSessionFromJob(job)),
+          originTab,
+          operation: current?.operation ?? jobOperation(job),
+          jobId: current?.jobId ?? job.id,
+          resultRecordId: current?.resultRecordId ?? job.recordId,
+          status: "failed",
+          error: error || job.error
+        }
+      };
+    });
+  }, [updateGenerationSessions]);
 
   useEffect(() => {
     loadPublicConfig().then((nextConfig) => {
@@ -162,12 +284,16 @@ export default function App() {
       });
     });
     loadLibrary().then((records) => setLibrary(visibleLibraryRecords(records)));
-    loadActiveJobs().then((jobs) => setActiveJobs(jobs)).catch(() => {});
   }, []);
 
   useEffect(() => {
     activeJobsRef.current = activeJobs;
   }, [activeJobs]);
+
+  useEffect(() => {
+    generationSessionsRef.current = generationSessions;
+    writeGenerationSessions(generationSessions);
+  }, [generationSessions]);
 
   useEffect(() => {
     tabHistoryRef.current = tabHistory;
@@ -180,6 +306,11 @@ export default function App() {
 
   useEffect(() => {
     const onPopState = () => {
+      if (studioResultGuardRef.current) {
+        navigate(studioResultPathRef.current, { replace: true });
+        setPendingBackExit(true);
+        return;
+      }
       skipNextPopSyncRef.current = true;
       const next = backCurrentTab(tabHistoryRef.current);
       setTabHistory(next.state);
@@ -201,6 +332,23 @@ export default function App() {
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
   }, [currentRecord?.id, navigate]);
+
+  const onStudioResult = Boolean(
+    recordRoute &&
+      recordRoute.mode === "result" &&
+      recordViewOpen &&
+      currentRecord &&
+      readSourceTab(location.search) === "studio"
+  );
+
+  useEffect(() => {
+    studioResultGuardRef.current = onStudioResult;
+    if (onStudioResult) {
+      studioResultPathRef.current = pathWithSearch;
+    } else {
+      setPendingBackExit(false);
+    }
+  }, [onStudioResult, pathWithSearch]);
 
   useEffect(() => {
     if (location.pathname === "/") {
@@ -311,6 +459,51 @@ export default function App() {
     setActiveJobs(next);
   }, []);
 
+  const seedGenerationSessionsFromJobs = useCallback((jobs: GenerationJob[]) => {
+    updateGenerationSessions((sessions) => {
+      const activeJobIds = new Set(
+        jobs
+          .filter((job) => hasUsableJobPayload(job) && (job.status === "queued" || job.status === "running"))
+          .map((job) => job.id)
+      );
+      let next = sessions;
+      for (const [tab, session] of Object.entries(sessions) as Array<[OriginTab, GenerationSession]>) {
+        if (!session) {
+          continue;
+        }
+        if (session.status === "running" && !activeJobIds.has(session.jobId)) {
+          next = { ...next };
+          delete next[tab];
+        }
+      }
+      for (const job of jobs) {
+        if (!hasUsableJobPayload(job) || (job.status !== "queued" && job.status !== "running")) {
+          continue;
+        }
+        const session = runningSessionFromJob(job);
+        next = {
+          ...next,
+          [session.originTab]: {
+            ...next[session.originTab],
+            ...session,
+            payload: next[session.originTab]?.payload ?? session.payload
+          }
+        };
+      }
+      return next;
+    });
+  }, [updateGenerationSessions]);
+
+  useEffect(() => {
+    loadActiveJobs()
+      .then((jobs) => {
+        setActiveJobs(jobs);
+        activeJobsRef.current = jobs;
+        seedGenerationSessionsFromJobs(jobs);
+      })
+      .catch(() => {});
+  }, [seedGenerationSessionsFromJobs]);
+
   const handleGenerationStart = useCallback((result: GenerationStartResult) => {
     if (result.limitReached) {
       replaceActiveJobs(result.activeJobs ?? []);
@@ -342,12 +535,40 @@ export default function App() {
     navigate(pathForRecord(record.id, nextSource), { replace: recordRoute?.recordId === record.id });
   }, [activeTab, location.search, navigate, onResult, recordRoute?.recordId]);
 
-  const startFusionJob = useCallback(async (recordId: string, sourcePhotoPath = "") => {
+  const applyFinishedRecordForOrigin = useCallback((record: GenerationRecord, originTab: OriginTab) => {
+    onResult(record);
+    clearGenerationSession(originTab);
+    const shouldOpenResult = activeTab === originTab;
+    setRecordViewOpen(shouldOpenResult);
+    if (!shouldOpenResult) {
+      return;
+    }
+    setAdjustOpen(false);
+    setShowProduction(false);
+    navigate(pathForRecord(record.id, originTab), { replace: true });
+  }, [activeTab, clearGenerationSession, navigate, onResult]);
+
+  const startFusionJob = useCallback(async (
+    recordId: string,
+    sourcePhotoPath = "",
+    originTab: OriginTab = "studio",
+    operation: GenerationOperation = "create"
+  ) => {
     try {
-      const result = await createFusion(recordId, sourcePhotoPath);
+      const result = await createFusion(recordId, sourcePhotoPath, originTab, operation);
       handleGenerationStart(result);
+      if (result.job?.status === "queued" || result.job?.status === "running") {
+        upsertGenerationSession({
+          ...runningSessionFromJob(result.job, { source_photo_path: sourcePhotoPath }),
+          originTab,
+          operation,
+          sourceRecordId: recordId
+        });
+        navigate(fallbackPathForSource(originTab), { replace: true });
+      }
       if (result.record && (!result.job || result.job.status === "succeeded" || result.job.status === "failed")) {
-        applyFinishedRecord(result.record);
+        clearGenerationSession(originTab);
+        applyFinishedRecordForOrigin(result.record, originTab);
       }
       if (result.job?.status === "failed") {
         throw new Error(result.job.error || "fusion generation failed");
@@ -358,13 +579,25 @@ export default function App() {
       }
       throw error;
     }
-  }, [applyFinishedRecord, handleGenerationStart, replaceActiveJobs]);
+  }, [applyFinishedRecordForOrigin, clearGenerationSession, handleGenerationStart, navigate, replaceActiveJobs, upsertGenerationSession]);
 
-  const startGenerationJob = useCallback(async (payload: Parameters<typeof createGeneration>[0]) => {
+  const startGenerationJob = useCallback(async (payload: GenerationPayload) => {
     try {
       const result = await createGeneration(payload);
       handleGenerationStart(result);
+      if (result.job?.status === "queued" || result.job?.status === "running") {
+        const originTab = payload.origin_tab ?? "studio";
+        const operation = payload.operation ?? "create";
+        upsertGenerationSession({
+          ...runningSessionFromJob(result.job, generationPayloadForSession(payload)),
+          originTab,
+          operation
+        });
+        navigate(fallbackPathForSource(originTab), { replace: true });
+      }
       if (result.record && !result.job) {
+        const originTab = payload.origin_tab ?? "studio";
+        clearGenerationSession(originTab);
         if (
           result.record.status === "succeeded"
           && payload.source_photo_path
@@ -373,7 +606,7 @@ export default function App() {
           && !autoFusionRecordIds.current.has(result.record.id)
         ) {
           autoFusionRecordIds.current.add(result.record.id);
-          await startFusionJob(result.record.id, result.record.source_photo_path);
+          await startFusionJob(result.record.id, result.record.source_photo_path, originTab, payload.operation ?? "create");
           return;
         }
         applyFinishedRecord(result.record);
@@ -384,9 +617,10 @@ export default function App() {
       }
       throw error;
     }
-  }, [applyFinishedRecord, handleGenerationStart, replaceActiveJobs, startFusionJob]);
+  }, [applyFinishedRecord, clearGenerationSession, handleGenerationStart, navigate, replaceActiveJobs, startFusionJob, upsertGenerationSession]);
 
   const finishRecordForJob = useCallback(async (job: GenerationJob, record: GenerationRecord) => {
+    const originTab = jobOriginTab(job);
     if (
       job.stage === "artwork"
       && record.status === "succeeded"
@@ -395,11 +629,15 @@ export default function App() {
       && !autoFusionRecordIds.current.has(record.id)
     ) {
       autoFusionRecordIds.current.add(record.id);
-      await startFusionJob(record.id, record.source_photo_path);
+      await startFusionJob(record.id, record.source_photo_path, originTab, jobOperation(job));
       return;
     }
-    applyFinishedRecord(record);
-  }, [applyFinishedRecord, startFusionJob]);
+    if (record.status === "failed") {
+      markGenerationSessionFailed(job, record.title);
+      return;
+    }
+    applyFinishedRecordForOrigin(record, originTab);
+  }, [applyFinishedRecordForOrigin, markGenerationSessionFailed, startFusionJob]);
 
   const completeJob = useCallback(async (job: GenerationJob) => {
     const record = await getRecord(job.recordId);
@@ -417,22 +655,37 @@ export default function App() {
     await Promise.all(currentJobs.map(async (job) => {
       try {
         const nextJob = await getJob(job.id);
+        if (!hasUsableJobPayload(nextJob)) {
+          return;
+        }
         if (nextJob.status === "queued" || nextJob.status === "running") {
           updates.set(nextJob.id, nextJob);
           return;
         }
         completedIds.add(nextJob.id);
+        if (nextJob.status === "failed") {
+          markGenerationSessionFailed(nextJob);
+          return;
+        }
         await completeJob(nextJob);
       } catch {
         try {
           const record = await getRecord(job.recordId);
+          if (!hasUsableRecordPayload(record)) {
+            return;
+          }
           if (record.status === "queued" || record.status === "running") {
             return;
           }
           completedIds.add(job.id);
+          if (record.status === "failed") {
+            markGenerationSessionFailed(job);
+            return;
+          }
           await finishRecordForJob(job, record);
         } catch {
           completedIds.add(job.id);
+          markGenerationSessionFailed(job);
         }
       }
     }));
@@ -446,7 +699,7 @@ export default function App() {
       activeJobsRef.current = next;
       return next;
     });
-  }, [completeJob, finishRecordForJob]);
+  }, [completeJob, finishRecordForJob, markGenerationSessionFailed]);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -535,10 +788,29 @@ export default function App() {
     navigate(pathForRecord(currentRecord.id, readSourceTab(location.search)), { replace: true });
   };
 
+  const cancelBackExit = () => setPendingBackExit(false);
+
+  const confirmBackExit = () => {
+    setPendingBackExit(false);
+    if (currentRecord?.id) {
+      recordCacheRef.current.delete(currentRecord.id);
+    }
+    setCurrentRecord(null);
+    setRestoringRecordId("");
+    setShowProduction(false);
+    setAdjustOpen(false);
+    setRecordViewOpen(false);
+    setResultActionError("");
+    setLibraryActionError("");
+    setStudioResetRequest((request) => request + 1);
+    navigate("/studio", { replace: true });
+  };
+
   const submitAdjustment = async (note: string) => {
     if (!currentRecord) {
       return;
     }
+    const originTab = tabToOriginTab(readSourceTab(location.search));
     setIsAdjusting(true);
     setAdjustError("");
     adjustSubmitRef.current = true;
@@ -548,7 +820,9 @@ export default function App() {
         answers: currentRecord.answers ?? {},
         conversationNotes: note,
         source_photo_path: currentRecord.source_photo_path,
-        recommended_artwork_size: currentRecord.recommended_artwork_size ?? null
+        recommended_artwork_size: currentRecord.recommended_artwork_size ?? null,
+        origin_tab: originTab,
+        operation: "adjust"
       });
     } catch (error) {
       adjustSubmitRef.current = false;
@@ -558,6 +832,31 @@ export default function App() {
     }
   };
 
+  const retryGenerationSession = useCallback((session: GenerationSession) => {
+    if (!session.payload.type || !session.payload.answers) {
+      return;
+    }
+    void startGenerationJob({
+      type: session.payload.type,
+      answers: session.payload.answers,
+      conversationNotes: session.payload.conversationNotes ?? "",
+      source_photo_path: session.payload.source_photo_path,
+      recommended_artwork_size: session.payload.recommended_artwork_size ?? null,
+      origin_tab: session.originTab,
+      operation: session.operation
+    });
+  }, [startGenerationJob]);
+
+  const resultSource = readSourceTab(location.search);
+  let resultBackLabel: string | undefined;
+  let resultOnBack: (() => void) | undefined;
+  if (resultSource === "studio") {
+    resultBackLabel = t("result.backStudio");
+    resultOnBack = () => setPendingBackExit(true);
+  } else if (resultSource === "library") {
+    resultBackLabel = t("result.back");
+    resultOnBack = () => navigate(fallbackPathForSource(resultSource));
+  }
   const resultSlot = currentRecord ? (
     <ResultView
       record={currentRecord}
@@ -568,6 +867,7 @@ export default function App() {
       adjustLabel={t("result.adjust")}
       adjustRetryLabel={t("result.adjustRetry")}
       attachPhotoLabel={t("result.attachPhotoFusion")}
+      generateFusionLabel={t("result.generateFusion")}
       busyLabel={t("studio.generating")}
       failedTitle={t("result.failedTitle")}
       failedHint={t("result.failedHint")}
@@ -575,11 +875,27 @@ export default function App() {
       imageUnavailableHint={t("result.imageUnavailableHint")}
       fusionUnavailableTitle={t("result.fusionUnavailableTitle")}
       fusionUnavailableHint={t("result.fusionUnavailableHint")}
+      backLabel={resultBackLabel}
       actionError={resultActionError}
       isAttachingPhoto={isAttachingPhoto}
       canMake={productionEnabled}
+      onBack={resultOnBack}
       onMake={openProduction}
       onAdjust={openAdjust}
+      onGenerateFusion={async () => {
+        if (!currentRecord?.id || !currentRecord.source_photo_path) {
+          return;
+        }
+        setIsAttachingPhoto(true);
+        setResultActionError("");
+        try {
+          await startFusionJob(currentRecord.id, currentRecord.source_photo_path, tabToOriginTab(resultSource), "adjust");
+        } catch {
+          setResultActionError(t("errors.generic"));
+        } finally {
+          setIsAttachingPhoto(false);
+        }
+      }}
       onAttachPhoto={async (file) => {
         if (!currentRecord?.id) {
           return;
@@ -592,7 +908,7 @@ export default function App() {
         setResultActionError("");
         try {
           const upload = await uploadPhoto(file);
-          await startFusionJob(currentRecord.id, upload.source_photo_path);
+          await startFusionJob(currentRecord.id, upload.source_photo_path, tabToOriginTab(resultSource), "adjust");
         } catch (error) {
           setResultActionError(isPhotoTooLargeError(error) ? t("errors.photoTooLarge") : t("errors.generic"));
         } finally {
@@ -611,6 +927,7 @@ export default function App() {
       submitLabel={t("adjust.submit")}
       submittingLabel={t("adjust.submitting")}
       backLabel={t("adjust.back")}
+      clearLabel={t("adjust.clearNote")}
       baseLabel={t("adjust.baseLabel")}
       artworkLabel={t("result.artwork")}
       suggestions={list("suggestions").slice(1)}
@@ -620,6 +937,10 @@ export default function App() {
       onSubmit={submitAdjustment}
     />
   ) : recordRoute && activeTab !== "studio" && recordViewOpen ? resultSlot : null;
+  const activeTabSession = generationSessions[tabToOriginTab(activeTab)];
+  const activeTabSessionRetry = activeTabSession && isRetryableGenerationSession(activeTabSession)
+    ? () => retryGenerationSession(activeTabSession)
+    : undefined;
 
   return (
     <div className="app-shell">
@@ -645,7 +966,19 @@ export default function App() {
       </header>
 
       <main className="main-surface">
-        {recordView ?? (
+        {activeTabSession ? (
+          <GeneratingView
+            originTab={activeTabSession.originTab}
+            operation={activeTabSession.operation}
+            jobId={activeTabSession.jobId}
+            startedAt={activeTabSession.startedAt}
+            status={activeTabSession.status}
+            error={activeTabSession.error}
+            locale={locale}
+            t={t}
+            onRetry={activeTabSessionRetry}
+          />
+        ) : recordView ?? (
           <>
             {activeTab === "studio" ? (
             <Studio
@@ -704,25 +1037,6 @@ export default function App() {
                 extraServiceDescription={t("experts.extraServiceDescription")}
                 expectationLabel={t("experts.expectation")}
                 sampleHeading={t("experts.sampleHeading")}
-                currentWorkLabel={t("experts.currentWork")}
-                currentWorkPreviewLabel={t("experts.currentWorkPreview")}
-                ctaLabel={
-                  currentRecord && currentRecord.status !== "failed"
-                    ? productionEnabled ? t("experts.ctaWithRecord") : t("experts.productionUnavailable")
-                    : t("experts.ctaStart")
-                }
-                ctaDisabled={Boolean(currentRecord && currentRecord.status !== "failed" && !productionEnabled)}
-                currentRecord={currentRecord}
-                onCta={() => {
-                  if (currentRecord && currentRecord.status !== "failed" && productionEnabled) {
-                    setAdjustOpen(false);
-                    setRecordViewOpen(true);
-                    setShowProduction(true);
-                    navigate(pathForRecord(currentRecord.id, "experts", "production"));
-                  } else {
-                    goToTab("studio");
-                  }
-                }}
               />
             ) : null}
           </>
@@ -769,11 +1083,23 @@ export default function App() {
           summaryServiceLabel={t("production.summaryService")}
           summarySizeLabel={t("production.summarySize")}
           summaryReferenceLabel={t("production.summaryReference")}
+          referenceRecommendedBadgeLabel={t("production.referenceRecommendedBadge")}
+          referenceCautionBadgeLabel={t("production.referenceCautionBadge")}
           confirmLabel={t("production.confirm")}
           contactPendingLabel={t("experts.contactPending")}
           productionAvailable={productionEnabled}
           productionUnavailableLabel={t("experts.productionUnavailable")}
           onClose={closeProduction}
+        />
+      ) : null}
+      {pendingBackExit ? (
+        <ConfirmDialog
+          title={t("result.backConfirmTitle")}
+          body={t("result.backConfirmBody")}
+          confirmLabel={t("result.backConfirmConfirm")}
+          cancelLabel={t("result.backConfirmCancel")}
+          onConfirm={confirmBackExit}
+          onCancel={cancelBackExit}
         />
       ) : null}
     </div>

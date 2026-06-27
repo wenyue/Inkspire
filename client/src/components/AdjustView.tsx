@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, X } from "lucide-react";
 import type { GenerationRecord } from "../api";
 
 interface AdjustViewProps {
@@ -10,6 +10,7 @@ interface AdjustViewProps {
   submitLabel: string;
   submittingLabel: string;
   backLabel: string;
+  clearLabel: string;
   baseLabel: string;
   artworkLabel: string;
   suggestions: string[];
@@ -32,6 +33,7 @@ export default function AdjustView({
   submitLabel,
   submittingLabel,
   backLabel,
+  clearLabel,
   baseLabel,
   artworkLabel,
   suggestions,
@@ -77,14 +79,29 @@ export default function AdjustView({
         <span className="adjust-base-label">{baseLabel}</span>
       </div>
       <p className="adjust-intro">{intro}</p>
-      <textarea
-        ref={noteRef}
-        className="adjust-note"
-        aria-label={title}
-        value={note}
-        onChange={(event) => setNote(event.target.value)}
-        placeholder={placeholder}
-      />
+      <div className="adjust-note-shell">
+        <textarea
+          ref={noteRef}
+          className="adjust-note"
+          aria-label={title}
+          value={note}
+          onChange={(event) => setNote(event.target.value)}
+          placeholder={placeholder}
+        />
+        {note ? (
+          <button
+            type="button"
+            className="adjust-note-clear surface-clear-button"
+            aria-label={clearLabel}
+            onClick={() => {
+              setNote("");
+              noteRef.current?.focus();
+            }}
+          >
+            <X aria-hidden="true" size={14} />
+          </button>
+        ) : null}
+      </div>
       <div className="suggestion-row">
         {suggestions.map((suggestion) => (
           <button key={suggestion} type="button" onClick={() => setNote(suggestion)}>

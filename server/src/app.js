@@ -187,7 +187,7 @@ function inferArtworkSizeFromScene(metadata = {}) {
       label: "横向点景",
       width_cm: 68,
       height_cm: 45,
-      reason: "根据场景图比例推算，适合横向陈设。"
+      reason: "根据环境图片比例推算，适合横向陈设。"
     };
   }
   if (ratio < 0.85) {
@@ -196,7 +196,7 @@ function inferArtworkSizeFromScene(metadata = {}) {
       label: "竖向挂画",
       width_cm: 45,
       height_cm: 68,
-      reason: "根据场景图比例推算，适合竖向挂画。"
+      reason: "根据环境图片比例推算，适合竖向挂画。"
     };
   }
   return {
@@ -204,7 +204,7 @@ function inferArtworkSizeFromScene(metadata = {}) {
     label: "方形点景",
     width_cm: 50,
     height_cm: 50,
-    reason: "根据场景图比例推算，适合作为方形点景作品。"
+    reason: "根据环境图片比例推算，适合作为方形点景作品。"
   };
 }
 
@@ -406,7 +406,9 @@ function createApp(options = {}) {
       answers: req.body.answers || {},
       conversationNotes: req.body.conversationNotes || req.body.conversation_notes || "",
       sourcePhotoPath,
-      recommendedArtworkSize: req.body.recommended_artwork_size || null
+      recommendedArtworkSize: req.body.recommended_artwork_size || null,
+      originTab: req.body.origin_tab || req.body.originTab || "studio",
+      operation: req.body.operation || "create"
     });
     res.status(result.limitReached ? 429 : 201).json(result);
   }));
@@ -421,7 +423,9 @@ function createApp(options = {}) {
     const result = await jobs.createFusion({
       userId: req.userId,
       recordId: req.params.id,
-      sourcePhotoPath
+      sourcePhotoPath,
+      originTab: req.body.origin_tab || req.body.originTab || "studio",
+      operation: req.body.operation || "create"
     });
     res.status(result.limitReached ? 429 : 201).json(result);
   }));
@@ -432,7 +436,9 @@ function createApp(options = {}) {
       userId: req.userId,
       type: current.type,
       answers: req.body.answers || current.answers || {},
-      conversationNotes: req.body.conversationNotes || current.conversation_notes || ""
+      conversationNotes: req.body.conversationNotes || current.conversation_notes || "",
+      originTab: req.body.origin_tab || req.body.originTab || "studio",
+      operation: req.body.operation || "adjust"
     });
     res.status(result.limitReached ? 429 : 201).json(result);
   }));

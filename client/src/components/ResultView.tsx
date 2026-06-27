@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Brush, ImagePlus, Wand2 } from "lucide-react";
+import { ArrowLeft, Brush, ImagePlus, Wand2 } from "lucide-react";
 import type { GenerationRecord } from "../api";
 import { resultLayoutForWidth } from "../domain";
 
@@ -12,6 +12,7 @@ interface ResultViewProps {
   adjustLabel: string;
   adjustRetryLabel: string;
   attachPhotoLabel: string;
+  generateFusionLabel: string;
   busyLabel: string;
   failedTitle: string;
   failedHint: string;
@@ -19,12 +20,15 @@ interface ResultViewProps {
   imageUnavailableHint: string;
   fusionUnavailableTitle: string;
   fusionUnavailableHint: string;
+  backLabel?: string;
   actionError?: string;
   isAttachingPhoto?: boolean;
   canMake?: boolean;
+  onBack?: () => void;
   onMake: () => void;
   onAdjust: () => void;
   onAttachPhoto: (file: File) => void;
+  onGenerateFusion: () => void;
 }
 
 function recordImage(record: GenerationRecord, kind: "artwork" | "fusion") {
@@ -52,6 +56,7 @@ export default function ResultView({
   adjustLabel,
   adjustRetryLabel,
   attachPhotoLabel,
+  generateFusionLabel,
   busyLabel,
   failedTitle,
   failedHint,
@@ -59,12 +64,15 @@ export default function ResultView({
   imageUnavailableHint,
   fusionUnavailableTitle,
   fusionUnavailableHint,
+  backLabel,
   actionError = "",
   isAttachingPhoto = false,
   canMake = true,
+  onBack,
   onMake,
   onAdjust,
-  onAttachPhoto
+  onAttachPhoto,
+  onGenerateFusion
 }: ResultViewProps) {
   const [layout, setLayout] = useState(resultLayoutForWidth(window.innerWidth));
   const [failedImages, setFailedImages] = useState<Record<string, boolean>>({});
@@ -88,6 +96,7 @@ export default function ResultView({
   const failed = record.status === "failed";
   const artworkFailed = Boolean(artwork && failedImages.artwork);
   const fusionFailed = Boolean(fusion && failedImages.fusion);
+  const hasEnvironmentImage = Boolean(record.source_photo_path);
   const mediaClassName = layout === "stacked" ? "compact-result-media" : undefined;
   const artworkFigure = (
     <figure>
@@ -139,7 +148,18 @@ export default function ResultView({
           <Wand2 aria-hidden="true" size={16} />
           {failed || artworkFailed ? adjustRetryLabel : adjustLabel}
         </button>
-        {!failed && !fusion ? (
+        {!failed && !fusion && hasEnvironmentImage ? (
+          <button
+            className="secondary-action result-action-button"
+            type="button"
+            onClick={onGenerateFusion}
+            disabled={isAttachingPhoto}
+          >
+            <ImagePlus aria-hidden="true" size={16} />
+            {isAttachingPhoto ? busyLabel : generateFusionLabel}
+          </button>
+        ) : null}
+        {!failed && !fusion && !hasEnvironmentImage ? (
           <label className="secondary-action result-upload-action" tabIndex={0} onKeyDown={openNestedFileInput}>
             <ImagePlus aria-hidden="true" size={16} />
             {isAttachingPhoto ? busyLabel : attachPhotoLabel}
@@ -165,6 +185,14 @@ export default function ResultView({
 
   return (
     <section className="result-view" ref={resultRef}>
+      {onBack && backLabel ? (
+        <div className="result-toolbar">
+          <button className="back-action" type="button" onClick={onBack}>
+            <ArrowLeft aria-hidden="true" size={16} />
+            {backLabel}
+          </button>
+        </div>
+      ) : null}
       {failed ? (
         <div className="result-failed" role="status">
           <strong>{failedTitle}</strong>

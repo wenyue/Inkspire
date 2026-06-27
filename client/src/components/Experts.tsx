@@ -1,4 +1,4 @@
-import type { Expert, GenerationRecord } from "../api";
+import type { Expert } from "../api";
 import type { Locale } from "../domain";
 
 interface ExpertsProps {
@@ -10,21 +10,10 @@ interface ExpertsProps {
   extraServiceDescription: string;
   expectationLabel: string;
   sampleHeading: string;
-  currentWorkLabel: string;
-  currentWorkPreviewLabel: string;
-  ctaLabel: string;
-  ctaDisabled?: boolean;
-  currentRecord?: GenerationRecord | null;
-  onCta: () => void;
 }
 
 function localizedText(value: Record<string, string>, locale: Locale): string {
   return value[locale] ?? value["zh-Hans"] ?? Object.values(value)[0] ?? "";
-}
-
-function currentRecordImageSrc(record: GenerationRecord): string {
-  const kind = record.fusion_path || record.has_fusion ? "fusion" : "artwork";
-  return `/api/records/${record.id}/images/${kind}`;
 }
 
 function sampleFallback(image: string): string {
@@ -39,13 +28,7 @@ export default function Experts({
   extraServiceName,
   extraServiceDescription,
   expectationLabel,
-  sampleHeading,
-  currentWorkLabel,
-  currentWorkPreviewLabel,
-  ctaLabel,
-  ctaDisabled = false,
-  currentRecord,
-  onCta
+  sampleHeading
 }: ExpertsProps) {
   return (
     <section className="experts-panel">
@@ -78,21 +61,6 @@ export default function Experts({
               </div>
             </div>
           ) : null}
-          <div className="expert-conversion">
-            <div className="expert-expectation">
-              <span>{expectationLabel}</span>
-              {expert.phone || expert.wechat ? <span>{expert.phone || expert.wechat}</span> : null}
-            </div>
-            {currentRecord && currentRecord.status !== "failed" ? (
-              <div className="expert-current-work">
-                <span>{currentWorkLabel}</span>
-                <img src={currentRecordImageSrc(currentRecord)} alt={currentWorkPreviewLabel} />
-              </div>
-            ) : null}
-            <button className="primary-action expert-cta" type="button" onClick={onCta} disabled={ctaDisabled}>
-              {ctaLabel}
-            </button>
-          </div>
           <div className="expert-services">
             <strong>{serviceHeading}</strong>
             <ul>

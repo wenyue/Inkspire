@@ -45,6 +45,13 @@ function fakeRunner(red = 40) {
   };
 }
 
+async function writeSourcePhoto(temp, recordId = "upload-source", content = "WEBP_SOURCE") {
+  const sourcePath = path.join(temp, "records", recordId, "source-photo.webp");
+  await fs.mkdir(path.dirname(sourcePath), { recursive: true });
+  await fs.writeFile(sourcePath, Buffer.from(content));
+  return `records/${recordId}/source-photo.webp`;
+}
+
 test("create artwork job writes artwork.webp and record.json using fake runner PNG", async () => {
   await withTempStore(async (temp) => {
     const manager = createJobManager({
@@ -69,6 +76,61 @@ test("create artwork job writes artwork.webp and record.json using fake runner P
   });
 });
 
+test("artwork creation copies the source photo into the new record directory", async () => {
+  await withTempStore(async (temp) => {
+    const storage = createStorage(temp);
+    const sourcePhotoPath = await writeSourcePhoto(temp);
+    const manager = createJobManager({
+      config: { app: { image: { webpQuality: 82 } }, prompts: {}, questions: {} },
+      storage,
+      runner: fakeRunner()
+    });
+
+    const { record } = await manager.createArtwork({
+      type: "painting",
+      answers: { painting_subject: "山水" },
+      sourcePhotoPath
+    });
+
+    const stored = await storage.getRecord(record.id);
+    assert.equal(stored.source_photo_path, `records/${record.id}/source-photo.webp`);
+    assert.equal(await fs.readFile(path.join(temp, stored.source_photo_path), "utf8"), "WEBP_SOURCE");
+  });
+});
+
+test("artwork source photo copy failure releases the origin tab slot", async () => {
+  await withTempStore(async (temp) => {
+    const manager = createJobManager({
+      config: { app: { image: { webpQuality: 82 } }, prompts: {}, questions: {} },
+      storage: createStorage(temp),
+      runner: fakeRunner()
+    });
+
+    await assert.rejects(
+      manager.createArtwork({
+        userId: "user-a",
+        type: "painting",
+        answers: {},
+        originTab: "studio",
+        sourcePhotoPath: "records/missing-source/source-photo.webp"
+      }),
+      /ENOENT/
+    );
+
+    const second = await manager.createArtwork({
+      userId: "user-a",
+      type: "painting",
+      answers: {},
+      originTab: "studio"
+    });
+
+    assert.notEqual(second.limitReached, true);
+    assert.ok(["queued", "running"].includes(second.job.status));
+    assert.equal(second.job.origin_tab, "studio");
+    await manager.waitForIdle();
+  });
+});
+
 test("fusion job preserves existing artwork and writes fusion.webp", async () => {
   await withTempStore(async (temp) => {
     const storage = createStorage(temp);
@@ -77,7 +139,8 @@ test("fusion job preserves existing artwork and writes fusion.webp", async () =>
       storage,
       runner: fakeRunner(180)
     });
-    const { record } = await manager.createArtwork({ type: "painting", answers: {} });
+    const sourcePhotoPath = await writeSourcePhoto(temp);
+    const { record } = await manager.createArtwork({ type: "painting", answers: {}, sourcePhotoPath });
     const artworkPath = record.artwork_path;
 
     const result = await manager.createFusion({ recordId: record.id });
@@ -191,7 +254,7 @@ test("getJob keeps legacy lookup compatibility while enforcing explicit owner mi
   });
 });
 
-test("per-user limit rejects the third active generation", async () => {
+test("default studio tab rejects the second active generation", async () => {
   await withTempStore(async (temp) => {
     const releases = new Map();
     const manager = createJobManager({
@@ -207,20 +270,143 @@ test("per-user limit rejects the third active generation", async () => {
       }
     });
 
-    const first = await manager.createArtwork({ userId: "user-a", type: "painting", answers: {} });
-    const second = await manager.createArtwork({ userId: "user-a", type: "painting", answers: {} });
-    const third = await manager.createArtwork({ userId: "user-a", type: "painting", answers: {} });
+    const first = await manager.createArtwork({ userId: "user-a", type: "painting", answers: {}, originTab: "studio" });
+    const second = await manager.createArtwork({ userId: "user-a", type: "painting", answers: {}, originTab: "studio" });
 
     assert.ok(["queued", "running"].includes(first.job.status));
-    assert.ok(["queued", "running"].includes(second.job.status));
-    assert.equal(third.limitReached, true);
-    assert.equal(third.code, "user_generation_limit_reached");
-    assert.equal(third.activeJobs.length, 2);
+    assert.equal(first.job.origin_tab, "studio");
+    assert.equal(first.job.operation, "create");
+    assert.equal(second.limitReached, true);
+    assert.equal(second.code, "tab_generation_limit_reached");
+    assert.equal(second.origin_tab, "studio");
+    assert.equal(second.activeJobs.length, 1);
 
-    await waitUntil(() => releases.size === 2);
+    await waitUntil(() => releases.size === 1);
     for (const release of releases.values()) {
       release();
     }
+    await manager.waitForIdle();
+  });
+});
+
+test("limits active jobs independently per origin tab", async () => {
+  await withTempStore(async (temp) => {
+    const releases = new Map();
+    const manager = createJobManager({
+      config: { app: { image: { webpQuality: 82 } }, prompts: {}, questions: {} },
+      storage: createStorage(temp),
+      runner: async ({ outputPngPath, record }) => {
+        await new Promise((resolve) => releases.set(record.id, resolve));
+        await fs.mkdir(path.dirname(outputPngPath), { recursive: true });
+        await fs.writeFile(outputPngPath, pngBuffer());
+        return { pngPath: outputPngPath, diagnostics: { reason: "slow" } };
+      }
+    });
+
+    const studio = await manager.createArtwork({
+      userId: "user-a",
+      type: "painting",
+      answers: {},
+      originTab: "studio",
+      operation: "create"
+    });
+    const studioRejected = await manager.createArtwork({
+      userId: "user-a",
+      type: "painting",
+      answers: {},
+      originTab: "studio",
+      operation: "create"
+    });
+    const library = await manager.createArtwork({
+      userId: "user-a",
+      type: "painting",
+      answers: {},
+      originTab: "library",
+      operation: "adjust"
+    });
+    const libraryRejected = await manager.createArtwork({
+      userId: "user-a",
+      type: "painting",
+      answers: {},
+      originTab: "library",
+      operation: "adjust"
+    });
+
+    assert.ok(["queued", "running"].includes(studio.job.status));
+    assert.equal(studio.job.origin_tab, "studio");
+    assert.equal(studio.job.operation, "create");
+    assert.equal(studioRejected.limitReached, true);
+    assert.equal(studioRejected.code, "tab_generation_limit_reached");
+    assert.equal(studioRejected.origin_tab, "studio");
+    assert.equal(studioRejected.activeJobs.length, 1);
+    assert.equal(studioRejected.activeJobs[0].origin_tab, "studio");
+
+    assert.ok(["queued", "running"].includes(library.job.status));
+    assert.equal(library.job.origin_tab, "library");
+    assert.equal(library.job.operation, "adjust");
+    assert.equal(libraryRejected.limitReached, true);
+    assert.equal(libraryRejected.code, "tab_generation_limit_reached");
+    assert.equal(libraryRejected.origin_tab, "library");
+    assert.equal(libraryRejected.activeJobs.length, 1);
+    assert.equal(libraryRejected.activeJobs[0].origin_tab, "library");
+    assert.equal(manager.listActiveJobs("user-a").length, 2);
+
+    await waitUntil(() => releases.size === 2);
+    for (const release of releases.values()) release();
+    await manager.waitForIdle();
+  });
+});
+
+test("failed authenticated jobs release the origin tab slot", async () => {
+  await withTempStore(async (temp) => {
+    let failedRecordId = "";
+    let secondRelease;
+    const manager = createJobManager({
+      config: { app: { image: { webpQuality: 82 } }, prompts: {}, questions: {} },
+      storage: createStorage(temp),
+      runner: async ({ outputPngPath, record }) => {
+        if (!failedRecordId) {
+          failedRecordId = record.id;
+        }
+        if (record.id === failedRecordId) {
+          const error = new Error("first job failed");
+          error.diagnostics = { reason: "first_job_failed" };
+          throw error;
+        }
+
+        await new Promise((resolve) => {
+          secondRelease = resolve;
+        });
+        await fs.mkdir(path.dirname(outputPngPath), { recursive: true });
+        await fs.writeFile(outputPngPath, pngBuffer());
+        return { pngPath: outputPngPath, diagnostics: { reason: "second_job_success" } };
+      }
+    });
+
+    const first = await manager.createArtwork({
+      userId: "user-a",
+      type: "painting",
+      answers: {},
+      originTab: "studio"
+    });
+    await manager.waitForIdle();
+
+    assert.equal(manager.getJob(first.job.id, "user-a").status, "failed");
+
+    const second = await manager.createArtwork({
+      userId: "user-a",
+      type: "painting",
+      answers: {},
+      originTab: "studio"
+    });
+
+    assert.notEqual(second.limitReached, true);
+    assert.ok(["queued", "running"].includes(second.job.status));
+    assert.equal(second.job.origin_tab, "studio");
+
+    await manager.waitForJobStart(second.job.id);
+    await waitUntil(() => typeof secondRelease === "function");
+    secondRelease();
     await manager.waitForIdle();
   });
 });
@@ -229,6 +415,7 @@ test("user fusion creation returns immediately", async () => {
   await withTempStore(async (temp) => {
     let release;
     let fusionStarted = false;
+    const sourcePhotoPath = await writeSourcePhoto(temp);
     const manager = createJobManager({
       config: { app: { image: { webpQuality: 82 } }, prompts: {}, questions: {} },
       storage: createStorage(temp),
@@ -245,12 +432,14 @@ test("user fusion creation returns immediately", async () => {
       }
     });
 
-    const created = await manager.createArtwork({ userId: "user-a", type: "painting", answers: {} });
+    const created = await manager.createArtwork({ userId: "user-a", type: "painting", answers: {}, sourcePhotoPath });
     await manager.waitForIdle();
 
     const result = await manager.createFusion({ userId: "user-a", recordId: created.record.id });
 
     assert.ok(["queued", "running"].includes(result.job.status));
+    assert.equal(result.job.origin_tab, "studio");
+    assert.equal(result.job.operation, "create");
     assert.equal(result.record.status, "queued");
     assert.equal(fusionStarted, false);
     await manager.waitForJobStart(result.job.id);
@@ -377,8 +566,8 @@ test("completed jobs free per-user capacity", async () => {
       }
     });
 
-    const first = await manager.createArtwork({ userId: "user-a", type: "painting", answers: {} });
-    const second = await manager.createArtwork({ userId: "user-a", type: "painting", answers: {} });
+    const first = await manager.createArtwork({ userId: "user-a", type: "painting", answers: {}, originTab: "studio" });
+    const second = await manager.createArtwork({ userId: "user-a", type: "painting", answers: {}, originTab: "library" });
 
     await Promise.all([
       manager.waitForJobStart(first.job.id),
@@ -387,14 +576,15 @@ test("completed jobs free per-user capacity", async () => {
 
     await manager.waitForRunningCount("user-a", 2);
 
-    const thirdRejected = await manager.createArtwork({ userId: "user-a", type: "painting", answers: {} });
+    const thirdRejected = await manager.createArtwork({ userId: "user-a", type: "painting", answers: {}, originTab: "studio" });
     assert.equal(thirdRejected.limitReached, true);
+    assert.equal(thirdRejected.origin_tab, "studio");
 
     await waitUntil(() => releases.size === 2);
     releases.get(first.record.id)();
     await waitUntil(() => manager.listActiveJobs("user-a").length === 1);
 
-    const third = await manager.createArtwork({ userId: "user-a", type: "painting", answers: {} });
+    const third = await manager.createArtwork({ userId: "user-a", type: "painting", answers: {}, originTab: "studio" });
 
     assert.ok(["queued", "running"].includes(third.job.status));
     assert.ok(["queued", "running"].includes(third.record.status));
@@ -433,6 +623,7 @@ test("artwork failure records failed status and diagnostics", async () => {
 test("fusion failure preserves succeeded artwork record for retry", async () => {
   await withTempStore(async (temp) => {
     const storage = createStorage(temp);
+    const sourcePhotoPath = await writeSourcePhoto(temp);
     const manager = createJobManager({
       config: { app: { image: { webpQuality: 82 } }, prompts: {}, questions: {} },
       storage,
@@ -447,7 +638,7 @@ test("fusion failure preserves succeeded artwork record for retry", async () => 
         return { pngPath: outputPngPath, diagnostics: { reason: "artwork_success" } };
       }
     });
-    const { record } = await manager.createArtwork({ type: "painting", answers: {} });
+    const { record } = await manager.createArtwork({ type: "painting", answers: {}, sourcePhotoPath });
     await manager.waitForIdle();
     const artworkPath = record.artwork_path;
 
@@ -462,6 +653,43 @@ test("fusion failure preserves succeeded artwork record for retry", async () => 
     assert.equal(stored.fusion_path, undefined);
     assert.equal(stored.has_fusion, undefined);
     assert.equal(stored.diagnostics.reason, "fusion_unavailable");
+  });
+});
+
+test("fusion failure preserves artwork and environment image for retry", async () => {
+  await withTempStore(async (temp) => {
+    const storage = createStorage(temp);
+    const sourcePhotoPath = await writeSourcePhoto(temp);
+    let fusionAttempts = 0;
+    const manager = createJobManager({
+      config: { app: { image: { webpQuality: 82 } }, prompts: {}, questions: {} },
+      storage,
+      runner: async ({ outputPngPath, stage }) => {
+        if (stage === "fusion_render") {
+          fusionAttempts += 1;
+          throw new Error("fusion failed");
+        }
+        await fs.mkdir(path.dirname(outputPngPath), { recursive: true });
+        await fs.writeFile(outputPngPath, pngBuffer());
+        return { pngPath: outputPngPath, diagnostics: { reason: "artwork_success" } };
+      }
+    });
+
+    const { record } = await manager.createArtwork({
+      type: "painting",
+      answers: {},
+      sourcePhotoPath
+    });
+    const artworkPath = record.artwork_path;
+    await manager.createFusion({ recordId: record.id });
+    const stored = await storage.getRecord(record.id);
+
+    assert.equal(fusionAttempts, 2);
+    assert.equal(stored.status, "succeeded");
+    assert.equal(stored.fusion_status, "failed");
+    assert.equal(stored.artwork_path, artworkPath);
+    assert.equal(stored.source_photo_path, `records/${record.id}/source-photo.webp`);
+    assert.equal(await fs.readFile(path.join(temp, stored.source_photo_path), "utf8"), "WEBP_SOURCE");
   });
 });
 
@@ -500,6 +728,7 @@ test("artwork generation retries once before recording failure", async () => {
 test("fusion generation retries once and preserves artwork", async () => {
   await withTempStore(async (temp) => {
     const storage = createStorage(temp);
+    const sourcePhotoPath = await writeSourcePhoto(temp);
     let fusionAttempts = 0;
     const manager = createJobManager({
       config: { app: { image: { webpQuality: 82 } }, prompts: {}, questions: {} },
@@ -518,7 +747,7 @@ test("fusion generation retries once and preserves artwork", async () => {
         return { pngPath: outputPngPath, diagnostics: { reason: `${stage}_success` } };
       }
     });
-    const { record } = await manager.createArtwork({ type: "painting", answers: {} });
+    const { record } = await manager.createArtwork({ type: "painting", answers: {}, sourcePhotoPath });
     await manager.waitForIdle();
     const artworkPath = record.artwork_path;
 

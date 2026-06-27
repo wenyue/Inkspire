@@ -1,5 +1,6 @@
 import { Camera, ImagePlus, RotateCcw, X } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
   isGenerationLimitError,
   isPhotoTooLargeError,
@@ -31,6 +32,12 @@ interface StudioDraft {
   photoStepComplete?: boolean;
 }
 
+type StudioStepQuery =
+  | { step: "work_type" }
+  | { step: "question"; index: number }
+  | { step: "photo" }
+  | { step: "notes" };
+
 interface StudioProps {
   config: PublicConfig;
   locale: Locale;
@@ -42,6 +49,8 @@ interface StudioProps {
     conversationNotes: string;
     source_photo_path?: string;
     recommended_artwork_size?: GenerationRecord["recommended_artwork_size"];
+    origin_tab?: "studio";
+    operation?: "create";
   }) => Promise<void>;
   activeJobs?: GenerationJob[];
   resultSlot: React.ReactNode;
@@ -194,6 +203,47 @@ function answersFromRecord(record: GenerationRecord, fallback: Answers): Answers
   };
 }
 
+function studioStepUrlForState(config: PublicConfig, answers: Answers, photoStepComplete: boolean): string {
+  if (!answers.work_type) {
+    return "/studio?step=work_type";
+  }
+  const currentQuestion = nextQuestion(config, answers);
+  if (currentQuestion) {
+    const branchQuestions = questionsForAnswers(config, answers);
+    const questionIndex = Math.max(0, branchQuestions.findIndex((item) => item.id === currentQuestion.id));
+    return `/studio?step=question&index=${questionIndex}`;
+  }
+  return photoStepComplete ? "/studio?step=notes" : "/studio?step=photo";
+}
+
+function readStudioStepQuery(search: string): StudioStepQuery | null {
+  const params = new URLSearchParams(search);
+  const step = params.get("step");
+  if (step === "work_type" || step === "photo" || step === "notes") {
+    return { step };
+  }
+  if (step === "question") {
+    const index = Number(params.get("index") ?? "0");
+    return { step, index: Number.isFinite(index) && index >= 0 ? Math.floor(index) : 0 };
+  }
+  return null;
+}
+
+function trimAnswersForStudioQuestion(config: PublicConfig, answers: Answers, index: number): Answers {
+  if (!answers.work_type) {
+    return answers;
+  }
+  const branchQuestions = questionsForAnswers(config, answers);
+  const keepIds = new Set(["work_type", ...branchQuestions.slice(0, index).map((item) => item.id)]);
+  const nextAnswers = { ...answers };
+  for (const question of branchQuestions) {
+    if (!keepIds.has(question.id)) {
+      delete nextAnswers[question.id];
+    }
+  }
+  return nextAnswers;
+}
+
 export function getProgressLabel(config: PublicConfig, answers: Answers, locale: Locale): string {
   const workType = answers.work_type;
   if (!workType) {
@@ -223,6 +273,8 @@ export default function Studio({
   onStartOver,
   studioResetRequest = 0
 }: StudioProps) {
+  const location = useLocation();
+  const navigate = useNavigate();
   const [answers, setAnswers] = useState<Answers>(() => readStudioDraft().answers ?? {});
   const [conversationNotes, setConversationNotes] = useState(() => readStudioDraft().conversationNotes ?? "");
   const [sourcePhotoPath, setSourcePhotoPath] = useState(() => readStudioDraft().sourcePhotoPath ?? "");
@@ -242,8 +294,6 @@ export default function Studio({
   const notesRef = useRef<HTMLTextAreaElement | null>(null);
   const pendingPhotoSelection = useRef<{ file: File; input: HTMLInputElement } | null>(null);
   const pendingPhotoTimer = useRef<number | null>(null);
-  const studioBackGuardActive = useRef(false);
-  const studioBackActionAvailable = useRef(false);
 
   const question = useMemo(() => {
     if (!answers.work_type) {
@@ -259,7 +309,8 @@ export default function Studio({
   const showConversationStep = complete && photoStepComplete;
   const showCreationPanel = !hasResult || notesFocusRequest > 0;
   const isIteratingResult = showConversationStep && notesFocusRequest > 0;
-  const generationLimitReached = activeJobs.length >= 2;
+  const studioActiveJobs = activeJobs.filter((job) => (job.origin_tab ?? "studio") === "studio");
+  const generationLimitReached = studioActiveJobs.length > 0;
   const generationSummary = sourcePhotoPath
     ? t("studio.generationSummaryWithPreview")
     : t("studio.generationSummaryArtwork");
@@ -341,12 +392,37 @@ export default function Studio({
     setTextQuestionDraft("");
   }, [answers, question?.id, question?.input_type]);
 
+  useEffect(() => {
+    const studioStep = readStudioStepQuery(location.search);
+    if (!studioStep) {
+      return;
+    }
+    setError("");
+    if (studioStep.step === "work_type") {
+      setAnswers({});
+      setPhotoStepComplete(false);
+      return;
+    }
+    if (studioStep.step === "question") {
+      setAnswers((current) => trimAnswersForStudioQuestion(config, current, studioStep.index));
+      setPhotoStepComplete(false);
+      return;
+    }
+    if (studioStep.step === "photo") {
+      setPhotoStepComplete(false);
+      return;
+    }
+    setPhotoStepComplete(true);
+  }, [config, location.search]);
+
   const answerQuestion = (option: string) => {
     if (!question) {
       return;
     }
     const value = optionValueForQuestion(question, option, locale);
-    setAnswers((current) => ({ ...current, [question.id]: value }));
+    const nextAnswers = { ...answers, [question.id]: value };
+    setAnswers(nextAnswers);
+    navigate(studioStepUrlForState(config, nextAnswers, false));
   };
 
   const answerTextQuestion = () => {
@@ -357,10 +433,12 @@ export default function Studio({
     if (!value) {
       return;
     }
-    setAnswers((current) => ({ ...current, [question.id]: value }));
+    const nextAnswers = { ...answers, [question.id]: value };
+    setAnswers(nextAnswers);
+    navigate(studioStepUrlForState(config, nextAnswers, false));
   };
 
-  const goToPreviousStudioStep = useCallback(() => {
+  const goToPreviousStudioStep = () => {
     if (photoStepComplete) {
       setPhotoStepComplete(false);
       setError("");
@@ -377,44 +455,16 @@ export default function Studio({
       return nextAnswers;
     });
     setError("");
-  }, [config, photoStepComplete]);
+  };
 
   const goBack = () => {
-    if (typeof window !== "undefined" && studioBackGuardActive.current) {
+    if (readStudioStepQuery(location.search) && typeof window !== "undefined") {
+      goToPreviousStudioStep();
       window.history.back();
       return;
     }
     goToPreviousStudioStep();
   };
-
-  const canUseStudioBackAction = showCreationPanel && canGoBack;
-
-  useEffect(() => {
-    studioBackActionAvailable.current = canUseStudioBackAction;
-    if (!canUseStudioBackAction) {
-      studioBackGuardActive.current = false;
-    }
-  }, [canUseStudioBackAction]);
-
-  useEffect(() => {
-    if (typeof window === "undefined" || !canUseStudioBackAction || studioBackGuardActive.current) {
-      return;
-    }
-    window.history.pushState(window.history.state, "", window.location.href);
-    studioBackGuardActive.current = true;
-  }, [answers, canUseStudioBackAction, photoStepComplete]);
-
-  useEffect(() => {
-    const onPopState = () => {
-      if (!studioBackActionAvailable.current || !studioBackGuardActive.current) {
-        return;
-      }
-      studioBackGuardActive.current = false;
-      goToPreviousStudioStep();
-    };
-    window.addEventListener("popstate", onPopState);
-    return () => window.removeEventListener("popstate", onPopState);
-  }, [goToPreviousStudioStep]);
 
   useEffect(() => () => {
     if (pendingPhotoTimer.current !== null && typeof window !== "undefined") {
@@ -491,6 +541,7 @@ export default function Studio({
   const skipPhotoStep = () => {
     setPhotoStepComplete(true);
     setError("");
+    navigate(studioStepUrlForState(config, answers, true));
   };
 
   const continueFromPhotoStep = () => {
@@ -499,6 +550,7 @@ export default function Studio({
     }
     setPhotoStepComplete(true);
     setError("");
+    navigate(studioStepUrlForState(config, answers, true));
   };
 
   const resetStudioDraft = () => {
@@ -515,6 +567,9 @@ export default function Studio({
     if (!type) {
       return;
     }
+    if (readStudioStepQuery(location.search)) {
+      navigate("/studio", { replace: true });
+    }
     setIsSubmittingGeneration(true);
     setError("");
     try {
@@ -523,7 +578,9 @@ export default function Studio({
         answers,
         conversationNotes: note || conversationNotes,
         source_photo_path: sourcePhotoPath,
-        recommended_artwork_size: recommendedArtworkSize ?? null
+        recommended_artwork_size: recommendedArtworkSize ?? null,
+        origin_tab: "studio",
+        operation: "create"
       });
     } catch (caught) {
       setError(isGenerationLimitError(caught) ? t("studio.generationLimit") : t("errors.generic"));
@@ -780,10 +837,10 @@ export default function Studio({
         </>
       ) : null}
 
-      {activeJobs.length > 0 ? (
+      {studioActiveJobs.length > 0 ? (
         <p className="status-line generation-status" role="status">
           {generationLimitReached ? t("studio.generationLimit") : t("studio.generatingWait")}
-          <span>{activeJobs.map((job) => generationJobLabel(job, locale)).join(" · ")}</span>
+          <span>{studioActiveJobs.map((job) => generationJobLabel(job, locale)).join(" · ")}</span>
         </p>
       ) : null}
       {error ? <p className="error-line">{error}</p> : null}

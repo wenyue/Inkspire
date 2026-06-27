@@ -7,6 +7,9 @@ import questions from "../../config/questions.json";
 import type { Answers, Locale, QuestionConfig, WorkType } from "./domain";
 import type { Dictionaries } from "./i18n";
 
+export type OriginTab = "studio" | "library" | "experts";
+export type GenerationOperation = "create" | "adjust";
+
 export interface ExpertService {
   id: string;
   name: Record<string, string>;
@@ -80,6 +83,8 @@ export interface GenerationJob {
   user_id?: string;
   recordId: string;
   stage: "artwork" | "fusion_render";
+  origin_tab?: OriginTab;
+  operation?: GenerationOperation;
   type?: WorkType;
   title?: string;
   status: "queued" | "running" | "succeeded" | "failed";
@@ -154,7 +159,10 @@ export function isGenerationLimitError(error: unknown): error is ApiError {
     && typeof error.payload === "object"
     && error.payload !== null
     && "code" in error.payload
-    && error.payload.code === "user_generation_limit_reached";
+    && (
+      error.payload.code === "user_generation_limit_reached"
+      || error.payload.code === "tab_generation_limit_reached"
+    );
 }
 
 export function isPhotoTooLargeError(error: unknown): error is ApiError {
@@ -230,6 +238,8 @@ export async function createGeneration(payload: {
   conversationNotes: string;
   source_photo_path?: string;
   recommended_artwork_size?: ArtworkSize | null;
+  origin_tab?: OriginTab;
+  operation?: GenerationOperation;
 }): Promise<GenerationStartResult> {
   return requestJson("/api/generations", {
     method: "POST",
@@ -239,16 +249,23 @@ export async function createGeneration(payload: {
       answers: payload.answers,
       conversationNotes: payload.conversationNotes,
       source_photo_path: payload.source_photo_path ?? "",
-      recommended_artwork_size: payload.recommended_artwork_size ?? null
+      recommended_artwork_size: payload.recommended_artwork_size ?? null,
+      origin_tab: payload.origin_tab ?? "studio",
+      operation: payload.operation ?? "create"
     })
   });
 }
 
-export async function createFusion(recordId: string, sourcePhotoPath = ""): Promise<GenerationStartResult> {
+export async function createFusion(
+  recordId: string,
+  sourcePhotoPath = "",
+  origin_tab: OriginTab = "studio",
+  operation: GenerationOperation = "create"
+): Promise<GenerationStartResult> {
   return requestJson(`/api/records/${recordId}/fusion`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ source_photo_path: sourcePhotoPath })
+    body: JSON.stringify({ source_photo_path: sourcePhotoPath, origin_tab, operation })
   });
 }
 

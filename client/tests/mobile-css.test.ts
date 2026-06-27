@@ -68,4 +68,8 @@ describe("mobile touch targets", () => {
     expect(blockFor(".copy-toast")).toContain("bottom: 24px");
     expect(blockFor(".copy-toast")).toContain("pointer-events: none");
   });
+
+  it("shows complete result artwork and preview images without cropping", () => {
+    expect(blockFor(".result-grid img,\n.image-placeholder")).toContain("object-fit: contain");
+  });
 });

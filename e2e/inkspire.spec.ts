@@ -22,7 +22,7 @@ async function completePaintingFlow(page) {
 async function addPhotoAndContinue(page, entry: "album" | "camera" = "album") {
   const inputLabel = entry === "camera" ? "拍照" : "相册";
   await page.getByLabel(inputLabel).setInputFiles(samplePng);
-  await expect(page.getByText("已提供环境图，将用于生成效果图。")).toBeVisible();
+  await expect(page.getByText("已提供环境图片，将用于生成效果图。")).toBeVisible();
   await page.getByRole("button", { name: "继续" }).click();
   await expect(page.getByRole("button", { name: "生成", exact: true })).toBeVisible();
 }

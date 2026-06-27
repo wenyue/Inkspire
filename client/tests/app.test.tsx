@@ -194,7 +194,7 @@ async function completePaintingWithoutPhoto(user: TestUser): Promise<void> {
 async function completePaintingWithPhoto(user: TestUser, file = new File(["sample"], "sample.png", { type: "image/png" })): Promise<void> {
   await completePaintingQuestions(user);
   await user.upload(screen.getByLabelText("相册"), file);
-  await screen.findByText("已提供环境图，将用于生成效果图。");
+  await screen.findByText("已提供环境图片，将用于生成效果图。");
   await user.click(screen.getByRole("button", { name: "继续" }));
 }
 
@@ -205,6 +205,9 @@ describe("App", () => {
   let configResponse = publicConfig;
   let libraryRecords: unknown[] = [];
   let activeJobsResponse: unknown[] = [];
+  let queuedGenerationJob: unknown | null = null;
+  let jobResponses: Record<string, unknown> = {};
+  let recordOneSourcePhotoPath = "";
 
   beforeEach(() => {
     failLateFusion = false;
@@ -213,6 +216,9 @@ describe("App", () => {
     configResponse = publicConfig;
     libraryRecords = [];
     activeJobsResponse = [];
+    queuedGenerationJob = null;
+    jobResponses = {};
+    recordOneSourcePhotoPath = "";
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       if (url.endsWith("/api/config/public")) {
@@ -223,6 +229,10 @@ describe("App", () => {
       }
       if (url.endsWith("/api/jobs/active")) {
         return Response.json({ jobs: activeJobsResponse });
+      }
+      const jobMatch = url.match(/\/api\/jobs\/([^/?]+)$/);
+      if (jobMatch) {
+        return Response.json(jobResponses[decodeURIComponent(jobMatch[1])] ?? {});
       }
       if (url.endsWith("/api/uploads/photo")) {
         if (failUploadTooLarge) {
@@ -235,6 +245,9 @@ describe("App", () => {
       }
       if (url.endsWith("/api/generations")) {
         const body = init?.body ? JSON.parse(String(init.body)) : {};
+        if (queuedGenerationJob) {
+          return Response.json({ job: queuedGenerationJob }, { status: 201 });
+        }
         if (body.conversationNotes === "fail") {
           return Response.json({
             record: {
@@ -264,13 +277,13 @@ describe("App", () => {
             type: "painting",
             artwork_path: "records/record-1/artwork.webp",
             fusion_path: "",
-            source_photo_path: "records/upload-1/source-photo.webp",
+            source_photo_path: body.source_photo_path ? "records/record-1/source-photo.webp" : "",
             recommended_artwork_size: {
               preset_id: "square_scene",
               label: "方形点景",
               width_cm: 50,
               height_cm: 50,
-              reason: "根据场景图比例推算，适合作为方形点景作品。"
+              reason: "根据环境图片比例推算，适合作为方形点景作品。"
             },
             status: "succeeded"
           }
@@ -349,7 +362,7 @@ describe("App", () => {
           answers: { painting_subject: "山水" },
           artwork_path: "records/record-1/artwork.webp",
           fusion_path: "",
-          source_photo_path: "",
+          source_photo_path: recordOneSourcePhotoPath,
           status: "succeeded",
           favorite: true
         });
@@ -417,12 +430,14 @@ describe("App", () => {
     expect(styles).toMatch(/\.language-select\s*{[^}]*margin-left:\s*auto/s);
   });
 
-  it("restores active generation status from the server", async () => {
+  it("restores an active job as the Studio loading page from the server", async () => {
     activeJobsResponse = [
       {
         id: "job-active",
         recordId: "record-1",
         stage: "artwork",
+        origin_tab: "studio",
+        operation: "create",
         title: "山水",
         status: "running"
       }
@@ -430,15 +445,16 @@ describe("App", () => {
 
     renderApp();
 
-    expect(await screen.findByText("墨色正在铺开，可能需要 2-3 分钟，请耐心等待。")).toBeInTheDocument();
-    expect(screen.getByText("山水 作品图")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "艺术家正在构思" })).toBeInTheDocument();
+    expect(screen.getByText("通常约 30 秒，请稍候。")).toBeInTheDocument();
+    expect(screen.queryByText("山水 作品图")).not.toBeInTheDocument();
   });
 
-  it("disables generation when the restored active job list already has two tasks", async () => {
+  it("keeps Studio generation available when other tabs have active jobs", async () => {
     const user = userEvent.setup();
     activeJobsResponse = [
-      { id: "job-a", recordId: "record-a", stage: "artwork", title: "山水", status: "running" },
-      { id: "job-b", recordId: "record-b", stage: "fusion_render", title: "花鸟", status: "queued" }
+      { id: "job-a", recordId: "record-a", stage: "artwork", origin_tab: "library", title: "山水", status: "running" },
+      { id: "job-b", recordId: "record-b", stage: "fusion_render", origin_tab: "experts", title: "花鸟", status: "queued" }
     ];
 
     renderApp();
@@ -446,9 +462,10 @@ describe("App", () => {
     await user.click(await screen.findByRole("button", { name: "国画" }));
     await user.click(screen.getByRole("button", { name: "山水" }));
 
-    expect(await screen.findByText("当前已有 2 个生成任务，请等其中一个完成后再开始。")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "不需要效果图，直接生成" })).toBeDisabled();
-    expect(screen.getByText("山水 作品图 · 花鸟 效果图")).toBeInTheDocument();
+    const skipPhoto = screen.getByRole("button", { name: "不需要效果图，直接生成" });
+    expect(skipPhoto).toBeEnabled();
+    expect(screen.queryByText("画案已有生成任务，请等它完成后再开始。")).not.toBeInTheDocument();
+    expect(screen.queryByText("山水 作品图 · 花鸟 效果图")).not.toBeInTheDocument();
   });
 
   it("does not show photo controls before the final photo step", async () => {
@@ -749,14 +766,14 @@ describe("App", () => {
 
     await completePaintingQuestions(user);
     await user.upload(screen.getByLabelText("相册"), new File(["sample"], "sample.png", { type: "image/png" }));
-    expect(await screen.findByText("已提供环境图，将用于生成效果图。")).toBeInTheDocument();
+    expect(await screen.findByText("已提供环境图片，将用于生成效果图。")).toBeInTheDocument();
 
     expect(screen.getByText("第 3 / 3 步")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "继续" }));
     await user.click(screen.getByRole("button", { name: "上一步" }));
 
     expect(screen.getByRole("heading", { name: "可选：添加摆放环境照片" })).toBeInTheDocument();
-    expect(screen.getByText("已提供环境图，将用于生成效果图。")).toBeInTheDocument();
+    expect(screen.getByText("已提供环境图片，将用于生成效果图。")).toBeInTheDocument();
   });
 
   it("moves to the previous studio step when the browser back action is used", async () => {
@@ -772,6 +789,36 @@ describe("App", () => {
 
     expect(await screen.findByRole("heading", { name: "可选：添加摆放环境照片" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "生成" })).not.toBeInTheDocument();
+  });
+
+  it("uses studio step URLs so browser back can move through multiple previous steps", async () => {
+    const user = userEvent.setup();
+    renderApp({ initialRoute: "/studio" });
+
+    await user.click(await screen.findByRole("button", { name: "国画" }));
+    expect(window.location.pathname).toBe("/studio");
+    expect(window.location.search).toBe("?step=question&index=0");
+
+    await user.click(screen.getByRole("button", { name: "山水" }));
+    expect(window.location.search).toBe("?step=photo");
+
+    await user.click(screen.getByRole("button", { name: "不需要效果图，直接生成" }));
+    expect(window.location.search).toBe("?step=notes");
+    expect(screen.getByRole("button", { name: "生成" })).toBeInTheDocument();
+
+    await act(async () => {
+      window.history.back();
+    });
+
+    expect(await screen.findByRole("heading", { name: "可选：添加摆放环境照片" })).toBeInTheDocument();
+    expect(window.location.search).toBe("?step=photo");
+
+    await act(async () => {
+      window.history.back();
+    });
+
+    expect(await screen.findByText("想画什么主题？")).toBeInTheDocument();
+    expect(window.location.search).toBe("?step=question&index=0");
   });
 
   it("keeps generation as the only submit action after questions complete", async () => {
@@ -796,11 +843,13 @@ describe("App", () => {
     expect(screen.getByText("将生成作品图和摆放效果图。")).toBeInTheDocument();
   });
 
-  it("restores active generation status from the server", async () => {
+  it("restores active job loading from the server with origin metadata", async () => {
     activeJobsResponse = [{
       id: "job-active-1",
       recordId: "record-1",
       stage: "artwork",
+      origin_tab: "studio",
+      operation: "create",
       type: "painting",
       title: "藏卷山水",
       status: "running"
@@ -808,15 +857,17 @@ describe("App", () => {
 
     renderApp();
 
-    expect(await screen.findByText("墨色正在铺开，可能需要 2-3 分钟，请耐心等待。")).toBeInTheDocument();
-    expect(screen.getByText("藏卷山水 作品图")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "艺术家正在构思" })).toBeInTheDocument();
+    expect(screen.queryByText("藏卷山水 作品图")).not.toBeInTheDocument();
   });
 
-  it("keeps active generation status when switching tabs", async () => {
+  it("keeps active job loading when switching tabs", async () => {
     activeJobsResponse = [{
       id: "job-active-1",
       recordId: "record-1",
       stage: "artwork",
+      origin_tab: "studio",
+      operation: "create",
       type: "painting",
       title: "藏卷山水",
       status: "queued"
@@ -824,18 +875,40 @@ describe("App", () => {
     const user = userEvent.setup();
     renderApp();
 
-    expect(await screen.findByText("墨色正在铺开，可能需要 2-3 分钟，请耐心等待。")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "艺术家正在构思" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "藏卷" }));
+    expect(await screen.findByText("藏卷还空着")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "画案" }));
 
-    expect(screen.getByText("藏卷山水 作品图")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "艺术家正在构思" })).toBeInTheDocument();
   });
 
-  it("shows the generation limit when two active jobs are already running", async () => {
+  it("clears a stale stored running loading session when active jobs restore empty", async () => {
+    window.localStorage.setItem("inkspire.generationSessions.v1", JSON.stringify({
+      studio: {
+        originTab: "studio",
+        operation: "create",
+        jobId: "job-stale",
+        resultRecordId: "record-stale",
+        startedAt: Date.now(),
+        status: "running",
+        payload: { type: "painting", answers: {}, conversationNotes: "" }
+      }
+    }));
+    activeJobsResponse = [];
+
+    renderApp();
+
+    expect(await screen.findByRole("button", { name: "国画" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "艺术家正在构思" })).not.toBeInTheDocument();
+  });
+
+  it("does not apply other tabs' active jobs to the Studio limit", async () => {
     activeJobsResponse = [{
       id: "job-active-1",
       recordId: "record-1",
       stage: "artwork",
+      origin_tab: "library",
       type: "painting",
       title: "山水",
       status: "running"
@@ -843,6 +916,7 @@ describe("App", () => {
       id: "job-active-2",
       recordId: "record-2",
       stage: "fusion_render",
+      origin_tab: "experts",
       type: "painting",
       title: "花鸟",
       status: "queued"
@@ -853,8 +927,8 @@ describe("App", () => {
     await user.click(await screen.findByRole("button", { name: "国画" }));
     await user.click(screen.getByRole("button", { name: "山水" }));
 
-    expect(screen.getByText("当前已有 2 个生成任务，请等其中一个完成后再开始。")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "不需要效果图，直接生成" })).toBeDisabled();
+    expect(screen.queryByText("画案已有生成任务，请等它完成后再开始。")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "不需要效果图，直接生成" })).toBeEnabled();
   });
 
   it("generates from empty notes with the primary generate button", async () => {
@@ -869,6 +943,116 @@ describe("App", () => {
     });
     expect(generationRequestBodies()[0].conversationNotes).toBe("");
     expect(generationRequestBodies()[0].source_photo_path).toBe("");
+  });
+
+  it("shows Studio create loading copy after starting a queued origin job", async () => {
+    queuedGenerationJob = {
+      id: "job-studio-create",
+      recordId: "record-1",
+      stage: "artwork",
+      origin_tab: "studio",
+      operation: "create",
+      status: "queued",
+    };
+    const user = userEvent.setup();
+    renderApp();
+
+    await completePaintingWithoutPhoto(user);
+    await user.click(screen.getByRole("button", { name: "生成" }));
+
+    expect(await screen.findByRole("heading", { name: "艺术家正在构思" })).toBeInTheDocument();
+    expect(screen.getByText("通常约 30 秒，请稍候。")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "生成" })).not.toBeInTheDocument();
+    expect(generationRequestBodies()[0].origin_tab).toBe("studio");
+    expect(generationRequestBodies()[0].operation).toBe("create");
+    expect(window.location.pathname).toBe("/studio");
+  });
+
+  it("keeps bottom tabs usable while Studio loading exists and restores loading when returning", async () => {
+    queuedGenerationJob = {
+      id: "job-studio-switch",
+      recordId: "record-1",
+      stage: "artwork",
+      origin_tab: "studio",
+      operation: "create",
+      status: "running",
+    };
+    const user = userEvent.setup();
+    renderApp();
+
+    await completePaintingWithoutPhoto(user);
+    await user.click(screen.getByRole("button", { name: "生成" }));
+    expect(await screen.findByRole("heading", { name: "艺术家正在构思" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "藏卷" }));
+
+    expect(await screen.findByText("藏卷还空着")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "画案" })).toHaveAttribute("aria-pressed", "false");
+
+    await user.click(screen.getByRole("button", { name: "画案" }));
+
+    expect(await screen.findByRole("heading", { name: "艺术家正在构思" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "画案" })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("opens the studio-origin result and clears loading when polling completes", async () => {
+    activeJobsResponse = [{
+      id: "job-origin-complete",
+      recordId: "record-1",
+      stage: "artwork",
+      origin_tab: "studio",
+      operation: "create",
+      status: "running",
+    }];
+    jobResponses = {
+      "job-origin-complete": {
+        id: "job-origin-complete",
+        recordId: "record-1",
+        stage: "artwork",
+        origin_tab: "studio",
+        operation: "create",
+        status: "succeeded"
+      }
+    };
+
+    renderApp();
+
+    expect(await screen.findByRole("heading", { name: "艺术家正在构思" })).toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(window.location.pathname).toBe("/records/record-1");
+      expect(window.location.search).toBe("?from=studio");
+    }, { timeout: 2500 });
+
+    expect(screen.queryByRole("heading", { name: "艺术家正在构思" })).not.toBeInTheDocument();
+  });
+
+  it("hides retry when a restored active job fails without retryable payload", async () => {
+    activeJobsResponse = [{
+      id: "job-origin-failed",
+      recordId: "record-1",
+      stage: "artwork",
+      origin_tab: "studio",
+      operation: "create",
+      status: "running"
+    }];
+    jobResponses = {
+      "job-origin-failed": {
+        id: "job-origin-failed",
+        recordId: "record-1",
+        stage: "artwork",
+        origin_tab: "studio",
+        operation: "create",
+        status: "failed",
+        error: "failed"
+      }
+    };
+
+    renderApp();
+
+    expect(await screen.findByRole("heading", { name: "生成没有完成" }, { timeout: 2500 })).toBeInTheDocument();
+    expect(screen.getByText("failed")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "重新尝试" })).not.toBeInTheDocument();
   });
 
   it("puts refinement suggestions into notes before generating", async () => {
@@ -916,7 +1100,7 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: "上一步" }));
 
     expect(screen.getByRole("heading", { name: "可选：添加摆放环境照片" })).toBeInTheDocument();
-    expect(screen.getByText("已提供环境图，将用于生成效果图。")).toBeInTheDocument();
+    expect(screen.getByText("已提供环境图片，将用于生成效果图。")).toBeInTheDocument();
   });
 
   it("shows when an optional photo is ready for fusion", async () => {
@@ -926,7 +1110,7 @@ describe("App", () => {
     await completePaintingQuestions(user);
     await user.upload(screen.getByLabelText("相册"), new File(["sample"], "sample.png", { type: "image/png" }));
 
-    expect(await screen.findByText("已提供环境图，将用于生成效果图。")).toBeInTheDocument();
+    expect(await screen.findByText("已提供环境图片，将用于生成效果图。")).toBeInTheDocument();
     expect(screen.getByRole("img", { name: "已选照片预览" })).toHaveAttribute("src", "blob:photo-preview");
     expect(screen.getByText("sample.png")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "移除照片" })).toBeInTheDocument();
@@ -956,11 +1140,11 @@ describe("App", () => {
 
     await completePaintingQuestions(user);
     await user.upload(screen.getByLabelText("相册"), new File(["sample"], "sample.png", { type: "image/png" }));
-    expect(await screen.findByText("已提供环境图，将用于生成效果图。")).toBeInTheDocument();
+    expect(await screen.findByText("已提供环境图片，将用于生成效果图。")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "移除照片" }));
 
-    expect(screen.queryByText("已提供环境图，将用于生成效果图。")).not.toBeInTheDocument();
+    expect(screen.queryByText("已提供环境图片，将用于生成效果图。")).not.toBeInTheDocument();
     expect(screen.getByLabelText("相册")).toBeInTheDocument();
   });
 
@@ -993,7 +1177,7 @@ describe("App", () => {
     await waitFor(() => {
       expect(fetch).toHaveBeenCalledWith("/api/uploads/photo", expect.objectContaining({ method: "POST" }));
     });
-    expect(await screen.findByText("已提供环境图，将用于生成效果图。")).toBeInTheDocument();
+    expect(await screen.findByText("已提供环境图片，将用于生成效果图。")).toBeInTheDocument();
     expect(screen.getByText("camera.png")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "继续" })).toBeInTheDocument();
   });
@@ -1017,7 +1201,7 @@ describe("App", () => {
     await waitFor(() => {
       expect(fetch).toHaveBeenCalledWith("/api/uploads/photo", expect.objectContaining({ method: "POST" }));
     });
-    expect(await screen.findByText("已提供环境图，将用于生成效果图。")).toBeInTheDocument();
+    expect(await screen.findByText("已提供环境图片，将用于生成效果图。")).toBeInTheDocument();
     expect(screen.getByText("camera-mobile.png")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "继续" })).toBeInTheDocument();
   });
@@ -1041,7 +1225,7 @@ describe("App", () => {
       .filter((request) => request.endsWith("/api/uploads/photo"));
 
     expect(uploadCalls).toHaveLength(1);
-    expect(await screen.findByText("已提供环境图，将用于生成效果图。")).toBeInTheDocument();
+    expect(await screen.findByText("已提供环境图片，将用于生成效果图。")).toBeInTheDocument();
     expect(screen.getByText("camera.png")).toBeInTheDocument();
   });
 
@@ -1164,7 +1348,7 @@ describe("App", () => {
     expect(screen.queryByRole("img", { name: "效果图" })).not.toBeInTheDocument();
 
     const photo = new File(["late sample"], "late.png", { type: "image/png" });
-    await user.upload(screen.getByLabelText("添加照片生成效果图"), photo);
+    await user.upload(screen.getByLabelText("添加环境照片生成效果图"), photo);
 
     await waitFor(() => {
       expect(fetch).toHaveBeenCalledWith("/api/uploads/photo", expect.objectContaining({ method: "POST" }));
@@ -1172,10 +1356,43 @@ describe("App", () => {
         "/api/records/record-1/fusion",
         expect.objectContaining({
           method: "POST",
-          body: JSON.stringify({ source_photo_path: "records/upload-1/source-photo.webp" })
+          body: JSON.stringify({
+            source_photo_path: "records/upload-1/source-photo.webp",
+            origin_tab: "studio",
+            operation: "adjust"
+          })
         })
       );
     });
+    expect(await screen.findByRole("img", { name: "效果图" })).toBeInTheDocument();
+  });
+
+  it("uses the saved environment image to generate a fusion render without another upload", async () => {
+    recordOneSourcePhotoPath = "records/record-1/source-photo.webp";
+    const user = userEvent.setup();
+    renderApp({ initialRoute: "/records/record-1?from=library" });
+
+    expect(await screen.findByRole("img", { name: "作品图" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "生成效果图" })).toBeInTheDocument();
+    expect(screen.queryByLabelText("添加环境照片生成效果图")).not.toBeInTheDocument();
+
+    vi.mocked(fetch).mockClear();
+    await user.click(screen.getByRole("button", { name: "生成效果图" }));
+
+    await waitFor(() => {
+      expect(fetch).toHaveBeenCalledWith(
+        "/api/records/record-1/fusion",
+        expect.objectContaining({
+          method: "POST",
+          body: JSON.stringify({
+            source_photo_path: "records/record-1/source-photo.webp",
+            origin_tab: "library",
+            operation: "adjust"
+          })
+        })
+      );
+    });
+    expect(vi.mocked(fetch).mock.calls.some(([input]) => String(input).endsWith("/api/uploads/photo"))).toBe(false);
     expect(await screen.findByRole("img", { name: "效果图" })).toBeInTheDocument();
   });
 
@@ -1193,7 +1410,7 @@ describe("App", () => {
     vi.mocked(fetch).mockClear();
 
     await user.upload(
-      screen.getByLabelText("添加照片生成效果图"),
+      screen.getByLabelText("添加环境照片生成效果图"),
       new File([new Uint8Array(1024 * 1024 + 1)], "late-large.png", { type: "image/png" })
     );
 
@@ -1208,7 +1425,7 @@ describe("App", () => {
 
     await completePaintingWithoutPhoto(user);
     await user.click(screen.getByRole("button", { name: "生成" }));
-    await user.upload(screen.getByLabelText("添加照片生成效果图"), new File(["sample"], "late.png", { type: "image/png" }));
+    await user.upload(screen.getByLabelText("添加环境照片生成效果图"), new File(["sample"], "late.png", { type: "image/png" }));
 
     expect(await screen.findByText("暂时无法完成，请稍后再试。")).toBeInTheDocument();
     expect(screen.queryByRole("img", { name: "效果图" })).not.toBeInTheDocument();
@@ -1221,7 +1438,7 @@ describe("App", () => {
 
     await completePaintingWithoutPhoto(user);
     await user.click(screen.getByRole("button", { name: "生成" }));
-    await user.upload(await screen.findByLabelText("添加照片生成效果图"), new File(["sample"], "late-large.png", { type: "image/png" }));
+    await user.upload(await screen.findByLabelText("添加环境照片生成效果图"), new File(["sample"], "late-large.png", { type: "image/png" }));
 
     expect(await screen.findByText("照片过大，请选择较小图片或先压缩。")).toBeInTheDocument();
     expect(screen.queryByText("暂时无法完成，请稍后再试。")).not.toBeInTheDocument();
@@ -1234,13 +1451,14 @@ describe("App", () => {
 
     await completePaintingWithoutPhoto(user);
     await user.click(screen.getByRole("button", { name: "生成" }));
-    await user.upload(screen.getByLabelText("添加照片生成效果图"), new File(["sample"], "late.png", { type: "image/png" }));
+    await user.upload(screen.getByLabelText("添加环境照片生成效果图"), new File(["sample"], "late.png", { type: "image/png" }));
 
     expect(await screen.findByText("暂时无法完成，请稍后再试。")).toBeInTheDocument();
     expect(screen.getByRole("img", { name: "作品图" })).toBeInTheDocument();
     expect(screen.queryByRole("img", { name: "效果图" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "制作作品" })).toBeInTheDocument();
-    expect(screen.getByLabelText("添加照片生成效果图")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "生成效果图" })).toBeInTheDocument();
+    expect(screen.queryByLabelText("添加环境照片生成效果图")).not.toBeInTheDocument();
     expect(screen.queryByText("生成未完成")).not.toBeInTheDocument();
   });
 
@@ -1275,10 +1493,6 @@ describe("App", () => {
     expect(await screen.findByRole("img", { name: "作品图" })).toBeInTheDocument();
 
     expect(screen.queryByRole("button", { name: "制作作品" })).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "雅匠" }));
-
-    const unavailableCta = await screen.findByRole("button", { name: "暂未开放制作咨询" });
-    expect(unavailableCta).toBeDisabled();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
@@ -1318,14 +1532,20 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: "生成" }));
     await user.click(await screen.findByRole("button", { name: "制作作品" }));
 
+    expect(screen.getAllByText("推荐")).toHaveLength(1);
+    expect(screen.getByText("慎选")).toBeInTheDocument();
     expect(await screen.findByRole("radio", { name: /第3级/ })).toHaveAttribute("aria-checked", "true");
-    expect(screen.getByText("参考总体布局，细节可自由发挥，提升艺术性。")).toBeInTheDocument();
-    expect(screen.queryByText("尽量贴近 AI 图的构图、色调和细节。")).not.toBeInTheDocument();
+    expect(screen.getByText("保留整体布局与气势，细节交由艺术家自由发挥与提升。")).toBeInTheDocument();
+    expect(screen.queryByText("几乎照搬 AI 图的构图与细节，艺术家发挥空间较小，不太推荐。")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("radio", { name: /第1级/ }));
+
+    expect(screen.getByText("几乎照搬 AI 图的构图与细节，艺术家发挥空间较小，不太推荐。")).toBeInTheDocument();
 
     await user.click(screen.getByRole("radio", { name: /第5级/ }));
 
-    expect(screen.getByText("AI 图只作灵感，主要交给艺术家判断。")).toBeInTheDocument();
-    expect(screen.queryByText("参考总体布局，细节可自由发挥，提升艺术性。")).not.toBeInTheDocument();
+    expect(screen.getByText("AI 图仅作灵感参考，画面主要交给艺术家自由发挥与创作。")).toBeInTheDocument();
+    expect(screen.queryByText("保留整体布局与气势，细节交由艺术家自由发挥与提升。")).not.toBeInTheDocument();
   });
 
   it("uses short visible labels for artist reference choices on mobile", async () => {
@@ -1394,7 +1614,7 @@ describe("App", () => {
     expect(screen.getByText(/电话：020-12345678/)).toBeInTheDocument();
     expect(screen.getByText(/微信：InkspireArt（点击拷贝）/)).toBeInTheDocument();
     expect(screen.getByText(/单号：ord-k8p4x2q9（点击拷贝）/)).toBeInTheDocument();
-    expect(screen.getByText("参考总体布局，细节可自由发挥，提升艺术性。")).toBeInTheDocument();
+    expect(screen.getByText("保留整体布局与气势，细节交由艺术家自由发挥与提升。")).toBeInTheDocument();
     expect(screen.queryByText("第3级 布局参考")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "调整尺寸" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "确认制作意向" })).not.toBeInTheDocument();
@@ -1485,7 +1705,7 @@ describe("App", () => {
     expect(screen.getByText(/Phone: 020-12345678/)).toBeInTheDocument();
     expect(screen.getByText(/WeChat: InkspireArt \(click to copy\)/)).toBeInTheDocument();
     expect(screen.getByText(/Order: ord-k8p4x2q9 \(click to copy\)/)).toBeInTheDocument();
-    expect(screen.getByText("Use the overall layout, while improving details freely.")).toBeInTheDocument();
+    expect(screen.getByText("Keeps the overall layout while artists refine the details freely.")).toBeInTheDocument();
     expect(screen.queryByText("Level 3 Layout")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Adjust" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Confirm production" })).not.toBeInTheDocument();
@@ -1548,6 +1768,12 @@ describe("App", () => {
     await user.type(screen.getByLabelText("调整这张作品"), "换成竖幅");
     await user.click(screen.getByRole("button", { name: "生成调整后的作品" }));
 
+    const adjustmentBodies = generationRequestBodies();
+    expect(adjustmentBodies[adjustmentBodies.length - 1]).toEqual(expect.objectContaining({
+      origin_tab: "library",
+      operation: "adjust",
+      conversationNotes: "换成竖幅"
+    }));
     expect(await screen.findByRole("img", { name: "作品图" })).toHaveAttribute(
       "src",
       "/api/records/record-2/images/artwork"
@@ -1577,6 +1803,42 @@ describe("App", () => {
 
     expect(screen.getByText("先定作品类型")).toBeInTheDocument();
     expect(screen.queryByRole("img", { name: "作品图" })).not.toBeInTheDocument();
+  });
+
+  it("shows library-owned adjustment loading when a saved result adjustment is queued", async () => {
+    queuedGenerationJob = {
+      id: "job-library-adjust",
+      recordId: "record-2",
+      stage: "artwork",
+      origin_tab: "library",
+      operation: "adjust",
+      status: "queued"
+    };
+    libraryRecords = [{
+      id: "record-1",
+      type: "painting",
+      title: "藏卷山水",
+      thumbnail_path: "records/record-1/artwork.webp",
+      artwork_path: "records/record-1/artwork.webp",
+      status: "succeeded",
+      favorite: true
+    }];
+    const user = userEvent.setup();
+    renderApp({ initialRoute: "/library" });
+
+    await user.click(await screen.findByRole("button", { name: /查看作品 藏卷山水/ }));
+    await user.click(await screen.findByRole("button", { name: "调整作品" }));
+    await user.type(screen.getByLabelText("调整这张作品"), "换成竖幅");
+    await user.click(screen.getByRole("button", { name: "生成调整后的作品" }));
+
+    expect(await screen.findByRole("heading", { name: "艺术家正在理解原作" })).toBeInTheDocument();
+    expect(screen.getByText("通常约 30 秒，请稍候。")).toBeInTheDocument();
+    const adjustmentBodies = generationRequestBodies();
+    expect(adjustmentBodies[adjustmentBodies.length - 1]).toEqual(expect.objectContaining({
+      origin_tab: "library",
+      operation: "adjust"
+    }));
+    expect(window.location.pathname).toBe("/library");
   });
 
   it("returns to the result when leaving the adjust page via back", async () => {
@@ -1650,7 +1912,6 @@ describe("App", () => {
     expect(screen.getByText("专家定制")).toBeInTheDocument();
     expect(screen.getByText("专家指导")).toBeInTheDocument();
     expect(screen.getByText("装裱与落地咨询")).toBeInTheDocument();
-    expect(screen.getByText("价格按需求评估")).toBeInTheDocument();
     expect(screen.getByText("中国书法家协会会员")).toBeInTheDocument();
     expect(screen.getByText("中山大学中国美学博士")).toBeInTheDocument();
     expect(screen.getByText("风格样张")).toBeInTheDocument();
@@ -1660,38 +1921,6 @@ describe("App", () => {
       "画"
     ]);
     expect(screen.queryByText("联系方式待确认")).not.toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "去生成作品" }));
-
-    expect(screen.getByText("先定作品类型")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "画案" })).toHaveAttribute("aria-pressed", "true");
-  });
-
-  it("lets users consult artisans with the current generated artwork", async () => {
-    const user = userEvent.setup();
-    renderApp();
-
-    await completePaintingWithoutPhoto(user);
-    await user.click(screen.getByRole("button", { name: "生成" }));
-    expect(await screen.findByRole("img", { name: "作品图" })).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "雅匠" }));
-    const currentWork = screen.getByText("当前作品");
-    expect(currentWork).toBeInTheDocument();
-    expect(screen.getByRole("img", { name: "当前作品预览" })).toHaveAttribute(
-      "src",
-      "/api/records/record-1/images/artwork"
-    );
-    expect(
-      currentWork.compareDocumentPosition(screen.getByText("可咨询方向")) & Node.DOCUMENT_POSITION_FOLLOWING
-    ).toBeTruthy();
-    await user.click(screen.getByRole("button", { name: "用当前作品咨询雅匠" }));
-
-    expect(screen.getByRole("img", { name: "作品图" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "制作作品" })).toBeInTheDocument();
-    expect(window.location.pathname).toBe("/records/record-1/production");
-    expect(window.location.search).toBe("?from=experts");
-    expect(screen.getByRole("button", { name: "雅匠" })).toHaveAttribute("aria-pressed", "true");
   });
 
   it("opens a saved library item as the current result", async () => {
@@ -1712,7 +1941,7 @@ describe("App", () => {
       "/api/records/record-1/images/artwork"
     );
     expect(screen.getByRole("button", { name: "制作作品" })).toBeInTheDocument();
-    expect(screen.getByLabelText("添加照片生成效果图")).toBeInTheDocument();
+    expect(screen.getByLabelText("添加环境照片生成效果图")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "藏卷" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("button", { name: "画案" })).toHaveAttribute("aria-pressed", "false");
   });
@@ -1773,6 +2002,31 @@ describe("App", () => {
     expect(screen.queryByRole("img", { name: "作品图" })).not.toBeInTheDocument();
   });
 
+  it("returns to the library grid via the in-app back button on a library-opened record", async () => {
+    libraryRecords = [{
+      id: "record-1",
+      type: "painting",
+      title: "藏卷山水",
+      thumbnail_path: "records/record-1/artwork.webp",
+      artwork_path: "records/record-1/artwork.webp",
+      status: "succeeded",
+      favorite: true
+    }];
+    const user = userEvent.setup();
+    renderApp({ initialRoute: "/library" });
+
+    await user.click(await screen.findByRole("button", { name: /查看作品 藏卷山水/ }));
+    expect(await screen.findByRole("img", { name: "作品图" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "返回藏卷" }));
+
+    await waitFor(() => {
+      expect(window.location.pathname).toBe("/library");
+    });
+    expect(screen.getByRole("button", { name: /查看作品 藏卷山水/ })).toBeInTheDocument();
+    expect(screen.queryByRole("img", { name: "作品图" })).not.toBeInTheDocument();
+  });
+
   it("navigates to a studio record URL after generation", async () => {
     const user = userEvent.setup();
     renderApp({ initialRoute: "/studio" });
@@ -1783,6 +2037,7 @@ describe("App", () => {
     expect(await screen.findByRole("img", { name: "作品图" })).toBeInTheDocument();
     expect(window.location.pathname).toBe("/records/record-1");
     expect(window.location.search).toBe("?from=studio");
+    expect(screen.queryByRole("button", { name: "返回藏卷" })).not.toBeInTheDocument();
   });
 
   it("keeps browser back inside the studio tab after generation", async () => {
@@ -1796,6 +2051,40 @@ describe("App", () => {
     await act(async () => {
       window.history.back();
     });
+
+    expect(await screen.findByText("确定要退出制作作品吗？")).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "作品图" })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(window.location.pathname).toBe("/records/record-1");
+    });
+
+    await user.click(screen.getByRole("button", { name: "确定返回" }));
+
+    await waitFor(() => {
+      expect(window.location.pathname).toBe("/studio");
+    });
+    expect(screen.getByText("先定作品类型")).toBeInTheDocument();
+    expect(screen.queryByRole("img", { name: "作品图" })).not.toBeInTheDocument();
+  });
+
+  it("confirms before leaving a studio result via the in-app back button", async () => {
+    const user = userEvent.setup();
+    renderApp({ initialRoute: "/studio" });
+
+    await completePaintingWithoutPhoto(user);
+    await user.click(screen.getByRole("button", { name: "生成" }));
+    expect(await screen.findByRole("img", { name: "作品图" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "返回画案" }));
+    expect(screen.getByText("确定要退出制作作品吗？")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "继续查看" }));
+    expect(screen.queryByText("确定要退出制作作品吗？")).not.toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "作品图" })).toBeInTheDocument();
+    expect(window.location.pathname).toBe("/records/record-1");
+
+    await user.click(screen.getByRole("button", { name: "返回画案" }));
+    await user.click(screen.getByRole("button", { name: "确定返回" }));
 
     await waitFor(() => {
       expect(window.location.pathname).toBe("/studio");

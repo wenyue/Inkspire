@@ -165,10 +165,113 @@ test("POST /api/generations creates a job and eventually a record with artwork",
     assert.equal(record.status, "succeeded");
     assert.equal(response.body.record.type, "painting");
     assert.equal(response.body.record.favorite, true);
-    assert.equal(response.body.record.source_photo_path, upload.body.source_photo_path);
-    assert.match(response.body.record.artwork_path, /artwork\.webp$/);
-    assert.equal((await fs.readFile(path.join(temp, response.body.record.artwork_path))).subarray(0, 4).toString("ascii"), "RIFF");
+    assert.equal(record.source_photo_path, `records/${record.id}/source-photo.webp`);
+    assert.notEqual(record.source_photo_path, upload.body.source_photo_path);
+    assert.equal(
+      (await fs.readFile(path.join(temp, record.source_photo_path))).subarray(8, 12).toString("ascii"),
+      "WEBP"
+    );
+    assert.match(record.artwork_path, /artwork\.webp$/);
+    assert.equal((await fs.readFile(path.join(temp, record.artwork_path))).subarray(0, 4).toString("ascii"), "RIFF");
   });
+});
+
+test("generation route preserves origin tab and operation metadata", async () => {
+  const app = createApp({
+    projectRoot: root,
+    jobs: {
+      createArtwork: async (payload) => ({
+        job: {
+          id: "job-1",
+          recordId: "record-1",
+          stage: "artwork",
+          title: "山水",
+          status: "queued",
+          origin_tab: payload.originTab,
+          operation: payload.operation
+        }
+      }),
+      listActiveJobs: () => [],
+      getJob: () => null
+    }
+  });
+
+  const response = await request(app)
+    .post("/api/generations")
+    .send({
+      type: "painting",
+      answers: {},
+      origin_tab: "library",
+      operation: "adjust"
+    })
+    .expect(201);
+
+  assert.equal(response.body.job.origin_tab, "library");
+  assert.equal(response.body.job.operation, "adjust");
+});
+
+test("regenerate and fusion routes pass origin tab and operation metadata", async () => {
+  const calls = [];
+  const app = createApp({
+    projectRoot: root,
+    storage: {
+      getRecordForUser: async () => ({
+        id: "record-1",
+        type: "painting",
+        answers: { painting_subject: "山水" },
+        conversation_notes: "keep mist"
+      })
+    },
+    jobs: {
+      createArtwork: async (payload) => {
+        calls.push({ route: "regenerate", payload });
+        return {
+          job: {
+            id: "job-regenerate",
+            recordId: "record-1",
+            stage: "artwork",
+            status: "queued",
+            origin_tab: payload.originTab,
+            operation: payload.operation
+          }
+        };
+      },
+      createFusion: async (payload) => {
+        calls.push({ route: "fusion", payload });
+        return {
+          job: {
+            id: "job-fusion",
+            recordId: "record-1",
+            stage: "fusion",
+            status: "queued",
+            origin_tab: payload.originTab,
+            operation: payload.operation
+          }
+        };
+      },
+      listActiveJobs: () => [],
+      getJob: () => null
+    }
+  });
+
+  const regenerated = await request(app)
+    .post("/api/records/record-1/regenerate")
+    .send({ originTab: "library" })
+    .expect(201);
+  assert.equal(regenerated.body.job.origin_tab, "library");
+  assert.equal(regenerated.body.job.operation, "adjust");
+
+  const fused = await request(app)
+    .post("/api/records/record-1/fusion")
+    .send({ origin_tab: "library" })
+    .expect(201);
+  assert.equal(fused.body.job.origin_tab, "library");
+  assert.equal(fused.body.job.operation, "create");
+
+  assert.equal(calls[0].payload.originTab, "library");
+  assert.equal(calls[0].payload.operation, "adjust");
+  assert.equal(calls[1].payload.originTab, "library");
+  assert.equal(calls[1].payload.operation, "create");
 });
 
 test("POST /api/uploads/photo returns source_photo_path and inferred artwork size", async () => {
@@ -188,7 +291,7 @@ test("POST /api/uploads/photo returns source_photo_path and inferred artwork siz
       label: "方形点景",
       width_cm: 50,
       height_cm: 50,
-      reason: "根据场景图比例推算，适合作为方形点景作品。"
+      reason: "根据环境图片比例推算，适合作为方形点景作品。"
     });
     assert.equal((await fs.readFile(path.join(temp, response.body.source_photo_path))).subarray(8, 12).toString("ascii"), "WEBP");
   });
@@ -323,7 +426,7 @@ test("POST /api/records/:id/fusion can attach a source photo after artwork gener
       .send({ source_photo_path: upload.body.source_photo_path })
       .expect(201);
 
-    assert.equal(response.body.record.source_photo_path, upload.body.source_photo_path);
+    assert.equal(response.body.record.source_photo_path, `records/${created.body.record.id}/source-photo.webp`);
     assert.equal(response.body.record.status, "queued");
     await waitForJob(agent, response.body.job.id);
     const fused = await agent.get(`/api/records/${created.body.record.id}`).expect(200);
@@ -331,6 +434,69 @@ test("POST /api/records/:id/fusion can attach a source photo after artwork gener
     await agent
       .get(`/api/records/${created.body.record.id}/images/source`)
       .expect(200);
+  });
+});
+
+test("POST /api/records/:id/fusion reuses the record environment image when no path is sent", async () => {
+  let fusionSourcePhotoPath = "";
+  await withTempApp(async ({ app }) => {
+    const agent = request.agent(app);
+    const upload = await agent
+      .post("/api/uploads/photo")
+      .attach("photo", pngBuffer(130), { filename: "source.png", contentType: "image/png" })
+      .expect(201);
+    const created = await agent
+      .post("/api/generations")
+      .send({
+        type: "painting",
+        answers: { painting_subject: "山水" },
+        source_photo_path: upload.body.source_photo_path
+      })
+      .expect(201);
+    await waitForJob(agent, created.body.job.id);
+    const record = await agent.get(`/api/records/${created.body.record.id}`).expect(200);
+    const expectedSourcePhotoPath = `records/${created.body.record.id}/source-photo.webp`;
+    assert.equal(record.body.source_photo_path, expectedSourcePhotoPath);
+
+    const response = await agent
+      .post(`/api/records/${created.body.record.id}/fusion`)
+      .send({})
+      .expect(201);
+
+    assert.equal(response.body.record.source_photo_path, record.body.source_photo_path);
+    assert.equal(response.body.record.status, "queued");
+    await waitForJob(agent, response.body.job.id);
+    const fused = await agent.get(`/api/records/${created.body.record.id}`).expect(200);
+    assert.equal(fused.body.fusion_path, `records/${created.body.record.id}/fusion.webp`);
+    assert.equal(fused.body.has_fusion, true);
+    assert.equal(fusionSourcePhotoPath, expectedSourcePhotoPath);
+  }, {
+    runner: async ({ outputPngPath, stage, record }) => {
+      if (stage === "fusion_render") {
+        fusionSourcePhotoPath = record.source_photo_path;
+      }
+      await fs.mkdir(path.dirname(outputPngPath), { recursive: true });
+      await fs.writeFile(outputPngPath, pngBuffer());
+      return { pngPath: outputPngPath, diagnostics: { reason: "fake_runner" } };
+    }
+  });
+});
+
+test("POST /api/records/:id/fusion rejects records without an environment image", async () => {
+  await withTempApp(async ({ app }) => {
+    const agent = request.agent(app);
+    const created = await agent
+      .post("/api/generations")
+      .send({ type: "painting", answers: { painting_subject: "山水" } })
+      .expect(201);
+    await waitForJob(agent, created.body.job.id);
+
+    const response = await agent
+      .post(`/api/records/${created.body.record.id}/fusion`)
+      .send({})
+      .expect(400);
+
+    assert.equal(response.body.error, "Environment image is required");
   });
 });
 
@@ -373,25 +539,38 @@ test("library, records, and jobs are scoped to the browser cookie user", async (
   });
 });
 
-test("POST /api/generations returns active jobs when the user already has two generations", async () => {
+test("POST /api/generations scopes active jobs by origin tab", async () => {
   const releases = [];
   await withTempApp(async ({ app }) => {
     const agent = request.agent(app);
-    const first = await agent.post("/api/generations").send({ type: "painting", answers: {} }).expect(201);
-    const second = await agent.post("/api/generations").send({ type: "painting", answers: {} }).expect(201);
+    const studio = await agent
+      .post("/api/generations")
+      .send({ type: "painting", answers: {}, origin_tab: "studio" })
+      .expect(201);
 
-    const third = await agent.post("/api/generations").send({ type: "painting", answers: {} }).expect(429);
-    assert.equal(third.body.limitReached, true);
-    assert.equal(third.body.code, "user_generation_limit_reached");
-    assert.equal(third.body.activeJobs.length, 2);
+    const sameTab = await agent
+      .post("/api/generations")
+      .send({ type: "painting", answers: {}, origin_tab: "studio" })
+      .expect(429);
+    assert.equal(sameTab.body.limitReached, true);
+    assert.equal(sameTab.body.code, "tab_generation_limit_reached");
+    assert.equal(sameTab.body.origin_tab, "studio");
+    assert.equal(sameTab.body.activeJobs.length, 1);
+    assert.equal(sameTab.body.activeJobs[0].id, studio.body.job.id);
+
+    const library = await agent
+      .post("/api/generations")
+      .send({ type: "painting", answers: {}, origin_tab: "library" })
+      .expect(201);
+    assert.equal(library.body.job.origin_tab, "library");
 
     const active = await agent.get("/api/jobs/active").expect(200);
     assert.equal(active.body.jobs.length, 2);
 
     await waitUntil(() => releases.length === 2);
     for (const release of releases) release();
-    await waitForJob(agent, first.body.job.id);
-    await waitForJob(agent, second.body.job.id);
+    await waitForJob(agent, studio.body.job.id);
+    await waitForJob(agent, library.body.job.id);
   }, {
     runner: async ({ outputPngPath }) => {
       await new Promise((resolve) => {

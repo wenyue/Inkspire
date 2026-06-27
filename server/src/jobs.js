@@ -1,7 +1,9 @@
 const crypto = require("node:crypto");
+const fs = require("node:fs/promises");
 const path = require("node:path");
 const { convertPngToWebp } = require("./imagePipeline");
 const { buildArtworkPrompt, buildFusionPrompt } = require("./prompts");
+const { resolveRecordAssetPath, validateRecordAssetPath } = require("./storage");
 
 function newId(prefix) {
   return `${prefix}-${Date.now().toString(36)}-${crypto.randomBytes(4).toString("hex")}`;
@@ -21,8 +23,42 @@ function relativeRecordPath(recordId, fileName) {
   return path.join("records", recordId, fileName).replace(/\\/g, "/");
 }
 
+const VALID_ORIGIN_TABS = new Set(["studio", "library", "experts"]);
+const VALID_OPERATIONS = new Set(["create", "adjust"]);
+const SOURCE_PHOTO_FILES = new Set(["source-photo.webp"]);
+
 function diagnosticsFromError(error) {
   return error?.diagnostics || { reason: "runner_error" };
+}
+
+function badRequest(message) {
+  const error = new Error(message);
+  error.status = 400;
+  return error;
+}
+
+async function copySourcePhotoForRecord(storage, recordId, sourcePhotoPath = "") {
+  if (!sourcePhotoPath) {
+    return "";
+  }
+  const normalizedSourcePath = validateRecordAssetPath(sourcePhotoPath, SOURCE_PHOTO_FILES);
+  const ownedSourcePath = relativeRecordPath(recordId, "source-photo.webp");
+  if (normalizedSourcePath === ownedSourcePath) {
+    return ownedSourcePath;
+  }
+  const sourcePath = resolveRecordAssetPath(storage.dataDir, normalizedSourcePath, SOURCE_PHOTO_FILES);
+  const destinationPath = resolveRecordAssetPath(storage.dataDir, ownedSourcePath, SOURCE_PHOTO_FILES);
+  await fs.mkdir(path.dirname(destinationPath), { recursive: true });
+  await fs.copyFile(sourcePath, destinationPath);
+  return ownedSourcePath;
+}
+
+function requireEnvironmentImage(record, sourcePhotoPath = "") {
+  const nextSourcePhotoPath = sourcePhotoPath || record.source_photo_path || "";
+  if (!nextSourcePhotoPath) {
+    throw badRequest("Environment image is required");
+  }
+  return nextSourcePhotoPath;
 }
 
 function createJobManager({ config, storage, runner }) {
@@ -39,6 +75,18 @@ function createJobManager({ config, storage, runner }) {
 
   function normalizeUserId(userId = "") {
     return typeof userId === "string" ? userId : "";
+  }
+
+  function normalizeOriginTab(originTab = "studio") {
+    return VALID_ORIGIN_TABS.has(originTab) ? originTab : "studio";
+  }
+
+  function normalizeOperation(operation = "create") {
+    return VALID_OPERATIONS.has(operation) ? operation : "create";
+  }
+
+  function tabKey(userId, originTab) {
+    return `${normalizeUserId(userId)}:${normalizeOriginTab(originTab)}`;
   }
 
   function cloneJob(job) {
@@ -72,11 +120,12 @@ function createJobManager({ config, storage, runner }) {
     return total;
   }
 
-  function countActiveJobs(userId) {
+  function countActiveJobsForTab(userId, originTab) {
     const ownerId = normalizeUserId(userId);
+    const tab = normalizeOriginTab(originTab);
     return Math.max(
-      countJobs(ownerId, (job) => job.status === "queued" || job.status === "running"),
-      activeCounts.get(ownerId) || 0
+      countJobs(ownerId, (job) => job.origin_tab === tab && (job.status === "queued" || job.status === "running")),
+      activeCounts.get(tabKey(ownerId, tab)) || 0
     );
   }
 
@@ -88,6 +137,18 @@ function createJobManager({ config, storage, runner }) {
     const ownerId = normalizeUserId(userId);
     return Array.from(jobs.values())
       .filter((job) => (ownerId ? job.user_id === ownerId : !job.user_id) && (job.status === "queued" || job.status === "running"))
+      .map(cloneJob);
+  }
+
+  function listActiveJobsForTab(userId, originTab) {
+    const ownerId = normalizeUserId(userId);
+    const tab = normalizeOriginTab(originTab);
+    return Array.from(jobs.values())
+      .filter((job) => (
+        (ownerId ? job.user_id === ownerId : !job.user_id)
+        && job.origin_tab === tab
+        && (job.status === "queued" || job.status === "running")
+      ))
       .map(cloneJob);
   }
 
@@ -138,23 +199,29 @@ function createJobManager({ config, storage, runner }) {
     }, 0);
   }
 
-  function reserveActiveSlot(userId) {
+  function reserveActiveSlot(userId, originTab) {
     const ownerId = normalizeUserId(userId);
-    const activeJobs = countActiveJobs(ownerId);
-    if (activeJobs >= 2) {
-      return { limitReached: true, activeJobs: listActiveJobs(ownerId) };
+    const tab = normalizeOriginTab(originTab);
+    const activeJobs = countActiveJobsForTab(ownerId, tab);
+    if (activeJobs >= 1) {
+      return {
+        limitReached: true,
+        activeJobs: listActiveJobsForTab(ownerId, tab),
+        originTab: tab
+      };
     }
-    activeCounts.set(ownerId, activeJobs + 1);
-    return { limitReached: false, ownerId };
+    activeCounts.set(tabKey(ownerId, tab), activeJobs + 1);
+    return { limitReached: false, ownerId, originTab: tab };
   }
 
-  function releaseActiveSlot(userId) {
+  function releaseActiveSlot(userId, originTab) {
     const ownerId = normalizeUserId(userId);
-    const next = (activeCounts.get(ownerId) || 0) - 1;
+    const key = tabKey(ownerId, originTab);
+    const next = (activeCounts.get(key) || 0) - 1;
     if (next > 0) {
-      activeCounts.set(ownerId, next);
+      activeCounts.set(key, next);
     } else {
-      activeCounts.delete(ownerId);
+      activeCounts.delete(key);
     }
   }
 
@@ -190,6 +257,8 @@ function createJobManager({ config, storage, runner }) {
 
   function createLegacyJob(stage, recordId = "", fields = {}) {
     const createdAt = new Date().toISOString();
+    const originTab = normalizeOriginTab(fields.originTab);
+    const operation = normalizeOperation(fields.operation);
     const job = {
       id: newId("job"),
       user_id: "",
@@ -197,6 +266,8 @@ function createJobManager({ config, storage, runner }) {
       stage,
       type: fields.type || "",
       title: fields.title || "",
+      origin_tab: originTab,
+      operation,
       status: "queued",
       created_at: createdAt,
       started_at: null,
@@ -254,6 +325,7 @@ function createJobManager({ config, storage, runner }) {
       const pngPath = path.join(storage.dataDir, "records", recordId, "artwork.png");
       const createdAt = new Date().toISOString();
       const title = titleFromRequest(type, answers);
+      const ownedSourcePhotoPath = await copySourcePhotoForRecord(storage, recordId, sourcePhotoPath);
       const job = createLegacyJob("artwork", recordId, { type, title });
       const record = {
         id: recordId,
@@ -263,7 +335,7 @@ function createJobManager({ config, storage, runner }) {
         title,
         answers,
         conversation_notes: conversationNotes,
-        source_photo_path: sourcePhotoPath,
+        source_photo_path: ownedSourcePhotoPath,
         recommended_artwork_size: recommendedArtworkSize,
         artwork_path: artworkPath,
         favorite: true,
@@ -313,6 +385,8 @@ function createJobManager({ config, storage, runner }) {
         ? storage.getRecordForUser.bind(storage)
         : storage.getRecord.bind(storage);
       const record = await getRecord(recordId, ownerId);
+      const requestedSourcePhotoPath = requireEnvironmentImage(record, sourcePhotoPath);
+      const ownedSourcePhotoPath = await copySourcePhotoForRecord(storage, recordId, requestedSourcePhotoPath);
       const fusionPath = relativeRecordPath(recordId, "fusion.webp");
       const pngPath = path.join(storage.dataDir, "records", recordId, "fusion.png");
       const job = createLegacyJob("fusion_render", recordId, {
@@ -323,9 +397,7 @@ function createJobManager({ config, storage, runner }) {
       job.status = "running";
       job.started_at = new Date().toISOString();
       record.status = "running";
-      if (sourcePhotoPath) {
-        record.source_photo_path = sourcePhotoPath;
-      }
+      record.source_photo_path = ownedSourcePhotoPath;
       await saveRecordSerial(record, ownerId);
 
       try {
@@ -443,7 +515,7 @@ function createJobManager({ config, storage, runner }) {
       task.job.diagnostics = task.record.diagnostics;
       task.job.completed_at = new Date().toISOString();
       releaseRunningSlot(task.userId);
-      releaseActiveSlot(task.userId);
+      releaseActiveSlot(task.userId, task.originTab);
       flushWaiters();
       scheduleQueue();
     }
@@ -455,9 +527,13 @@ function createJobManager({ config, storage, runner }) {
     answers = {},
     conversationNotes = "",
     sourcePhotoPath = "",
-    recommendedArtworkSize = null
+    recommendedArtworkSize = null,
+    originTab = "studio",
+    operation = "create"
   }) {
     const ownerId = normalizeUserId(userId);
+    const normalizedOriginTab = normalizeOriginTab(originTab);
+    const normalizedOperation = normalizeOperation(operation);
     if (!ownerId) {
       return runImmediateArtwork({
         userId: ownerId,
@@ -468,11 +544,12 @@ function createJobManager({ config, storage, runner }) {
         recommendedArtworkSize
       });
     }
-    const reservation = reserveActiveSlot(ownerId);
+    const reservation = reserveActiveSlot(ownerId, normalizedOriginTab);
     if (reservation.limitReached) {
       return {
         limitReached: true,
-        code: "user_generation_limit_reached",
+        code: "tab_generation_limit_reached",
+        origin_tab: reservation.originTab,
         activeJobs: reservation.activeJobs
       };
     }
@@ -480,6 +557,13 @@ function createJobManager({ config, storage, runner }) {
     const recordId = newId("record");
     const createdAt = new Date().toISOString();
     const artworkPath = relativeRecordPath(recordId, "artwork.webp");
+    let ownedSourcePhotoPath;
+    try {
+      ownedSourcePhotoPath = await copySourcePhotoForRecord(storage, recordId, sourcePhotoPath);
+    } catch (error) {
+      releaseActiveSlot(ownerId, normalizedOriginTab);
+      throw error;
+    }
     const pngPath = path.join(storage.dataDir, "records", recordId, "artwork.png");
     const record = {
       id: recordId,
@@ -489,7 +573,7 @@ function createJobManager({ config, storage, runner }) {
       title: titleFromRequest(type, answers),
       answers,
       conversation_notes: conversationNotes,
-      source_photo_path: sourcePhotoPath,
+      source_photo_path: ownedSourcePhotoPath,
       recommended_artwork_size: recommendedArtworkSize,
       artwork_path: artworkPath,
       favorite: true,
@@ -503,6 +587,8 @@ function createJobManager({ config, storage, runner }) {
       stage: "artwork",
       type,
       title: record.title,
+      origin_tab: normalizedOriginTab,
+      operation: normalizedOperation,
       status: "queued",
       created_at: createdAt,
       started_at: null,
@@ -521,7 +607,9 @@ function createJobManager({ config, storage, runner }) {
         title: record.title,
         answers,
         conversationNotes,
-        sourcePhotoPath,
+        sourcePhotoPath: ownedSourcePhotoPath,
+        originTab: normalizedOriginTab,
+        operation: normalizedOperation,
         record,
         job,
         outputPngPath: pngPath,
@@ -532,21 +620,24 @@ function createJobManager({ config, storage, runner }) {
       return { job: cloneJob(job), record: cloneRecord(record) };
     } catch (error) {
       jobs.delete(job.id);
-      releaseActiveSlot(ownerId);
+      releaseActiveSlot(ownerId, normalizedOriginTab);
       throw error;
     }
   }
 
-  async function createFusion({ userId = "", recordId, sourcePhotoPath = "" }) {
+  async function createFusion({ userId = "", recordId, sourcePhotoPath = "", originTab = "studio", operation = "create" }) {
     const ownerId = normalizeUserId(userId);
+    const normalizedOriginTab = normalizeOriginTab(originTab);
+    const normalizedOperation = normalizeOperation(operation);
     if (!ownerId) {
       return runImmediateFusion({ userId: ownerId, recordId, sourcePhotoPath });
     }
-    const reservation = reserveActiveSlot(ownerId);
+    const reservation = reserveActiveSlot(ownerId, normalizedOriginTab);
     if (reservation.limitReached) {
       return {
         limitReached: true,
-        code: "user_generation_limit_reached",
+        code: "tab_generation_limit_reached",
+        origin_tab: reservation.originTab,
         activeJobs: reservation.activeJobs
       };
     }
@@ -557,6 +648,8 @@ function createJobManager({ config, storage, runner }) {
         ? storage.getRecordForUser.bind(storage)
         : storage.getRecord.bind(storage);
       const record = await getRecord(recordId, ownerId);
+      const requestedSourcePhotoPath = requireEnvironmentImage(record, sourcePhotoPath);
+      const ownedSourcePhotoPath = await copySourcePhotoForRecord(storage, recordId, requestedSourcePhotoPath);
       const createdAt = new Date().toISOString();
       const fusionPath = relativeRecordPath(recordId, "fusion.webp");
       const pngPath = path.join(storage.dataDir, "records", recordId, "fusion.png");
@@ -567,6 +660,8 @@ function createJobManager({ config, storage, runner }) {
         stage: "fusion_render",
         type: record.type,
         title: record.title || titleFromRequest(record.type, record.answers || {}),
+        origin_tab: normalizedOriginTab,
+        operation: normalizedOperation,
         status: "queued",
         created_at: createdAt,
         started_at: null,
@@ -577,9 +672,7 @@ function createJobManager({ config, storage, runner }) {
       jobs.set(job.id, job);
 
       record.status = "queued";
-      if (sourcePhotoPath) {
-        record.source_photo_path = sourcePhotoPath;
-      }
+      record.source_photo_path = ownedSourcePhotoPath;
       await saveRecordSerial(record, ownerId);
 
       queuedJobs.push({
@@ -589,7 +682,9 @@ function createJobManager({ config, storage, runner }) {
         title: job.title,
         record,
         job,
-        sourcePhotoPath,
+        sourcePhotoPath: ownedSourcePhotoPath,
+        originTab: normalizedOriginTab,
+        operation: normalizedOperation,
         outputPngPath: pngPath,
         outputWebpPath: fusionPath
       });
@@ -600,7 +695,7 @@ function createJobManager({ config, storage, runner }) {
       if (job) {
         jobs.delete(job.id);
       }
-      releaseActiveSlot(ownerId);
+      releaseActiveSlot(ownerId, normalizedOriginTab);
       throw error;
     }
   }
