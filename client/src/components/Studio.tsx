@@ -5,6 +5,7 @@ import {
   isGenerationLimitError,
   isPhotoTooLargeError,
   uploadPhoto,
+  type GenerationComplexity,
   type GenerationJob,
   type GenerationRecord,
   type PublicConfig
@@ -30,12 +31,15 @@ interface StudioDraft {
   selectedPhotoName?: string;
   recommendedArtworkSize?: GenerationRecord["recommended_artwork_size"];
   photoStepComplete?: boolean;
+  generationComplexity?: GenerationComplexity;
+  complexityStepComplete?: boolean;
 }
 
 type StudioStepQuery =
   | { step: "work_type" }
   | { step: "question"; index: number }
   | { step: "photo" }
+  | { step: "complexity" }
   | { step: "notes" };
 
 interface StudioProps {
@@ -49,6 +53,7 @@ interface StudioProps {
     conversationNotes: string;
     source_photo_path?: string;
     recommended_artwork_size?: GenerationRecord["recommended_artwork_size"];
+    generation_complexity?: GenerationComplexity;
     origin_tab?: "studio";
     operation?: "create";
   }) => Promise<void>;
@@ -203,7 +208,13 @@ function answersFromRecord(record: GenerationRecord, fallback: Answers): Answers
   };
 }
 
-function studioStepUrlForState(config: PublicConfig, answers: Answers, photoStepComplete: boolean): string {
+function studioStepUrlForState(
+  config: PublicConfig,
+  answers: Answers,
+  photoStepComplete: boolean,
+  complexityStepComplete: boolean,
+  hasSourcePhoto: boolean,
+): string {
   if (!answers.work_type) {
     return "/studio?step=work_type";
   }
@@ -213,13 +224,16 @@ function studioStepUrlForState(config: PublicConfig, answers: Answers, photoStep
     const questionIndex = Math.max(0, branchQuestions.findIndex((item) => item.id === currentQuestion.id));
     return `/studio?step=question&index=${questionIndex}`;
   }
-  return photoStepComplete ? "/studio?step=notes" : "/studio?step=photo";
+  if (!photoStepComplete) {
+    return "/studio?step=photo";
+  }
+  return hasSourcePhoto || complexityStepComplete ? "/studio?step=notes" : "/studio?step=complexity";
 }
 
 function readStudioStepQuery(search: string): StudioStepQuery | null {
   const params = new URLSearchParams(search);
   const step = params.get("step");
-  if (step === "work_type" || step === "photo" || step === "notes") {
+  if (step === "work_type" || step === "photo" || step === "complexity" || step === "notes") {
     return { step };
   }
   if (step === "question") {
@@ -284,6 +298,12 @@ export default function Studio({
   const [photoStepComplete, setPhotoStepComplete] = useState(
     () => readStudioDraft().photoStepComplete ?? false,
   );
+  const [generationComplexity, setGenerationComplexity] = useState<GenerationComplexity | undefined>(
+    () => readStudioDraft().generationComplexity
+  );
+  const [complexityStepComplete, setComplexityStepComplete] = useState(
+    () => readStudioDraft().complexityStepComplete ?? false,
+  );
   const [recommendedArtworkSize, setRecommendedArtworkSize] = useState<GenerationRecord["recommended_artwork_size"]>(
     () => readStudioDraft().recommendedArtworkSize ?? null
   );
@@ -306,7 +326,12 @@ export default function Studio({
   const noteSuggestions = suggestions.slice(1);
   const canGoBack = Boolean(answers.work_type);
   const showPhotoStep = complete && !photoStepComplete;
-  const showConversationStep = complete && photoStepComplete;
+  const showComplexityStep = complete
+    && photoStepComplete
+    && !sourcePhotoPath
+    && !complexityStepComplete
+    && notesFocusRequest <= 0;
+  const showConversationStep = complete && photoStepComplete && !showComplexityStep;
   const showCreationPanel = !hasResult || notesFocusRequest > 0;
   const isIteratingResult = showConversationStep && notesFocusRequest > 0;
   const studioActiveJobs = activeJobs.filter((job) => (job.origin_tab ?? "studio") === "studio");
@@ -323,6 +348,8 @@ export default function Studio({
       selectedPhotoName,
       recommendedArtworkSize,
       photoStepComplete,
+      generationComplexity,
+      complexityStepComplete,
     });
   }, [
     answers,
@@ -331,6 +358,8 @@ export default function Studio({
     selectedPhotoName,
     recommendedArtworkSize,
     photoStepComplete,
+    generationComplexity,
+    complexityStepComplete,
   ]);
 
   useEffect(() => () => {
@@ -348,6 +377,8 @@ export default function Studio({
     setTextQuestionDraft("");
     setRecommendedArtworkSize(null);
     setPhotoStepComplete(false);
+    setGenerationComplexity(undefined);
+    setComplexityStepComplete(false);
     setPhotoPreviewFailed(false);
     setPhotoPreviewUrl((current) => {
       revokePhotoPreview(current);
@@ -371,6 +402,8 @@ export default function Studio({
     });
     setRecommendedArtworkSize(iterationRecord.recommended_artwork_size ?? null);
     setPhotoStepComplete(true);
+    setGenerationComplexity(undefined);
+    setComplexityStepComplete(true);
     setError("");
   }, [iterationRecord, notesFocusRequest]);
 
@@ -401,18 +434,31 @@ export default function Studio({
     if (studioStep.step === "work_type") {
       setAnswers({});
       setPhotoStepComplete(false);
+      setGenerationComplexity(undefined);
+      setComplexityStepComplete(false);
       return;
     }
     if (studioStep.step === "question") {
       setAnswers((current) => trimAnswersForStudioQuestion(config, current, studioStep.index));
       setPhotoStepComplete(false);
+      setGenerationComplexity(undefined);
+      setComplexityStepComplete(false);
       return;
     }
     if (studioStep.step === "photo") {
       setPhotoStepComplete(false);
+      setGenerationComplexity(undefined);
+      setComplexityStepComplete(false);
+      return;
+    }
+    if (studioStep.step === "complexity") {
+      setPhotoStepComplete(true);
+      setGenerationComplexity(undefined);
+      setComplexityStepComplete(false);
       return;
     }
     setPhotoStepComplete(true);
+    setComplexityStepComplete(true);
   }, [config, location.search]);
 
   const answerQuestion = (option: string) => {
@@ -422,7 +468,7 @@ export default function Studio({
     const value = optionValueForQuestion(question, option, locale);
     const nextAnswers = { ...answers, [question.id]: value };
     setAnswers(nextAnswers);
-    navigate(studioStepUrlForState(config, nextAnswers, false));
+    navigate(studioStepUrlForState(config, nextAnswers, false, false, false));
   };
 
   const answerTextQuestion = () => {
@@ -435,12 +481,20 @@ export default function Studio({
     }
     const nextAnswers = { ...answers, [question.id]: value };
     setAnswers(nextAnswers);
-    navigate(studioStepUrlForState(config, nextAnswers, false));
+    navigate(studioStepUrlForState(config, nextAnswers, false, false, false));
   };
 
   const goToPreviousStudioStep = () => {
+    if (showConversationStep && !sourcePhotoPath && complexityStepComplete && notesFocusRequest <= 0) {
+      setGenerationComplexity(undefined);
+      setComplexityStepComplete(false);
+      setError("");
+      return;
+    }
     if (photoStepComplete) {
       setPhotoStepComplete(false);
+      setGenerationComplexity(undefined);
+      setComplexityStepComplete(false);
       setError("");
       return;
     }
@@ -489,6 +543,8 @@ export default function Studio({
       setSelectedPhotoName(file.name);
       setPhotoPreviewFailed(false);
       setPhotoStepComplete(false);
+      setGenerationComplexity(undefined);
+      setComplexityStepComplete(false);
       setPhotoPreviewUrl((current) => {
         revokePhotoPreview(current);
         return previewUrl;
@@ -535,13 +591,17 @@ export default function Studio({
       return "";
     });
     setRecommendedArtworkSize(null);
+    setGenerationComplexity(undefined);
+    setComplexityStepComplete(false);
     setError("");
   };
 
   const skipPhotoStep = () => {
     setPhotoStepComplete(true);
+    setGenerationComplexity(undefined);
+    setComplexityStepComplete(false);
     setError("");
-    navigate(studioStepUrlForState(config, answers, true));
+    navigate(studioStepUrlForState(config, answers, true, false, false));
   };
 
   const continueFromPhotoStep = () => {
@@ -549,8 +609,17 @@ export default function Studio({
       return;
     }
     setPhotoStepComplete(true);
+    setGenerationComplexity(undefined);
+    setComplexityStepComplete(true);
     setError("");
-    navigate(studioStepUrlForState(config, answers, true));
+    navigate(studioStepUrlForState(config, answers, true, true, true));
+  };
+
+  const selectGenerationComplexity = (complexity: GenerationComplexity) => {
+    setGenerationComplexity(complexity);
+    setComplexityStepComplete(true);
+    setError("");
+    navigate(studioStepUrlForState(config, answers, true, true, false));
   };
 
   const resetStudioDraft = () => {
@@ -558,6 +627,8 @@ export default function Studio({
     setConversationNotes("");
     setTextQuestionDraft("");
     setPhotoStepComplete(false);
+    setGenerationComplexity(undefined);
+    setComplexityStepComplete(false);
     removePhoto();
     onStartOver?.();
   };
@@ -579,6 +650,7 @@ export default function Studio({
         conversationNotes: note || conversationNotes,
         source_photo_path: sourcePhotoPath,
         recommended_artwork_size: recommendedArtworkSize ?? null,
+        generation_complexity: sourcePhotoPath ? undefined : generationComplexity ?? "medium",
         origin_tab: "studio",
         operation: "create"
       });
@@ -773,6 +845,34 @@ export default function Studio({
                     </button>
                   </div>
                 ) : null}
+              </div>
+            ) : showComplexityStep ? (
+              <div className="conversation-panel">
+                <h2>{t("studio.complexityTitle")}</h2>
+                <p className="generation-summary">{t("studio.complexityHint")}</p>
+                <div className="option-grid">
+                  {([
+                    ["small", t("studio.complexitySmall"), t("studio.complexitySmallHint")],
+                    ["medium", t("studio.complexityMedium"), t("studio.complexityMediumHint")],
+                    ["large", t("studio.complexityLarge"), t("studio.complexityLargeHint")],
+                  ] as Array<[GenerationComplexity, string, string]>).map(([value, label, hint]) => (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => selectGenerationComplexity(value)}
+                    >
+                      <span className="option-preview-frame" aria-hidden="true">
+                        <span className="option-preview-fallback">
+                          {value === "small" ? "简" : value === "medium" ? "衡" : "丰"}
+                        </span>
+                      </span>
+                      <span>
+                        <span className="option-label">{label}</span>
+                        <span>{hint}</span>
+                      </span>
+                    </button>
+                  ))}
+                </div>
               </div>
             ) : (
               <div className="conversation-panel">

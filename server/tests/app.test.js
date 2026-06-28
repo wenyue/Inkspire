@@ -154,6 +154,7 @@ test("POST /api/generations creates a job and eventually a record with artwork",
         type: "painting",
         answers: { painting_subject: "山水" },
         conversationNotes: "请保留云气",
+        generation_complexity: "large",
         source_photo_path: upload.body.source_photo_path
       })
       .expect(201);
@@ -165,6 +166,7 @@ test("POST /api/generations creates a job and eventually a record with artwork",
     assert.equal(record.status, "succeeded");
     assert.equal(response.body.record.type, "painting");
     assert.equal(response.body.record.favorite, true);
+    assert.equal(record.generation_complexity, "large");
     assert.equal(record.source_photo_path, `records/${record.id}/source-photo.webp`);
     assert.notEqual(record.source_photo_path, upload.body.source_photo_path);
     assert.equal(
@@ -219,7 +221,16 @@ test("regenerate and fusion routes pass origin tab and operation metadata", asyn
         id: "record-1",
         type: "painting",
         answers: { painting_subject: "山水" },
-        conversation_notes: "keep mist"
+        conversation_notes: "keep mist",
+        source_photo_path: "records/record-1/source-photo.webp",
+        generation_complexity: "large",
+        recommended_artwork_size: {
+          preset_id: "ai_scene",
+          label: "环境估算",
+          width_cm: 60,
+          height_cm: 90,
+          reason: "按环境估算"
+        }
       })
     },
     jobs: {
@@ -270,6 +281,15 @@ test("regenerate and fusion routes pass origin tab and operation metadata", asyn
 
   assert.equal(calls[0].payload.originTab, "library");
   assert.equal(calls[0].payload.operation, "adjust");
+  assert.equal(calls[0].payload.sourcePhotoPath, "records/record-1/source-photo.webp");
+  assert.equal(calls[0].payload.generationComplexity, "large");
+  assert.deepEqual(calls[0].payload.recommendedArtworkSize, {
+    preset_id: "ai_scene",
+    label: "环境估算",
+    width_cm: 60,
+    height_cm: 90,
+    reason: "按环境估算"
+  });
   assert.equal(calls[1].payload.originTab, "library");
   assert.equal(calls[1].payload.operation, "create");
 });
@@ -293,6 +313,18 @@ test("POST /api/uploads/photo returns source_photo_path and inferred artwork siz
       height_cm: 50,
       reason: "根据环境图片比例推算，适合作为方形点景作品。"
     });
+    assert.equal((await fs.readFile(path.join(temp, response.body.source_photo_path))).subarray(8, 12).toString("ascii"), "WEBP");
+  });
+});
+
+test("POST /api/uploads/photo accepts phone camera HEIC MIME types", async () => {
+  await withTempApp(async ({ app, temp }) => {
+    const response = await request(app)
+      .post("/api/uploads/photo")
+      .attach("photo", pngBuffer(), { filename: "camera.heic", contentType: "image/heic" })
+      .expect(201);
+
+    assert.equal(response.body.source_photo_path, `records/${response.body.record_id}/source-photo.webp`);
     assert.equal((await fs.readFile(path.join(temp, response.body.source_photo_path))).subarray(8, 12).toString("ascii"), "WEBP");
   });
 });
@@ -438,7 +470,6 @@ test("POST /api/records/:id/fusion can attach a source photo after artwork gener
 });
 
 test("POST /api/records/:id/fusion reuses the record environment image when no path is sent", async () => {
-  let fusionSourcePhotoPath = "";
   await withTempApp(async ({ app }) => {
     const agent = request.agent(app);
     const upload = await agent
@@ -467,14 +498,11 @@ test("POST /api/records/:id/fusion reuses the record environment image when no p
     assert.equal(response.body.record.status, "queued");
     await waitForJob(agent, response.body.job.id);
     const fused = await agent.get(`/api/records/${created.body.record.id}`).expect(200);
+    assert.equal(fused.body.source_photo_path, expectedSourcePhotoPath);
     assert.equal(fused.body.fusion_path, `records/${created.body.record.id}/fusion.webp`);
     assert.equal(fused.body.has_fusion, true);
-    assert.equal(fusionSourcePhotoPath, expectedSourcePhotoPath);
   }, {
-    runner: async ({ outputPngPath, stage, record }) => {
-      if (stage === "fusion_render") {
-        fusionSourcePhotoPath = record.source_photo_path;
-      }
+    runner: async ({ outputPngPath }) => {
       await fs.mkdir(path.dirname(outputPngPath), { recursive: true });
       await fs.writeFile(outputPngPath, pngBuffer());
       return { pngPath: outputPngPath, diagnostics: { reason: "fake_runner" } };

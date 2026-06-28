@@ -9,6 +9,7 @@ import type { Dictionaries } from "./i18n";
 
 export type OriginTab = "studio" | "library" | "experts";
 export type GenerationOperation = "create" | "adjust";
+export type GenerationComplexity = "small" | "medium" | "large";
 
 export interface ExpertService {
   id: string;
@@ -68,6 +69,7 @@ export interface LibraryRecord {
   fusion_path?: string;
   source_photo_path?: string;
   recommended_artwork_size?: ArtworkSize | null;
+  generation_complexity?: GenerationComplexity;
   has_fusion?: boolean;
   favorite?: boolean;
   status?: string;
@@ -238,6 +240,7 @@ export async function createGeneration(payload: {
   conversationNotes: string;
   source_photo_path?: string;
   recommended_artwork_size?: ArtworkSize | null;
+  generation_complexity?: GenerationComplexity;
   origin_tab?: OriginTab;
   operation?: GenerationOperation;
 }): Promise<GenerationStartResult> {
@@ -250,6 +253,7 @@ export async function createGeneration(payload: {
       conversationNotes: payload.conversationNotes,
       source_photo_path: payload.source_photo_path ?? "",
       recommended_artwork_size: payload.recommended_artwork_size ?? null,
+      generation_complexity: payload.generation_complexity,
       origin_tab: payload.origin_tab ?? "studio",
       operation: payload.operation ?? "create"
     })

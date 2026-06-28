@@ -639,6 +639,16 @@ button:disabled {
   display: block;
 }
 
+.adjust-base-open {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  padding: 0;
+  color: inherit;
+  overflow: hidden;
+}
+
 .adjust-base-placeholder {
   display: flex;
   width: 100%;
@@ -786,6 +796,31 @@ button:disabled {
 
 .result-grid figure {
   margin: 0;
+}
+
+.image-open-button {
+  display: block;
+  width: 100%;
+  min-height: 0;
+  padding: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  overflow: hidden;
+}
+
+.image-open-button:focus-visible,
+.adjust-base-open:focus-visible {
+  outline: 2px solid rgba(43, 88, 71, 0.72);
+  outline-offset: 3px;
+}
+
+.image-open-button img {
+  display: block;
+}
+
+.image-open-button.compact-result-media {
+  aspect-ratio: 1 / 1;
 }
 
 .result-grid img,
@@ -984,7 +1019,14 @@ button:disabled {
   object-fit: cover;
 }
 
-.library-copy strong,
+.library-copy strong {
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .expert-card h3,
 .experts-panel h2 {
   margin: 0;
@@ -1123,6 +1165,7 @@ button:disabled {
 .library-copy {
   display: grid;
   gap: 4px;
+  min-width: 0;
 }
 
 .library-open-action {
@@ -1183,6 +1226,88 @@ button:disabled {
 
 .library-remove-action:active {
   transform: translateY(1px);
+}
+
+.image-viewer {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 12px;
+  padding: calc(12px + env(safe-area-inset-top)) 12px calc(16px + env(safe-area-inset-bottom));
+  background: rgba(15, 24, 21, 0.92);
+  color: #fffaf0;
+}
+
+.image-viewer-back {
+  justify-self: start;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 0 12px;
+  border-radius: 8px;
+  background: rgba(255, 250, 240, 0.12);
+  color: #fffaf0;
+  box-shadow: inset 0 0 0 1px rgba(255, 250, 240, 0.2);
+}
+
+.image-viewer-stage {
+  display: grid;
+  min-height: 0;
+  place-items: center;
+  overflow: hidden;
+  touch-action: none;
+  cursor: grab;
+}
+
+.image-viewer-stage.dragging {
+  cursor: grabbing;
+}
+
+.image-viewer-image {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  transform-origin: center;
+  user-select: none;
+  will-change: transform;
+}
+
+.image-viewer-error {
+  display: grid;
+  min-width: min(100%, 260px);
+  min-height: 120px;
+  place-items: center;
+  padding: 18px;
+  border-radius: 8px;
+  background: rgba(255, 250, 240, 0.12);
+  text-align: center;
+}
+
+.image-viewer-controls {
+  justify-self: center;
+  display: inline-grid;
+  grid-template-columns: repeat(3, 44px);
+  gap: 8px;
+  padding: 6px;
+  border-radius: 8px;
+  background: rgba(255, 250, 240, 0.12);
+  box-shadow: inset 0 0 0 1px rgba(255, 250, 240, 0.18);
+}
+
+.image-viewer-controls button {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  min-height: 44px;
+  place-items: center;
+  padding: 0;
+  border-radius: 8px;
+  background: rgba(255, 250, 240, 0.9);
+  color: #20352e;
 }
 
 .dialog-layer {

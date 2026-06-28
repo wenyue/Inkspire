@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, X } from "lucide-react";
 import type { GenerationRecord } from "../api";
+import ImageViewer from "./ImageViewer";
 
 interface AdjustViewProps {
   record: GenerationRecord;
@@ -44,8 +45,10 @@ export default function AdjustView({
 }: AdjustViewProps) {
   const [note, setNote] = useState("");
   const [imageFailed, setImageFailed] = useState(false);
+  const [viewerImage, setViewerImage] = useState<{ src: string; alt: string } | null>(null);
   const noteRef = useRef<HTMLTextAreaElement | null>(null);
   const image = recordImage(record);
+  const baseImageLabel = `${baseLabel} ${artworkLabel}`;
 
   useEffect(() => {
     noteRef.current?.focus();
@@ -65,12 +68,19 @@ export default function AdjustView({
       <h2>{title}</h2>
       <div className="adjust-base">
         {image && !imageFailed ? (
-          <img
-            className="adjust-base-image"
-            src={image}
-            alt={`${baseLabel} ${artworkLabel}`}
-            onError={() => setImageFailed(true)}
-          />
+          <button
+            className="adjust-base-open surface-clear-button"
+            type="button"
+            aria-label={`查看${baseImageLabel}`}
+            onClick={() => setViewerImage({ src: image, alt: baseImageLabel })}
+          >
+            <img
+              className="adjust-base-image"
+              src={image}
+              alt={baseImageLabel}
+              onError={() => setImageFailed(true)}
+            />
+          </button>
         ) : (
           <div className="adjust-base-placeholder" aria-hidden="true">
             {record.type === "painting" ? "画" : "书"}
@@ -118,6 +128,9 @@ export default function AdjustView({
         {isSubmitting ? submittingLabel : submitLabel}
       </button>
       {error ? <p className="error-line" role="status">{error}</p> : null}
+      {viewerImage ? (
+        <ImageViewer src={viewerImage.src} alt={viewerImage.alt} onClose={() => setViewerImage(null)} />
+      ) : null}
     </section>
   );
 }

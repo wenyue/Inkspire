@@ -72,4 +72,13 @@ describe("mobile touch targets", () => {
   it("shows complete result artwork and preview images without cropping", () => {
     expect(blockFor(".result-grid img,\n.image-placeholder")).toContain("object-fit: contain");
   });
+
+  it("keeps library titles to one line with ellipsis", () => {
+    const titleBlock = blockFor(".library-copy strong");
+
+    expect(titleBlock).toContain("min-width: 0");
+    expect(titleBlock).toContain("overflow: hidden");
+    expect(titleBlock).toContain("text-overflow: ellipsis");
+    expect(titleBlock).toContain("white-space: nowrap");
+  });
 });

@@ -1,9 +1,10 @@
-import type { GenerationOperation, GenerationRecord, OriginTab } from "./api";
+import type { GenerationComplexity, GenerationOperation, GenerationRecord, OriginTab } from "./api";
 import type { Answers, WorkType } from "./domain";
 
 const STORAGE_KEY = "inkspire.generationSessions.v1";
 const ORIGIN_TABS: OriginTab[] = ["studio", "library", "experts"];
 const OPERATIONS: GenerationOperation[] = ["create", "adjust"];
+const GENERATION_COMPLEXITIES: GenerationComplexity[] = ["small", "medium", "large"];
 const STATUSES: GenerationSessionStatus[] = ["running", "succeeded", "failed"];
 const WORK_TYPES: WorkType[] = ["painting", "calligraphy"];
 
@@ -24,6 +25,7 @@ export interface GenerationSessionPayload {
   conversationNotes?: string;
   source_photo_path?: string;
   recommended_artwork_size?: GenerationRecord["recommended_artwork_size"] | null;
+  generation_complexity?: GenerationComplexity;
 }
 
 export interface GenerationSession {
@@ -58,6 +60,10 @@ function isFiniteNumber(value: unknown): value is number {
 
 function isGenerationOperation(value: unknown): value is GenerationOperation {
   return OPERATIONS.includes(value as GenerationOperation);
+}
+
+function isGenerationComplexity(value: unknown): value is GenerationComplexity {
+  return GENERATION_COMPLEXITIES.includes(value as GenerationComplexity);
 }
 
 function isGenerationSessionStatus(value: unknown): value is GenerationSessionStatus {
@@ -107,6 +113,7 @@ function parseGenerationSessionPayload(value: unknown): GenerationSessionPayload
     || (value.answers !== undefined && !isObject(value.answers))
     || !optionalStringIsValid(value.conversationNotes)
     || !optionalStringIsValid(value.source_photo_path)
+    || (value.generation_complexity !== undefined && !isGenerationComplexity(value.generation_complexity))
   ) {
     return null;
   }
@@ -128,6 +135,9 @@ function parseGenerationSessionPayload(value: unknown): GenerationSessionPayload
   }
   if (value.source_photo_path !== undefined) {
     payload.source_photo_path = value.source_photo_path;
+  }
+  if (value.generation_complexity !== undefined) {
+    payload.generation_complexity = value.generation_complexity;
   }
   if (value.recommended_artwork_size !== undefined) {
     payload.recommended_artwork_size = recommendedArtworkSize;

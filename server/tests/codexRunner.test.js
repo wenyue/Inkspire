@@ -8,7 +8,8 @@ const { PNG } = require("pngjs");
 const {
   buildImageGenerationPrompt,
   diagnoseCodexImageGeneration,
-  runCodexImageGeneration
+  runCodexImageGeneration,
+  runCodexJsonEstimation
 } = require("../src/codexRunner");
 
 async function withTempDir(fn) {
@@ -30,6 +31,22 @@ test("wraps art brief with explicit image-generation instructions", () => {
   assert.match(prompt, /Do not only describe the image/);
   assert.match(prompt, /1024x1536 pixels, 2:3 aspect ratio/);
   assert.match(prompt, /一幅清雅水墨山水/);
+});
+
+test("wraps reference image paths for second-pass render prompts", () => {
+  const prompt = buildImageGenerationPrompt({
+    prompt: "把作品真实挂入环境照片",
+    canvas: { width: 1024, height: 1536, aspectRatio: "2:3" },
+    referenceImages: {
+      environment: "D:\\Inkspire\\data\\records\\record-1\\source-photo.webp",
+      artwork: "D:\\Inkspire\\data\\records\\record-1\\artwork.webp"
+    }
+  });
+
+  assert.match(prompt, /Reference images/);
+  assert.match(prompt, /environment: D:\\Inkspire\\data\\records\\record-1\\source-photo\.webp/);
+  assert.match(prompt, /artwork: D:\\Inkspire\\data\\records\\record-1\\artwork\.webp/);
+  assert.match(prompt, /use them as visual references/i);
 });
 
 function pngBuffer(red) {
@@ -122,6 +139,33 @@ test("finds newest generated PNG under generated_images root when events have no
     assert.deepEqual(await fs.readFile(result.pngPath), pngBuffer(90));
     assert.equal(result.diagnostics.image_event_count, 1);
     assert.equal(result.diagnostics.reason, "generated_images_fallback");
+  });
+});
+
+test("runs Codex JSON estimation without requiring an output PNG path", async () => {
+  await withTempDir(async (temp) => {
+    const result = await runCodexJsonEstimation({
+      prompt: "请估算环境图中的作品尺寸，只返回 JSON",
+      referenceImages: {
+        environment: "D:\\Inkspire\\data\\records\\record-1\\source-photo.webp"
+      },
+      jobDir: path.join(temp, "estimate"),
+      config: {
+        codexCommand: "codex",
+        codexModel: "gpt-5",
+        codexReasoningEffort: "medium"
+      },
+      spawnImpl: fakeSpawn({
+        stdout: JSON.stringify({
+          type: "message",
+          text: "{\"generation_complexity\":\"large\",\"recommended_artwork_size\":{\"width_cm\":60,\"height_cm\":90}}"
+        })
+      })
+    });
+
+    assert.equal(result.json.generation_complexity, "large");
+    assert.equal(result.json.recommended_artwork_size.width_cm, 60);
+    assert.match(result.text, /generation_complexity/);
   });
 });
 

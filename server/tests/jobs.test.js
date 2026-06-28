@@ -4,6 +4,7 @@ const fs = require("node:fs/promises");
 const os = require("node:os");
 const path = require("node:path");
 const { PNG } = require("pngjs");
+const sharp = require("sharp");
 const { createStorage } = require("../src/storage");
 const { createJobManager } = require("../src/jobs");
 
@@ -27,7 +28,11 @@ async function waitUntil(predicate, timeoutMs = 2000) {
 }
 
 function pngBuffer(red = 40) {
-  const png = new PNG({ width: 2, height: 2 });
+  return sizedPngBuffer(2, 2, red);
+}
+
+function sizedPngBuffer(width, height, red = 40) {
+  const png = new PNG({ width, height });
   for (let offset = 0; offset < png.data.length; offset += 4) {
     png.data[offset] = red;
     png.data[offset + 1] = 80;
@@ -38,7 +43,19 @@ function pngBuffer(red = 40) {
 }
 
 function fakeRunner(red = 40) {
-  return async ({ outputPngPath }) => {
+  return async ({ outputPngPath, stage }) => {
+    if (stage === "size_estimation") {
+      return {
+        json: {
+          generation_complexity: "medium",
+          recommended_artwork_size: {
+            width_cm: 45,
+            height_cm: 70,
+            reason: "测试默认环境估算"
+          }
+        }
+      };
+    }
     await fs.mkdir(path.dirname(outputPngPath), { recursive: true });
     await fs.writeFile(outputPngPath, pngBuffer(red));
     return { pngPath: outputPngPath, diagnostics: { reason: "fake_runner" } };
@@ -50,6 +67,45 @@ async function writeSourcePhoto(temp, recordId = "upload-source", content = "WEB
   await fs.mkdir(path.dirname(sourcePath), { recursive: true });
   await fs.writeFile(sourcePath, Buffer.from(content));
   return `records/${recordId}/source-photo.webp`;
+}
+
+async function writeSourcePhotoImage(temp, recordId = "upload-source", { width = 120, height = 80, color = { r: 32, g: 96, b: 128 } } = {}) {
+  const sourcePath = path.join(temp, "records", recordId, "source-photo.webp");
+  await fs.mkdir(path.dirname(sourcePath), { recursive: true });
+  await sharp({
+    create: {
+      width,
+      height,
+      channels: 4,
+      background: { ...color, alpha: 1 }
+    }
+  })
+    .webp()
+    .toFile(sourcePath);
+  return `records/${recordId}/source-photo.webp`;
+}
+
+async function readRawImage(filePath) {
+  const input = await fs.readFile(filePath);
+  const image = sharp(input);
+  const metadata = await image.metadata();
+  const data = await image.ensureAlpha().raw().toBuffer();
+  return { width: metadata.width, height: metadata.height, data };
+}
+
+function pixelAt(image, x, y) {
+  const offset = (image.width * y + x) << 2;
+  return Array.from(image.data.subarray(offset, offset + 4));
+}
+
+function assertColorClose(actual, expected, tolerance = 5) {
+  assert.equal(actual.length, expected.length);
+  for (let index = 0; index < actual.length; index += 1) {
+    assert.ok(
+      Math.abs(actual[index] - expected[index]) <= tolerance,
+      `channel ${index}: expected ${actual[index]} to be within ${tolerance} of ${expected[index]}`
+    );
+  }
 }
 
 test("create artwork job writes artwork.webp and record.json using fake runner PNG", async () => {
@@ -76,6 +132,70 @@ test("create artwork job writes artwork.webp and record.json using fake runner P
   });
 });
 
+test("calligraphy title preserves the full submitted text", async () => {
+  await withTempStore(async (temp) => {
+    const storage = createStorage(temp);
+    const manager = createJobManager({
+      config: { app: { image: { webpQuality: 82 } }, prompts: {}, questions: {} },
+      storage,
+      runner: fakeRunner()
+    });
+    const text = "明月松间照清泉石上流竹喧归浣女莲动下渔舟";
+
+    const { record } = await manager.createArtwork({ type: "calligraphy", answers: { text } });
+    const stored = await storage.getRecord(record.id);
+
+    assert.equal(record.title, text);
+    assert.equal(stored.title, text);
+  });
+});
+
+test("painting title becomes an elegant artwork name instead of the subject category", async () => {
+  await withTempStore(async (temp) => {
+    const manager = createJobManager({
+      config: { app: { image: { webpQuality: 82 } }, prompts: {}, questions: {} },
+      storage: createStorage(temp),
+      runner: fakeRunner()
+    });
+
+    const { job, record } = await manager.createArtwork({
+      type: "painting",
+      answers: {
+        painting_subject: "山水",
+        painting_mood: "清雅",
+        painting_palette: "水墨"
+      }
+    });
+
+    assert.notEqual(record.title, "山水");
+    assert.notEqual(record.title, "中国画作品");
+    assert.equal(job.title, record.title);
+    assert.match(record.title, /云|溪|山|岫|清|泉|烟|雨/);
+  });
+});
+
+test("painting title is deterministic for the same answers", async () => {
+  await withTempStore(async (temp) => {
+    const manager = createJobManager({
+      config: { app: { image: { webpQuality: 82 } }, prompts: {}, questions: {} },
+      storage: createStorage(temp),
+      runner: fakeRunner()
+    });
+    const answers = {
+      painting_subject: "花鸟",
+      painting_mood: "温润",
+      painting_palette: "浅绛",
+      painting_composition: "斗方"
+    };
+
+    const first = await manager.createArtwork({ type: "painting", answers });
+    const second = await manager.createArtwork({ type: "painting", answers });
+
+    assert.equal(first.record.title, second.record.title);
+    assert.notEqual(first.record.title, "花鸟");
+  });
+});
+
 test("artwork creation copies the source photo into the new record directory", async () => {
   await withTempStore(async (temp) => {
     const storage = createStorage(temp);
@@ -95,6 +215,132 @@ test("artwork creation copies the source photo into the new record directory", a
     const stored = await storage.getRecord(record.id);
     assert.equal(stored.source_photo_path, `records/${record.id}/source-photo.webp`);
     assert.equal(await fs.readFile(path.join(temp, stored.source_photo_path), "utf8"), "WEBP_SOURCE");
+  });
+});
+
+test("artwork creation with source photo estimates complexity and size before artwork render", async () => {
+  await withTempStore(async (temp) => {
+    const storage = createStorage(temp);
+    const sourcePhotoPath = await writeSourcePhotoImage(temp);
+    const runnerCalls = [];
+    const manager = createJobManager({
+      config: {
+        app: { image: { webpQuality: 82 } },
+        prompts: {
+          painting: {
+            system: "国画系统",
+            template: "国画模板 {{answers}} {{notes}}"
+          }
+        },
+        questions: {}
+      },
+      storage,
+      runner: async ({ outputPngPath, prompt, referenceImages, stage, record }) => {
+        runnerCalls.push({
+          stage,
+          prompt,
+          referenceImages,
+          generationComplexity: record.generation_complexity,
+          recommendedArtworkSize: record.recommended_artwork_size
+        });
+        if (stage === "size_estimation") {
+          return {
+            json: {
+              generation_complexity: "large",
+              recommended_artwork_size: {
+                preset_id: "environment-wall",
+                label: "环境主墙",
+                width_cm: 72,
+                height_cm: 38,
+                reason: "按玄关墙面估算"
+              }
+            }
+          };
+        }
+        assert.equal(stage, "artwork");
+        assert.equal(record.generation_complexity, "large");
+        assert.deepEqual(record.recommended_artwork_size, {
+          preset_id: "environment-wall",
+          label: "环境主墙",
+          width_cm: 40,
+          height_cm: 70,
+          reason: "按玄关墙面估算"
+        });
+        assert.match(prompt, /丰富/);
+        assert.match(prompt, /40 × 70 cm/);
+        await fs.mkdir(path.dirname(outputPngPath), { recursive: true });
+        await fs.writeFile(outputPngPath, pngBuffer(120));
+        return { pngPath: outputPngPath, diagnostics: { reason: "artwork_success" } };
+      }
+    });
+
+    const { record } = await manager.createArtwork({
+      type: "painting",
+      answers: {
+        work_type: "painting",
+        painting_composition_orientation: "portrait"
+      },
+      sourcePhotoPath,
+      generationComplexity: "small"
+    });
+    const stored = await storage.getRecord(record.id);
+
+    assert.deepEqual(runnerCalls.map((call) => call.stage), ["size_estimation", "artwork"]);
+    assert.deepEqual(runnerCalls[0].referenceImages, {
+      environment: path.join(temp, "records", record.id, "source-photo.webp")
+    });
+    assert.equal(stored.generation_complexity, "large");
+    assert.equal(stored.recommended_artwork_size.width_cm, 40);
+    assert.equal(stored.recommended_artwork_size.height_cm, 70);
+  });
+});
+
+test("artwork without environment image stores complexity, resolved orientation, prompt metadata, and recommended size", async () => {
+  await withTempStore(async (temp) => {
+    const storage = createStorage(temp);
+    const runnerCalls = [];
+    const manager = createJobManager({
+      config: {
+        app: { image: { webpQuality: 82 } },
+        prompts: {
+          painting: {
+            system: "国画系统",
+            template: "国画模板 {{answers}} {{notes}}"
+          }
+        },
+        questions: {}
+      },
+      storage,
+      runner: async ({ outputPngPath, prompt }) => {
+        runnerCalls.push({ prompt });
+        await fs.mkdir(path.dirname(outputPngPath), { recursive: true });
+        await fs.writeFile(outputPngPath, sizedPngBuffer(60, 120, 75));
+        return { pngPath: outputPngPath, diagnostics: { reason: "portrait_runner" } };
+      }
+    });
+
+    const created = await manager.createArtwork({
+      userId: "user-a",
+      type: "painting",
+      answers: { work_type: "painting" },
+      generationComplexity: "large"
+    });
+
+    await manager.waitForIdle();
+    const stored = await storage.getRecord(created.record.id);
+    const artworkMetadata = await sharp(await fs.readFile(path.join(temp, stored.artwork_path))).metadata();
+
+    assert.equal(stored.generation_complexity, "large");
+    assert.equal(stored.resolved_orientation, "portrait");
+    assert.equal(stored.orientation_source, "artwork_aspect");
+    assert.equal(stored.recommended_artwork_size.preset_id, "complexity_large");
+    assert.ok(stored.recommended_artwork_size.width_cm < stored.recommended_artwork_size.height_cm);
+    assert.equal(artworkMetadata.width, 60);
+    assert.equal(artworkMetadata.height, 120);
+    assert.match(runnerCalls[0].prompt, /画面复杂度:/);
+    assert.match(runnerCalls[0].prompt, /large|丰富/);
+    assert.match(runnerCalls[0].prompt, /最终方向:/);
+    assert.match(runnerCalls[0].prompt, /portrait/);
   });
 });
 
@@ -139,7 +385,7 @@ test("fusion job preserves existing artwork and writes fusion.webp", async () =>
       storage,
       runner: fakeRunner(180)
     });
-    const sourcePhotoPath = await writeSourcePhoto(temp);
+    const sourcePhotoPath = await writeSourcePhotoImage(temp);
     const { record } = await manager.createArtwork({ type: "painting", answers: {}, sourcePhotoPath });
     const artworkPath = record.artwork_path;
 
@@ -151,6 +397,148 @@ test("fusion job preserves existing artwork and writes fusion.webp", async () =>
     assert.equal(fused.fusion_path, `records/${record.id}/fusion.webp`);
     assert.equal(fused.has_fusion, true);
     assert.equal((await fs.readFile(path.join(temp, fused.fusion_path))).subarray(8, 12).toString("ascii"), "WEBP");
+  });
+});
+
+test("fusion job sends a realistic placement prompt to the image runner", async () => {
+  await withTempStore(async (temp) => {
+    const storage = createStorage(temp);
+    const runnerCalls = [];
+    const manager = createJobManager({
+      config: {
+        app: { image: { webpQuality: 100 } },
+        prompts: {
+          fusion: {
+            system: "效果图系统提示",
+            template: "效果图模板 {{painting}} {{calligraphy}} {{relationship}}"
+          }
+        },
+        questions: {}
+      },
+      storage,
+      runner: async ({ outputPngPath, prompt, referenceImages, stage, record }) => {
+        runnerCalls.push({ prompt, referenceImages, stage, recordId: record.id });
+        if (stage === "size_estimation") {
+          return {
+            json: {
+              generation_complexity: "medium",
+              recommended_artwork_size: { width_cm: 45, height_cm: 70, reason: "测试环境估算" }
+            }
+          };
+        }
+        await fs.mkdir(path.dirname(outputPngPath), { recursive: true });
+        await fs.writeFile(outputPngPath, pngBuffer(stage === "fusion_render" ? 210 : 80));
+        return { pngPath: outputPngPath, diagnostics: { reason: `${stage}_runner` } };
+      }
+    });
+    const sourcePhotoPath = await writeSourcePhotoImage(temp, "upload-source", {
+      width: 120,
+      height: 80,
+      color: { r: 32, g: 96, b: 128 }
+    });
+    const { record } = await manager.createArtwork({ type: "painting", answers: {}, sourcePhotoPath });
+
+    await manager.createFusion({ recordId: record.id });
+    const fused = await storage.getRecord(record.id);
+    const renderCalls = runnerCalls.filter((call) => call.stage !== "size_estimation");
+    const fusionRenderCall = runnerCalls.find((call) => call.stage === "fusion_render");
+
+    assert.equal(renderCalls.length, 2);
+    assert.equal(fusionRenderCall.stage, "fusion_render");
+    assert.equal(fusionRenderCall.recordId, record.id);
+    assert.match(fusionRenderCall.prompt, /真实摆放效果/);
+    assert.match(fusionRenderCall.prompt, /不是简单叠加/);
+    assert.match(fusionRenderCall.prompt, new RegExp(`records/${record.id}/source-photo\\.webp`));
+    assert.match(fusionRenderCall.prompt, new RegExp(`records/${record.id}/artwork\\.webp`));
+    assert.deepEqual(fusionRenderCall.referenceImages, {
+      environment: path.join(temp, "records", record.id, "source-photo.webp"),
+      artwork: path.join(temp, "records", record.id, "artwork.webp")
+    });
+    assert.equal(fused.diagnostics.reason, "fusion_render_runner");
+  });
+});
+
+test("fusion job estimates and stores recommended size before AI render", async () => {
+  await withTempStore(async (temp) => {
+    const storage = createStorage(temp);
+    const runnerCalls = [];
+    const manager = createJobManager({
+      config: {
+        app: { image: { webpQuality: 100 } },
+        prompts: {
+          fusion: {
+            system: "效果图系统提示",
+            template: "效果图模板 {{painting}} {{calligraphy}} {{relationship}}"
+          }
+        },
+        questions: {}
+      },
+      storage,
+      runner: async ({ outputPngPath, prompt, referenceImages, stage, record }) => {
+        runnerCalls.push({
+          stage,
+          prompt,
+          referenceImages,
+          generationComplexity: record.generation_complexity,
+          recommendedArtworkSize: record.recommended_artwork_size
+        });
+        if (stage === "size_estimation") {
+          return {
+            text: JSON.stringify({
+              generation_complexity: "large",
+              recommended_artwork_size: {
+                preset_id: "fusion-wall",
+                label: "融合墙面",
+                width_cm: 112,
+                height_cm: 58,
+                reason: "按沙发背景墙估算"
+              }
+            })
+          };
+        }
+        await fs.mkdir(path.dirname(outputPngPath), { recursive: true });
+        await fs.writeFile(outputPngPath, pngBuffer(stage === "fusion_render" ? 210 : 80));
+        return { pngPath: outputPngPath, diagnostics: { reason: `${stage}_success` } };
+      }
+    });
+    const sourcePhotoPath = await writeSourcePhotoImage(temp);
+    const created = await manager.createArtwork({
+      userId: "user-a",
+      type: "painting",
+      answers: {
+        work_type: "painting",
+        painting_composition_orientation: "landscape"
+      },
+      generationComplexity: "small"
+    });
+    await manager.waitForIdle();
+
+    await manager.createFusion({ userId: "user-a", recordId: created.record.id, sourcePhotoPath });
+    await manager.waitForIdle();
+    const fused = await storage.getRecord(created.record.id);
+    const stages = runnerCalls.map((call) => call.stage);
+    const sizeIndex = stages.indexOf("size_estimation");
+    const fusionIndex = stages.indexOf("fusion_render");
+    const fusionRenderCall = runnerCalls[fusionIndex];
+
+    assert.ok(sizeIndex > -1);
+    assert.ok(fusionIndex > -1);
+    assert.ok(sizeIndex < fusionIndex);
+    assert.deepEqual(runnerCalls[sizeIndex].referenceImages, {
+      environment: path.join(temp, "records", created.record.id, "source-photo.webp")
+    });
+    assert.deepEqual(fusionRenderCall.recommendedArtworkSize, {
+      preset_id: "fusion-wall",
+      label: "融合墙面",
+      width_cm: 110,
+      height_cm: 60,
+      reason: "按沙发背景墙估算"
+    });
+    assert.equal(fusionRenderCall.generationComplexity, "large");
+    assert.match(fusionRenderCall.prompt, /110 × 60 cm/);
+    assert.equal(fused.recommended_artwork_size.width_cm, 110);
+    assert.equal(fused.recommended_artwork_size.height_cm, 60);
+    assert.equal(fused.generation_complexity, "large");
   });
 });
 
@@ -413,21 +801,23 @@ test("failed authenticated jobs release the origin tab slot", async () => {
 
 test("user fusion creation returns immediately", async () => {
   await withTempStore(async (temp) => {
-    let release;
-    let fusionStarted = false;
-    const sourcePhotoPath = await writeSourcePhoto(temp);
+    const sourcePhotoPath = await writeSourcePhotoImage(temp);
+    let runnerCalls = 0;
     const manager = createJobManager({
       config: { app: { image: { webpQuality: 82 } }, prompts: {}, questions: {} },
       storage: createStorage(temp),
       runner: async ({ outputPngPath, stage }) => {
+        if (stage === "size_estimation") {
+          return {
+            json: {
+              generation_complexity: "medium",
+              recommended_artwork_size: { width_cm: 45, height_cm: 70, reason: "测试环境估算" }
+            }
+          };
+        }
+        runnerCalls += 1;
         await fs.mkdir(path.dirname(outputPngPath), { recursive: true });
         await fs.writeFile(outputPngPath, pngBuffer());
-        if (stage === "fusion_render") {
-          fusionStarted = true;
-          await new Promise((resolve) => {
-            release = resolve;
-          });
-        }
         return { pngPath: outputPngPath, diagnostics: { reason: "slow" } };
       }
     });
@@ -441,12 +831,10 @@ test("user fusion creation returns immediately", async () => {
     assert.equal(result.job.origin_tab, "studio");
     assert.equal(result.job.operation, "create");
     assert.equal(result.record.status, "queued");
-    assert.equal(fusionStarted, false);
+    assert.equal(runnerCalls, 1);
     await manager.waitForJobStart(result.job.id);
-    await waitUntil(() => fusionStarted);
-    await waitUntil(() => typeof release === "function");
-    release();
     await manager.waitForIdle();
+    assert.equal(manager.getJob(result.job.id, "user-a").status, "succeeded");
   });
 });
 
@@ -620,17 +1008,26 @@ test("artwork failure records failed status and diagnostics", async () => {
   });
 });
 
-test("fusion failure preserves succeeded artwork record for retry", async () => {
+test("fusion runner failure preserves succeeded artwork record for retry", async () => {
   await withTempStore(async (temp) => {
     const storage = createStorage(temp);
-    const sourcePhotoPath = await writeSourcePhoto(temp);
+    const sourcePhotoPath = await writeSourcePhotoImage(temp);
     const manager = createJobManager({
-      config: { app: { image: { webpQuality: 82 } }, prompts: {}, questions: {} },
+      config: {
+        app: { image: { webpQuality: 82 } },
+        prompts: {
+          fusion: {
+            system: "效果图系统提示",
+            template: "效果图模板 {{painting}} {{calligraphy}} {{relationship}}"
+          }
+        },
+        questions: {}
+      },
       storage,
       runner: async ({ outputPngPath, stage }) => {
         if (stage === "fusion_render") {
-          const error = new Error("fusion model unavailable");
-          error.diagnostics = { reason: "fusion_unavailable" };
+          const error = new Error("fusion render failed");
+          error.diagnostics = { reason: "fusion_runner_failed" };
           throw error;
         }
         await fs.mkdir(path.dirname(outputPngPath), { recursive: true });
@@ -652,21 +1049,28 @@ test("fusion failure preserves succeeded artwork record for retry", async () => 
     assert.equal(stored.artwork_path, artworkPath);
     assert.equal(stored.fusion_path, undefined);
     assert.equal(stored.has_fusion, undefined);
-    assert.equal(stored.diagnostics.reason, "fusion_unavailable");
+    assert.equal(stored.diagnostics.reason, "fusion_runner_failed");
   });
 });
 
 test("fusion failure preserves artwork and environment image for retry", async () => {
   await withTempStore(async (temp) => {
     const storage = createStorage(temp);
-    const sourcePhotoPath = await writeSourcePhoto(temp);
-    let fusionAttempts = 0;
+    const sourcePhotoPath = await writeSourcePhotoImage(temp);
     const manager = createJobManager({
-      config: { app: { image: { webpQuality: 82 } }, prompts: {}, questions: {} },
+      config: {
+        app: { image: { webpQuality: 82 } },
+        prompts: {
+          fusion: {
+            system: "效果图系统提示",
+            template: "效果图模板 {{painting}} {{calligraphy}} {{relationship}}"
+          }
+        },
+        questions: {}
+      },
       storage,
       runner: async ({ outputPngPath, stage }) => {
         if (stage === "fusion_render") {
-          fusionAttempts += 1;
           throw new Error("fusion failed");
         }
         await fs.mkdir(path.dirname(outputPngPath), { recursive: true });
@@ -684,12 +1088,11 @@ test("fusion failure preserves artwork and environment image for retry", async (
     await manager.createFusion({ recordId: record.id });
     const stored = await storage.getRecord(record.id);
 
-    assert.equal(fusionAttempts, 2);
     assert.equal(stored.status, "succeeded");
     assert.equal(stored.fusion_status, "failed");
     assert.equal(stored.artwork_path, artworkPath);
     assert.equal(stored.source_photo_path, `records/${record.id}/source-photo.webp`);
-    assert.equal(await fs.readFile(path.join(temp, stored.source_photo_path), "utf8"), "WEBP_SOURCE");
+    assert.equal((await fs.readFile(path.join(temp, stored.source_photo_path))).subarray(8, 12).toString("ascii"), "WEBP");
   });
 });
 
@@ -725,25 +1128,39 @@ test("artwork generation retries once before recording failure", async () => {
   });
 });
 
-test("fusion generation retries once and preserves artwork", async () => {
+test("fusion generation calls the image runner for a second-pass render and preserves artwork", async () => {
   await withTempStore(async (temp) => {
     const storage = createStorage(temp);
-    const sourcePhotoPath = await writeSourcePhoto(temp);
-    let fusionAttempts = 0;
+    const sourcePhotoPath = await writeSourcePhotoImage(temp);
+    let runnerCalls = 0;
+    let fusionPrompt = "";
     const manager = createJobManager({
-      config: { app: { image: { webpQuality: 82 } }, prompts: {}, questions: {} },
-      storage,
-      runner: async ({ outputPngPath, stage }) => {
-        if (stage === "fusion_render") {
-          fusionAttempts += 1;
-          if (fusionAttempts === 1) {
-            const error = new Error("temporary fusion issue");
-            error.diagnostics = { reason: "temporary" };
-            throw error;
+      config: {
+        app: { image: { webpQuality: 82 } },
+        prompts: {
+          fusion: {
+            system: "效果图系统提示",
+            template: "效果图模板 {{painting}} {{calligraphy}} {{relationship}}"
           }
+        },
+        questions: {}
+      },
+      storage,
+      runner: async ({ outputPngPath, prompt, stage }) => {
+        if (stage === "size_estimation") {
+          return {
+            json: {
+              generation_complexity: "medium",
+              recommended_artwork_size: { width_cm: 45, height_cm: 70, reason: "测试环境估算" }
+            }
+          };
+        }
+        runnerCalls += 1;
+        if (stage === "fusion_render") {
+          fusionPrompt = prompt;
         }
         await fs.mkdir(path.dirname(outputPngPath), { recursive: true });
-        await fs.writeFile(outputPngPath, pngBuffer(stage === "fusion_render" ? 220 : 80));
+        await fs.writeFile(outputPngPath, pngBuffer(80));
         return { pngPath: outputPngPath, diagnostics: { reason: `${stage}_success` } };
       }
     });
@@ -755,11 +1172,13 @@ test("fusion generation retries once and preserves artwork", async () => {
     await manager.waitForIdle();
     const fused = await storage.getRecord(record.id);
 
-    assert.equal(fusionAttempts, 2);
+    assert.equal(runnerCalls, 2);
     assert.equal(manager.getJob(job.id).status, "succeeded");
     assert.equal(fused.status, "succeeded");
     assert.equal(fused.artwork_path, artworkPath);
     assert.equal(fused.diagnostics.reason, "fusion_render_success");
+    assert.match(fusionPrompt, /真实摆放效果/);
+    assert.match(fusionPrompt, /不是简单叠加/);
     assert.equal((await fs.readFile(path.join(temp, fused.fusion_path))).subarray(8, 12).toString("ascii"), "WEBP");
   });
 });

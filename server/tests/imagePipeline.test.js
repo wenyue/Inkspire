@@ -5,7 +5,7 @@ const os = require("node:os");
 const path = require("node:path");
 const { PNG } = require("pngjs");
 const sharp = require("sharp");
-const { archiveSourcePhoto, convertPngToWebp } = require("../src/imagePipeline");
+const { archiveSourcePhoto, composeArtworkPreview, convertPngToWebp } = require("../src/imagePipeline");
 
 async function withTempDir(fn) {
   const temp = await fs.mkdtemp(path.join(os.tmpdir(), "inkspire-image-"));
@@ -25,6 +25,24 @@ async function writeTinyPng(filePath) {
   await fs.writeFile(filePath, PNG.sync.write(png));
 }
 
+async function writeSolidImage(filePath, { width, height, color }) {
+  await sharp({
+    create: {
+      width,
+      height,
+      channels: 4,
+      background: color
+    }
+  })
+    .png()
+    .toFile(filePath);
+}
+
+function pixelAt(png, x, y) {
+  const offset = (png.width * y + x) << 2;
+  return Array.from(png.data.subarray(offset, offset + 4));
+}
+
 test("convertPngToWebp writes a WEBP RIFF file", async () => {
   await withTempDir(async (temp) => {
     const pngPath = path.join(temp, "source.png");
@@ -36,6 +54,32 @@ test("convertPngToWebp writes a WEBP RIFF file", async () => {
     const output = await fs.readFile(webpPath);
     assert.equal(output.subarray(0, 4).toString("ascii"), "RIFF");
     assert.equal(output.subarray(8, 12).toString("ascii"), "WEBP");
+  });
+});
+
+test("composeArtworkPreview mounts artwork pixels onto the environment photo", async () => {
+  await withTempDir(async (temp) => {
+    const environmentPath = path.join(temp, "source-photo.webp");
+    const artworkPath = path.join(temp, "artwork.webp");
+    const outputPath = path.join(temp, "fusion.png");
+    await writeSolidImage(environmentPath, {
+      width: 200,
+      height: 120,
+      color: { r: 32, g: 96, b: 128, alpha: 1 }
+    });
+    await writeSolidImage(artworkPath, {
+      width: 40,
+      height: 60,
+      color: { r: 210, g: 48, b: 36, alpha: 1 }
+    });
+
+    await composeArtworkPreview(environmentPath, artworkPath, outputPath);
+
+    const output = PNG.sync.read(await fs.readFile(outputPath));
+    assert.equal(output.width, 200);
+    assert.equal(output.height, 120);
+    assert.deepEqual(pixelAt(output, 5, 5), [32, 96, 128, 255]);
+    assert.deepEqual(pixelAt(output, 100, 53), [210, 48, 36, 255]);
   });
 });
 

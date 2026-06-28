@@ -7,7 +7,7 @@ const path = require("node:path");
 const { PNG } = require("pngjs");
 const sharp = require("sharp");
 const { loadConfig, publicConfig, productionAvailable } = require("./config");
-const { runCodexImageGeneration } = require("./codexRunner");
+const { runCodexImageGeneration, runCodexJsonEstimation } = require("./codexRunner");
 const { archiveSourcePhoto } = require("./imagePipeline");
 const { createJobManager } = require("./jobs");
 const { createStorage, resolveRecordAssetPath, validateRecordAssetPath, validateRecordId } = require("./storage");
@@ -159,7 +159,7 @@ function createUploadMiddleware(dataDir, config) {
     dest: path.join(dataDir, "uploads"),
     limits: { fileSize: maxUploadBytes(config) },
     fileFilter: (req, file, callback) => {
-      if (/^image\/(png|jpe?g|webp)$/i.test(file.mimetype || "")) {
+      if (/^image\/(png|jpe?g|webp|heic|heif|heic-sequence|heif-sequence)$/i.test(file.mimetype || "")) {
         callback(null, true);
         return;
       }
@@ -269,6 +269,21 @@ async function checkWebpAvailable() {
 }
 
 async function runDeterministicImageGeneration({ outputPngPath, stage }) {
+  if (stage === "size_estimation") {
+    return {
+      json: {
+        generation_complexity: "medium",
+        recommended_artwork_size: {
+          preset_id: "deterministic_environment",
+          label: "环境估算尺寸",
+          width_cm: 45,
+          height_cm: 70,
+          reason: "测试环境估算。"
+        }
+      }
+    };
+  }
+
   const png = new PNG({ width: 64, height: 96 });
   const seed = stage === "fusion_render" ? [124, 46, 40] : [38, 92, 73];
   for (let y = 0; y < png.height; y += 1) {
@@ -293,11 +308,20 @@ function createApp(options = {}) {
   const storage = options.storage || createStorage(dataDir);
   const runner = options.runner || (shouldUseDeterministicRunner()
     ? runDeterministicImageGeneration
-    : ((runnerOptions) => runCodexImageGeneration({
-    ...runnerOptions,
-    config,
-    generatedImagesRoot: configuredGeneratedImagesRoot(projectRoot, config)
-  })));
+    : ((runnerOptions) => {
+      const baseOptions = {
+        ...runnerOptions,
+        config,
+        generatedImagesRoot: configuredGeneratedImagesRoot(projectRoot, config)
+      };
+      if (runnerOptions.stage === "size_estimation") {
+        return runCodexJsonEstimation({
+          ...baseOptions,
+          jobDir: runnerOptions.jobDir || path.join(dataDir, "records", runnerOptions.record?.id || "size-estimation", "size-estimation")
+        });
+      }
+      return runCodexImageGeneration(baseOptions);
+    }));
   const jobs = options.jobs || createJobManager({ config, storage, runner });
   const upload = createUploadMiddleware(dataDir, config);
   const app = express();
@@ -407,6 +431,7 @@ function createApp(options = {}) {
       conversationNotes: req.body.conversationNotes || req.body.conversation_notes || "",
       sourcePhotoPath,
       recommendedArtworkSize: req.body.recommended_artwork_size || null,
+      generationComplexity: req.body.generation_complexity,
       originTab: req.body.origin_tab || req.body.originTab || "studio",
       operation: req.body.operation || "create"
     });
@@ -437,6 +462,9 @@ function createApp(options = {}) {
       type: current.type,
       answers: req.body.answers || current.answers || {},
       conversationNotes: req.body.conversationNotes || current.conversation_notes || "",
+      sourcePhotoPath: current.source_photo_path || "",
+      recommendedArtworkSize: current.recommended_artwork_size || null,
+      generationComplexity: req.body.generation_complexity || current.generation_complexity,
       originTab: req.body.origin_tab || req.body.originTab || "studio",
       operation: req.body.operation || "adjust"
     });

@@ -152,6 +152,7 @@ describe("generation session helpers", () => {
       { answers: null },
       { conversationNotes: 123 },
       { source_photo_path: 123 },
+      { generation_complexity: "huge" },
       { recommended_artwork_size: [] },
       {
         recommended_artwork_size: {
@@ -207,6 +208,7 @@ describe("generation session helpers", () => {
           answers: { work_type: "calligraphy", text: "松风" },
           conversationNotes: "make it lighter",
           source_photo_path: "uploads/source.webp",
+          generation_complexity: "large",
           recommended_artwork_size: {
             preset_id: "medium",
             label: "Medium",
@@ -232,6 +234,7 @@ describe("generation session helpers", () => {
           answers: { work_type: "calligraphy", text: "松风" },
           conversationNotes: "make it lighter",
           source_photo_path: "uploads/source.webp",
+          generation_complexity: "large",
           recommended_artwork_size: {
             preset_id: "medium",
             label: "Medium",

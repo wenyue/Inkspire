@@ -120,6 +120,30 @@ describe("Library", () => {
     expect(screen.getByText(/2026/)).toBeInTheDocument();
   });
 
+  it("keeps the full calligraphy title in the rendered text", () => {
+    const longTitle = "明月松间照清泉石上流竹喧归浣女莲动下渔舟";
+
+    render(
+      <Library
+        records={[
+          {
+            id: "record-long-calligraphy",
+            type: "calligraphy",
+            title: longTitle,
+            thumbnail_path: "records/record-long-calligraphy/artwork.webp",
+            status: "succeeded"
+          }
+        ]}
+        locale="zh-Hans"
+        emptyLabel="暂无作品"
+        labels={labels}
+      />
+    );
+
+    expect(screen.getByText(longTitle)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: new RegExp(longTitle) })).toBeInTheDocument();
+  });
+
   it("makes opening saved records visible on the card", () => {
     render(
       <Library

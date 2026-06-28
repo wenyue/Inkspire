@@ -95,6 +95,9 @@ const tabIcons = {
   experts: Users
 };
 
+const originTabs: OriginTab[] = ["studio", "library", "experts"];
+const storedSessionLookupOrder: OriginTab[] = ["library", "experts", "studio"];
+
 function generationTime(record: LibraryRecord): number {
   const time = record.created_at ? new Date(record.created_at).getTime() : NaN;
   return Number.isNaN(time) ? -Infinity : time;
@@ -125,12 +128,20 @@ function tabToOriginTab(tab: Tab): OriginTab {
   return tab;
 }
 
+function isOriginTab(value: unknown): value is OriginTab {
+  return value === "studio" || value === "library" || value === "experts";
+}
+
+function isGenerationOperation(value: unknown): value is GenerationOperation {
+  return value === "create" || value === "adjust";
+}
+
 function jobOriginTab(job: GenerationJob): OriginTab {
-  return job.origin_tab ?? "studio";
+  return isOriginTab(job.origin_tab) ? job.origin_tab : "studio";
 }
 
 function jobOperation(job: GenerationJob): GenerationOperation {
-  return job.operation ?? "create";
+  return isGenerationOperation(job.operation) ? job.operation : "create";
 }
 
 function jobStartedAt(job: GenerationJob): number {
@@ -144,17 +155,79 @@ function generationPayloadForSession(payload: GenerationPayload): GenerationSess
     answers: payload.answers,
     conversationNotes: payload.conversationNotes,
     source_photo_path: payload.source_photo_path,
-    recommended_artwork_size: payload.recommended_artwork_size
+    recommended_artwork_size: payload.recommended_artwork_size,
+    generation_complexity: payload.generation_complexity
   };
+}
+
+function storedSessionForJob(sessions: GenerationSessionMap, jobId: string): GenerationSession | undefined {
+  for (const tab of storedSessionLookupOrder) {
+    const session = sessions[tab];
+    if (session?.status === "running" && session.jobId === jobId) {
+      return session;
+    }
+  }
+  return undefined;
+}
+
+function generationJobMetadata(
+  job: GenerationJob,
+  sessions: GenerationSessionMap
+): { originTab: OriginTab; operation: GenerationOperation } {
+  const storedSession = storedSessionForJob(sessions, job.id);
+  return {
+    originTab: isOriginTab(job.origin_tab) ? job.origin_tab : storedSession?.originTab ?? "studio",
+    operation: isGenerationOperation(job.operation) ? job.operation : storedSession?.operation ?? "create"
+  };
+}
+
+function expectsPreviewGeneration(session: GenerationSession | undefined): boolean {
+  return Boolean(
+    session
+    && session.operation === "create"
+    && session.payload.source_photo_path
+  );
+}
+
+function jobWithResolvedMetadata(job: GenerationJob, sessions: GenerationSessionMap): GenerationJob {
+  const metadata = generationJobMetadata(job, sessions);
+  return {
+    ...job,
+    origin_tab: metadata.originTab,
+    operation: metadata.operation
+  };
+}
+
+function jobsWithResolvedMetadata(jobs: GenerationJob[], sessions: GenerationSessionMap): GenerationJob[] {
+  return jobs.map((job) => jobWithResolvedMetadata(job, sessions));
+}
+
+function jobWithFallbackMetadata(
+  job: GenerationJob,
+  metadata: { originTab: OriginTab; operation: GenerationOperation }
+): GenerationJob {
+  return {
+    ...job,
+    origin_tab: isOriginTab(job.origin_tab) ? job.origin_tab : metadata.originTab,
+    operation: isGenerationOperation(job.operation) ? job.operation : metadata.operation
+  };
+}
+
+function startResultWithFallbackMetadata(
+  result: GenerationStartResult,
+  metadata: { originTab: OriginTab; operation: GenerationOperation }
+): GenerationStartResult {
+  return result.job ? { ...result, job: jobWithFallbackMetadata(result.job, metadata) } : result;
 }
 
 function runningSessionFromJob(
   job: GenerationJob,
-  payload: GenerationSession["payload"] = {}
+  payload: GenerationSession["payload"] = {},
+  metadata?: { originTab: OriginTab; operation: GenerationOperation }
 ): GenerationSession {
   return {
-    originTab: jobOriginTab(job),
-    operation: jobOperation(job),
+    originTab: metadata?.originTab ?? jobOriginTab(job),
+    operation: metadata?.operation ?? jobOperation(job),
     jobId: job.id,
     resultRecordId: job.recordId,
     startedAt: jobStartedAt(job),
@@ -257,15 +330,15 @@ export default function App() {
   }, [updateGenerationSessions]);
 
   const markGenerationSessionFailed = useCallback((job: GenerationJob, error?: string) => {
-    const originTab = jobOriginTab(job);
     updateGenerationSessions((sessions) => {
-      const current = sessions[originTab];
+      const metadata = generationJobMetadata(job, sessions);
+      const current = sessions[metadata.originTab];
       return {
         ...sessions,
-        [originTab]: {
-          ...(current ?? runningSessionFromJob(job)),
-          originTab,
-          operation: current?.operation ?? jobOperation(job),
+        [metadata.originTab]: {
+          ...(current ?? runningSessionFromJob(job, {}, metadata)),
+          originTab: metadata.originTab,
+          operation: current?.operation ?? metadata.operation,
           jobId: current?.jobId ?? job.id,
           resultRecordId: current?.resultRecordId ?? job.recordId,
           status: "failed",
@@ -443,7 +516,8 @@ export default function App() {
 
   const mergeActiveJob = useCallback((job: GenerationJob) => {
     setActiveJobs((jobs) => {
-      const next = [job, ...jobs.filter((item) => item.id !== job.id)]
+      const resolvedJob = jobWithResolvedMetadata(job, generationSessionsRef.current);
+      const next = [resolvedJob, ...jobs.filter((item) => item.id !== resolvedJob.id)]
         .filter((item) => item.status === "queued" || item.status === "running")
         .slice(0, 2);
       activeJobsRef.current = next;
@@ -452,7 +526,7 @@ export default function App() {
   }, []);
 
   const replaceActiveJobs = useCallback((jobs: GenerationJob[]) => {
-    const next = jobs
+    const next = jobsWithResolvedMetadata(jobs, generationSessionsRef.current)
       .filter((job) => job.status === "queued" || job.status === "running")
       .slice(0, 2);
     activeJobsRef.current = next;
@@ -480,13 +554,22 @@ export default function App() {
         if (!hasUsableJobPayload(job) || (job.status !== "queued" && job.status !== "running")) {
           continue;
         }
-        const session = runningSessionFromJob(job);
+        const metadata = generationJobMetadata(job, next);
+        for (const tab of originTabs) {
+          const duplicate = next[tab];
+          if (tab !== metadata.originTab && duplicate?.status === "running" && duplicate.jobId === job.id) {
+            next = { ...next };
+            delete next[tab];
+          }
+        }
+        const current = next[metadata.originTab];
+        const session = runningSessionFromJob(job, current?.payload, metadata);
         next = {
           ...next,
-          [session.originTab]: {
-            ...next[session.originTab],
+          [metadata.originTab]: {
+            ...current,
             ...session,
-            payload: next[session.originTab]?.payload ?? session.payload
+            payload: current?.payload ?? session.payload
           }
         };
       }
@@ -497,9 +580,10 @@ export default function App() {
   useEffect(() => {
     loadActiveJobs()
       .then((jobs) => {
-        setActiveJobs(jobs);
-        activeJobsRef.current = jobs;
-        seedGenerationSessionsFromJobs(jobs);
+        const resolvedJobs = jobsWithResolvedMetadata(jobs, generationSessionsRef.current);
+        setActiveJobs(resolvedJobs);
+        activeJobsRef.current = resolvedJobs;
+        seedGenerationSessionsFromJobs(resolvedJobs);
       })
       .catch(() => {});
   }, [seedGenerationSessionsFromJobs]);
@@ -555,13 +639,14 @@ export default function App() {
     operation: GenerationOperation = "create"
   ) => {
     try {
-      const result = await createFusion(recordId, sourcePhotoPath, originTab, operation);
+      const result = startResultWithFallbackMetadata(
+        await createFusion(recordId, sourcePhotoPath, originTab, operation),
+        { originTab, operation }
+      );
       handleGenerationStart(result);
       if (result.job?.status === "queued" || result.job?.status === "running") {
         upsertGenerationSession({
-          ...runningSessionFromJob(result.job, { source_photo_path: sourcePhotoPath }),
-          originTab,
-          operation,
+          ...runningSessionFromJob(result.job, { source_photo_path: sourcePhotoPath }, { originTab, operation }),
           sourceRecordId: recordId
         });
         navigate(fallbackPathForSource(originTab), { replace: true });
@@ -583,20 +668,20 @@ export default function App() {
 
   const startGenerationJob = useCallback(async (payload: GenerationPayload) => {
     try {
-      const result = await createGeneration(payload);
+      const originTab = payload.origin_tab ?? "studio";
+      const operation = payload.operation ?? "create";
+      const result = startResultWithFallbackMetadata(
+        await createGeneration(payload),
+        { originTab, operation }
+      );
       handleGenerationStart(result);
       if (result.job?.status === "queued" || result.job?.status === "running") {
-        const originTab = payload.origin_tab ?? "studio";
-        const operation = payload.operation ?? "create";
         upsertGenerationSession({
-          ...runningSessionFromJob(result.job, generationPayloadForSession(payload)),
-          originTab,
-          operation
+          ...runningSessionFromJob(result.job, generationPayloadForSession(payload), { originTab, operation })
         });
         navigate(fallbackPathForSource(originTab), { replace: true });
       }
       if (result.record && !result.job) {
-        const originTab = payload.origin_tab ?? "studio";
         clearGenerationSession(originTab);
         if (
           result.record.status === "succeeded"
@@ -620,7 +705,8 @@ export default function App() {
   }, [applyFinishedRecord, clearGenerationSession, handleGenerationStart, navigate, replaceActiveJobs, startFusionJob, upsertGenerationSession]);
 
   const finishRecordForJob = useCallback(async (job: GenerationJob, record: GenerationRecord) => {
-    const originTab = jobOriginTab(job);
+    const metadata = generationJobMetadata(job, generationSessionsRef.current);
+    const originTab = metadata.originTab;
     if (
       job.stage === "artwork"
       && record.status === "succeeded"
@@ -629,7 +715,7 @@ export default function App() {
       && !autoFusionRecordIds.current.has(record.id)
     ) {
       autoFusionRecordIds.current.add(record.id);
-      await startFusionJob(record.id, record.source_photo_path, originTab, jobOperation(job));
+      await startFusionJob(record.id, record.source_photo_path, originTab, metadata.operation);
       return;
     }
     if (record.status === "failed") {
@@ -654,10 +740,14 @@ export default function App() {
 
     await Promise.all(currentJobs.map(async (job) => {
       try {
-        const nextJob = await getJob(job.id);
-        if (!hasUsableJobPayload(nextJob)) {
+        const polledJob = await getJob(job.id);
+        if (!hasUsableJobPayload(polledJob)) {
           return;
         }
+        const nextJob = jobWithResolvedMetadata(
+          jobWithFallbackMetadata(polledJob, { originTab: jobOriginTab(job), operation: jobOperation(job) }),
+          generationSessionsRef.current
+        );
         if (nextJob.status === "queued" || nextJob.status === "running") {
           updates.set(nextJob.id, nextJob);
           return;
@@ -821,6 +911,7 @@ export default function App() {
         conversationNotes: note,
         source_photo_path: currentRecord.source_photo_path,
         recommended_artwork_size: currentRecord.recommended_artwork_size ?? null,
+        generation_complexity: currentRecord.generation_complexity,
         origin_tab: originTab,
         operation: "adjust"
       });
@@ -842,6 +933,7 @@ export default function App() {
       conversationNotes: session.payload.conversationNotes ?? "",
       source_photo_path: session.payload.source_photo_path,
       recommended_artwork_size: session.payload.recommended_artwork_size ?? null,
+      generation_complexity: session.payload.generation_complexity,
       origin_tab: session.originTab,
       operation: session.operation
     });
@@ -868,6 +960,7 @@ export default function App() {
       adjustRetryLabel={t("result.adjustRetry")}
       attachPhotoLabel={t("result.attachPhotoFusion")}
       generateFusionLabel={t("result.generateFusion")}
+      reuploadEnvironmentPhotoLabel={t("result.reuploadEnvironmentPhoto")}
       busyLabel={t("studio.generating")}
       failedTitle={t("result.failedTitle")}
       failedHint={t("result.failedHint")}
@@ -977,6 +1070,7 @@ export default function App() {
             locale={locale}
             t={t}
             onRetry={activeTabSessionRetry}
+            expectsPreviewGeneration={expectsPreviewGeneration(activeTabSession)}
           />
         ) : recordView ?? (
           <>

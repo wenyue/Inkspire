@@ -18,6 +18,8 @@ type ProductionSize = ArtworkSize & {
   hint: Record<Locale, string>;
 };
 
+type SizePresetId = "small" | "medium" | "large";
+
 type ReferenceTone = "recommended" | "neutral" | "caution";
 
 type ReferenceLevel = {
@@ -42,48 +44,42 @@ const DEFAULT_SIZE: ArtworkSize & { labelText: Record<Locale, string>; reasonTex
   }
 };
 
-const SIZE_OPTIONS: ProductionSize[] = [
-  {
-    preset_id: "small",
+const SIZE_TARGET_AREAS: Record<SizePresetId, number> = {
+  small: 1350,
+  medium: 3060,
+  large: 5400
+};
+
+const SIZE_COPY: Record<SizePresetId, Pick<ProductionSize, "label" | "labelText" | "hint">> = {
+  small: {
     label: "小幅点景",
     labelText: { "zh-Hans": "小幅点景", "zh-Hant": "小幅點景", en: "Small accent" },
-    width_cm: 30,
-    height_cm: 45,
     hint: { "zh-Hans": "约一张海报大小，适合玄关、书桌旁。", "zh-Hant": "約一張海報大小，適合玄關、書桌旁。", en: "Poster-like, good for entryways and desks." }
   },
-  {
-    preset_id: "medium",
+  medium: {
     label: "中幅雅作",
     labelText: { "zh-Hans": "中幅雅作", "zh-Hant": "中幅雅作", en: "Medium artwork" },
-    width_cm: 45,
-    height_cm: 68,
     hint: { "zh-Hans": "最常用，适合书房、客厅边柜、礼赠。", "zh-Hant": "最常用，適合書房、客廳邊櫃、禮贈。", en: "Most common, good for studies, sideboards, and gifts." }
   },
-  {
-    preset_id: "large",
+  large: {
     label: "厅堂主景",
     labelText: { "zh-Hans": "厅堂主景", "zh-Hant": "廳堂主景", en: "Feature wall" },
-    width_cm: 60,
-    height_cm: 90,
     hint: { "zh-Hans": "更有存在感，适合沙发墙或厅堂主位。", "zh-Hant": "更有存在感，適合沙發牆或廳堂主位。", en: "More prominent, good for feature walls." }
-  },
-  {
-    preset_id: "square_scene",
-    label: "方形点景",
+  }
+};
+
+const LEGACY_SIZE_COPY: Record<string, Pick<ProductionSize, "labelText" | "hint">> = {
+  square_scene: {
     labelText: { "zh-Hans": "方形点景", "zh-Hant": "方形點景", en: "Square accent" },
-    width_cm: 50,
-    height_cm: 50,
     hint: { "zh-Hans": "接近抱枕宽度，适合方形留白或组合陈设。", "zh-Hant": "接近抱枕寬度，適合方形留白或組合陳設。", en: "Square accent size for balanced displays." }
   },
-  {
-    preset_id: "landscape_scene",
-    label: "横向陈设",
+  landscape_scene: {
     labelText: { "zh-Hans": "横向陈设", "zh-Hant": "橫向陳設", en: "Landscape display" },
-    width_cm: 68,
-    height_cm: 45,
     hint: { "zh-Hans": "适合横向墙面、边柜上方或长桌背景。", "zh-Hant": "適合橫向牆面、邊櫃上方或長桌背景。", en: "Wide format for horizontal walls." }
   }
-];
+};
+
+const SIZE_PRESET_IDS: SizePresetId[] = ["small", "medium", "large"];
 
 const REFERENCE_LEVELS: ReferenceLevel[] = [
   {
@@ -161,13 +157,53 @@ function customSizeLabel(locale: Locale): string {
   return locale === "en" ? "Custom size" : locale === "zh-Hant" ? "自訂尺寸" : "自定义尺寸";
 }
 
+function isSizePresetId(value: string): value is SizePresetId {
+  return SIZE_PRESET_IDS.includes(value as SizePresetId);
+}
+
+function roundToNearestFive(value: number): number {
+  return Math.max(5, Math.round(value / 5) * 5);
+}
+
+function sizeRatio(size: ArtworkSize): number {
+  return Number.isFinite(size.width_cm)
+    && Number.isFinite(size.height_cm)
+    && size.width_cm > 0
+    && size.height_cm > 0
+    ? size.width_cm / size.height_cm
+    : DEFAULT_SIZE.width_cm / DEFAULT_SIZE.height_cm;
+}
+
+function sizeFromRatio(presetId: SizePresetId, ratio: number): ProductionSize {
+  const area = SIZE_TARGET_AREAS[presetId];
+  const height = Math.sqrt(area / ratio);
+  const width = height * ratio;
+  const copy = SIZE_COPY[presetId];
+  return {
+    preset_id: presetId,
+    label: copy.label,
+    width_cm: roundToNearestFive(width),
+    height_cm: roundToNearestFive(height),
+    labelText: copy.labelText,
+    hint: copy.hint
+  };
+}
+
+function sizeOptionsFor(inferredSize: ArtworkSize): ProductionSize[] {
+  const ratio = sizeRatio(inferredSize);
+  return SIZE_PRESET_IDS.map((presetId) => sizeFromRatio(presetId, ratio));
+}
+
 function localizedSizeName(size: ArtworkSize, locale: Locale): string {
   if (size.preset_id === "custom") {
     return customSizeLabel(locale);
   }
-  const preset = SIZE_OPTIONS.find((option) => option.preset_id === size.preset_id);
-  if (preset) {
-    return text(preset.labelText, locale);
+  if (isSizePresetId(size.preset_id)) {
+    return text(SIZE_COPY[size.preset_id].labelText, locale);
+  }
+  const legacy = LEGACY_SIZE_COPY[size.preset_id];
+  if (legacy) {
+    return text(legacy.labelText, locale);
   }
   if (size.preset_id === DEFAULT_SIZE.preset_id) {
     return text(DEFAULT_SIZE.labelText, locale);
@@ -181,17 +217,20 @@ function sizeLabel(size: ArtworkSize, locale: Locale): string {
 }
 
 function sizeHint(size: ArtworkSize, locale: Locale): string {
-  const preset = SIZE_OPTIONS.find((option) => option.preset_id === size.preset_id);
-  if (preset) {
-    return text(preset.hint, locale);
+  if (size.reason) {
+    return locale === "en" && /[\u3400-\u9fff]/.test(size.reason) ? "Suggested from the artwork size estimate." : size.reason;
+  }
+  if (isSizePresetId(size.preset_id)) {
+    return text(SIZE_COPY[size.preset_id].hint, locale);
+  }
+  const legacy = LEGACY_SIZE_COPY[size.preset_id];
+  if (legacy) {
+    return text(legacy.hint, locale);
   }
   if (size.preset_id === DEFAULT_SIZE.preset_id) {
     return text(DEFAULT_SIZE.reasonText, locale);
   }
-  if (!size.reason) {
-    return "";
-  }
-  return locale === "en" && /[\u3400-\u9fff]/.test(size.reason) ? "Suggested from the artwork size estimate." : size.reason;
+  return "";
 }
 
 function estimateSizeKey(size: ArtworkSize): string {
@@ -279,10 +318,7 @@ export default function ProductionDialog({
     wechat: expert.wechat || supportContact?.wechat || ""
   };
   const productionOpen = productionAvailable && Boolean(contact.phone || contact.wechat);
-  const presetOptions = useMemo(() => {
-    const hasInferred = SIZE_OPTIONS.some((option) => option.preset_id === inferredSize.preset_id);
-    return hasInferred ? SIZE_OPTIONS : [inferredSize as ProductionSize, ...SIZE_OPTIONS];
-  }, [inferredSize]);
+  const presetOptions = useMemo(() => sizeOptionsFor(inferredSize), [inferredSize]);
   const customSelected = draftSize.preset_id === "custom";
   const customWidthValue = Number(customWidth);
   const customHeightValue = Number(customHeight);

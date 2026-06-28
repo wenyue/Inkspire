@@ -15,6 +15,7 @@ interface GeneratingViewProps {
   locale: Locale;
   t: (key: string) => string;
   onRetry?: () => void;
+  expectsPreviewGeneration?: boolean;
 }
 
 function loadingImagePath(operation: GenerationOperation, stage: string, jobId: string): string {
@@ -31,12 +32,16 @@ export default function GeneratingView({
   error,
   locale,
   t,
-  onRetry
+  onRetry,
+  expectsPreviewGeneration = false
 }: GeneratingViewProps) {
   const elapsedSeconds = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
   const phase = generationPhase(operation, elapsedSeconds);
   const failed = status === "failed";
   const copyKey = `generationLoading.${operation}.${phase.labelKey}`;
+  const estimateKey = expectsPreviewGeneration
+    ? "generationLoading.estimate.double"
+    : "generationLoading.estimate.single";
 
   return (
     <section
@@ -51,7 +56,7 @@ export default function GeneratingView({
       </div>
       <div className="generating-copy">
         <h2>{failed ? t("generationLoading.failedTitle") : t(copyKey)}</h2>
-        <p>{failed ? error || t("generationLoading.failedHint") : t("generationLoading.estimate")}</p>
+        <p>{failed ? error || t("generationLoading.failedHint") : t(estimateKey)}</p>
       </div>
       {failed && onRetry ? (
         <button className="primary-action compact-action generating-retry-action" type="button" onClick={onRetry}>

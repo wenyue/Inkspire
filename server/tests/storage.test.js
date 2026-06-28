@@ -35,6 +35,14 @@ test("saveRecord writes record JSON, updates library, and getRecord returns it",
       created_at: "2026-06-24T12:00:00.000Z",
       source_photo_path: "records/artwork-1/source-photo.webp",
       artwork_path: "records/artwork-1/artwork.webp",
+      generation_complexity: "large",
+      recommended_artwork_size: {
+        preset_id: "complexity_large",
+        label: "丰富参考尺寸",
+        width_cm: 60,
+        height_cm: 90,
+        reason: "按作品复杂度和画面比例估算。"
+      },
       favorite: true,
       status: "succeeded",
       answers: { painting_subject: "山水" }
@@ -57,6 +65,14 @@ test("saveRecord writes record JSON, updates library, and getRecord returns it",
         title: "松风入画",
         thumbnail_path: "records/artwork-1/artwork.webp",
         has_fusion: false,
+        generation_complexity: "large",
+        recommended_artwork_size: {
+          preset_id: "complexity_large",
+          label: "丰富参考尺寸",
+          width_cm: 60,
+          height_cm: 90,
+          reason: "按作品复杂度和画面比例估算。"
+        },
         favorite: true,
         status: "succeeded"
       }

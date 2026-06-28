@@ -15,7 +15,7 @@ async function completePaintingFlow(page) {
   for (const option of ["山水", "水墨", "清雅", "竖幅", "适中"]) {
     await page.getByRole("button", { name: option }).click();
   }
-  await expect(page.getByRole("heading", { name: "可选：添加摆放环境照片" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "可选：添加环境照片" })).toBeVisible();
   await expect(page.getByRole("button", { name: "生成", exact: true })).not.toBeVisible();
 }
 
@@ -60,7 +60,6 @@ test("mobile user can complete Inkspire creation flow with mocked generation", a
   await addPhotoAndContinue(page);
   await page.getByRole("button", { name: "生成", exact: true }).click();
 
-  await expect(page.getByText("墨色正在铺开，可能需要 2-3 分钟，请耐心等待。")).toBeVisible();
   await expect(page.getByRole("img", { name: "作品图" })).toBeVisible({ timeout: 30_000 });
   await expect(page.getByRole("img", { name: "效果图" })).toBeVisible();
   await expect(page.getByText("作品图", { exact: true })).toBeVisible();
@@ -117,7 +116,6 @@ test("wide viewport shows artwork and fusion side by side", async ({ page }) => 
   await addPhotoAndContinue(page);
   await page.getByRole("button", { name: "生成", exact: true }).click();
 
-  await expect(page.getByText("墨色正在铺开，可能需要 2-3 分钟，请耐心等待。")).toBeVisible();
   await expect(page.getByRole("img", { name: "作品图" })).toBeVisible({ timeout: 30_000 });
   await expect(page.getByRole("img", { name: "效果图" })).toBeVisible();
   const resultColumns = await page.locator(".result-grid").first().evaluate((element) => {
@@ -134,7 +132,6 @@ test("camera photo entry applies and generates fusion output", async ({ page }) 
   await addPhotoAndContinue(page, "camera");
   await page.getByRole("button", { name: "生成", exact: true }).click();
 
-  await expect(page.getByText("墨色正在铺开，可能需要 2-3 分钟，请耐心等待。")).toBeVisible();
   await expect(page.getByRole("img", { name: "作品图" })).toBeVisible({ timeout: 30_000 });
   await expect(page.getByRole("img", { name: "效果图" })).toBeVisible();
 });

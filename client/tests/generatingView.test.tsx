@@ -4,7 +4,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import GeneratingView from "../src/components/GeneratingView";
 
 const copy: Record<string, string> = {
-  "generationLoading.estimate": "Usually about 30 seconds. Please wait.",
+  "generationLoading.estimate.single": "Usually about 30 seconds. Please wait.",
+  "generationLoading.estimate.double": "Usually about 50 seconds. Please wait.",
   "generationLoading.retry": "Try again",
   "generationLoading.failedTitle": "Generation did not finish",
   "generationLoading.failedHint": "Try again, or switch to another page first.",
@@ -46,6 +47,25 @@ describe("GeneratingView", () => {
     );
     expect(screen.queryByRole("progressbar")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Try again" })).not.toBeInTheDocument();
+  });
+
+  it("shows the longer estimate when one user action will generate artwork and preview", () => {
+    vi.setSystemTime(new Date("2026-06-27T10:00:10.000Z"));
+
+    render(
+      <GeneratingView
+        originTab="studio"
+        operation="create"
+        jobId="job-create-preview"
+        startedAt={new Date("2026-06-27T10:00:00.000Z").getTime()}
+        status="running"
+        locale="en"
+        t={t}
+        expectsPreviewGeneration
+      />
+    );
+
+    expect(screen.getByText("Usually about 50 seconds. Please wait.")).toBeInTheDocument();
   });
 
   it("shows failure copy and calls retry from the retry action", async () => {

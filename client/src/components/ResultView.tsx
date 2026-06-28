@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, Brush, ImagePlus, Wand2 } from "lucide-react";
 import type { GenerationRecord } from "../api";
 import { resultLayoutForWidth } from "../domain";
+import ImageViewer from "./ImageViewer";
 
 interface ResultViewProps {
   record: GenerationRecord;
@@ -13,6 +14,7 @@ interface ResultViewProps {
   adjustRetryLabel: string;
   attachPhotoLabel: string;
   generateFusionLabel: string;
+  reuploadEnvironmentPhotoLabel: string;
   busyLabel: string;
   failedTitle: string;
   failedHint: string;
@@ -57,6 +59,7 @@ export default function ResultView({
   adjustRetryLabel,
   attachPhotoLabel,
   generateFusionLabel,
+  reuploadEnvironmentPhotoLabel,
   busyLabel,
   failedTitle,
   failedHint,
@@ -76,7 +79,10 @@ export default function ResultView({
 }: ResultViewProps) {
   const [layout, setLayout] = useState(resultLayoutForWidth(window.innerWidth));
   const [failedImages, setFailedImages] = useState<Record<string, boolean>>({});
+  const [viewerImage, setViewerImage] = useState<{ src: string; alt: string } | null>(null);
   const resultRef = useRef<HTMLElement | null>(null);
+  const pendingPhotoSelection = useRef<{ file: File; input: HTMLInputElement } | null>(null);
+  const pendingPhotoTimer = useRef<number | null>(null);
 
   useEffect(() => {
     const onResize = () => setLayout(resultLayoutForWidth(window.innerWidth));
@@ -91,6 +97,41 @@ export default function ResultView({
     setFailedImages({});
   }, [record.id]);
 
+  useEffect(() => () => {
+    if (pendingPhotoTimer.current !== null && typeof window !== "undefined") {
+      window.clearTimeout(pendingPhotoTimer.current);
+    }
+  }, []);
+
+  const applySelectedPhoto = (file: File, input: HTMLInputElement): void => {
+    onAttachPhoto(file);
+    input.value = "";
+  };
+
+  const onPhotoChange = (event: React.ChangeEvent<HTMLInputElement> | React.FormEvent<HTMLInputElement>): void => {
+    const input = event.currentTarget;
+    const file = input.files?.[0];
+    if (!file) {
+      return;
+    }
+    pendingPhotoSelection.current = { file, input };
+    if (pendingPhotoTimer.current !== null && typeof window !== "undefined") {
+      window.clearTimeout(pendingPhotoTimer.current);
+    }
+    if (typeof window === "undefined") {
+      applySelectedPhoto(file, input);
+      return;
+    }
+    pendingPhotoTimer.current = window.setTimeout(() => {
+      pendingPhotoTimer.current = null;
+      const selection = pendingPhotoSelection.current;
+      pendingPhotoSelection.current = null;
+      if (selection) {
+        applySelectedPhoto(selection.file, selection.input);
+      }
+    }, 0);
+  };
+
   const artwork = recordImage(record, "artwork");
   const fusion = recordImage(record, "fusion");
   const failed = record.status === "failed";
@@ -98,15 +139,23 @@ export default function ResultView({
   const fusionFailed = Boolean(fusion && failedImages.fusion);
   const hasEnvironmentImage = Boolean(record.source_photo_path);
   const mediaClassName = layout === "stacked" ? "compact-result-media" : undefined;
+  const uploadPhotoLabel = fusion ? reuploadEnvironmentPhotoLabel : attachPhotoLabel;
   const artworkFigure = (
     <figure>
       {artwork && !artworkFailed ? (
-        <img
-          className={mediaClassName}
-          src={artwork}
-          alt={artworkLabel}
-          onError={() => setFailedImages((current) => ({ ...current, artwork: true }))}
-        />
+        <button
+          className={`image-open-button ${mediaClassName ?? ""}`.trim()}
+          type="button"
+          aria-label={`查看${artworkLabel}`}
+          onClick={() => setViewerImage({ src: artwork, alt: artworkLabel })}
+        >
+          <img
+            className={mediaClassName}
+            src={artwork}
+            alt={artworkLabel}
+            onError={() => setFailedImages((current) => ({ ...current, artwork: true }))}
+          />
+        </button>
       ) : (
         <div className={`image-placeholder image-error ${mediaClassName ?? ""}`.trim()} role="status">
           <strong>{imageUnavailableTitle}</strong>
@@ -119,12 +168,19 @@ export default function ResultView({
   const fusionFigure = fusion ? (
     <figure>
       {!fusionFailed ? (
-        <img
-          className={mediaClassName}
-          src={fusion}
-          alt={fusionLabel}
-          onError={() => setFailedImages((current) => ({ ...current, fusion: true }))}
-        />
+        <button
+          className={`image-open-button ${mediaClassName ?? ""}`.trim()}
+          type="button"
+          aria-label={`查看${fusionLabel}`}
+          onClick={() => setViewerImage({ src: fusion, alt: fusionLabel })}
+        >
+          <img
+            className={mediaClassName}
+            src={fusion}
+            alt={fusionLabel}
+            onError={() => setFailedImages((current) => ({ ...current, fusion: true }))}
+          />
+        </button>
       ) : (
         <div className={`image-placeholder image-error ${mediaClassName ?? ""}`.trim()} role="status">
           <strong>{fusionUnavailableTitle}</strong>
@@ -159,23 +215,18 @@ export default function ResultView({
             {isAttachingPhoto ? busyLabel : generateFusionLabel}
           </button>
         ) : null}
-        {!failed && !fusion && !hasEnvironmentImage ? (
+        {!failed && (Boolean(fusion) || (!fusion && !hasEnvironmentImage)) ? (
           <label className="secondary-action result-upload-action" tabIndex={0} onKeyDown={openNestedFileInput}>
             <ImagePlus aria-hidden="true" size={16} />
-            {isAttachingPhoto ? busyLabel : attachPhotoLabel}
+            {isAttachingPhoto ? busyLabel : uploadPhotoLabel}
             <input
               type="file"
               accept="image/*"
               disabled={isAttachingPhoto}
-              aria-label={attachPhotoLabel}
+              aria-label={uploadPhotoLabel}
               tabIndex={-1}
-              onChange={(event) => {
-                const file = event.target.files?.[0];
-                if (file) {
-                  onAttachPhoto(file);
-                }
-                event.target.value = "";
-              }}
+              onInput={onPhotoChange}
+              onChange={onPhotoChange}
             />
           </label>
         ) : null}
@@ -204,16 +255,19 @@ export default function ResultView({
             {artworkFigure}
             {layout === "split" ? fusionFigure : null}
           </div>
-          {layout === "stacked" ? resultActions : null}
           {layout === "stacked" && fusionFigure ? (
             <div className="result-grid stacked result-fusion-followup">
               {fusionFigure}
             </div>
           ) : null}
+          {layout === "stacked" ? resultActions : null}
         </>
       )}
       {failed || layout === "split" ? resultActions : null}
       {actionError ? <p className="error-line" role="status">{actionError}</p> : null}
+      {viewerImage ? (
+        <ImageViewer src={viewerImage.src} alt={viewerImage.alt} onClose={() => setViewerImage(null)} />
+      ) : null}
     </section>
   );
 }

@@ -19,12 +19,15 @@ function resolveGeneratedImagesRoot(root) {
   return path.join(process.env.CODEX_HOME || path.join(os.homedir(), ".codex"), "generated_images");
 }
 
-function buildCodexArgs({ model, reasoningEffort, prompt }) {
+function buildCodexArgs({ model, reasoningEffort, prompt, enableImageGeneration = true }) {
   const args = ["exec", "-m", model || "gpt-5"];
   if (reasoningEffort) {
     args.push("-c", `model_reasoning_effort="${reasoningEffort}"`);
   }
-  args.push("--enable", "image_generation", "--json", prompt);
+  if (enableImageGeneration) {
+    args.push("--enable", "image_generation");
+  }
+  args.push("--json", prompt);
   return args;
 }
 
@@ -35,7 +38,14 @@ function formatCanvas(canvas = {}) {
   return `${width}x${height} pixels, ${aspectRatio} aspect ratio`;
 }
 
-function buildImageGenerationPrompt({ prompt, canvas }) {
+function referenceImageLines(referenceImages = {}) {
+  return Object.entries(referenceImages)
+    .filter(([, imagePath]) => typeof imagePath === "string" && imagePath.length > 0)
+    .map(([label, imagePath]) => `${label}: ${imagePath}`);
+}
+
+function buildImageGenerationPrompt({ prompt, canvas, referenceImages = {} }) {
+  const references = referenceImageLines(referenceImages);
   return [
     "You are the Inkspire image-generation worker.",
     "",
@@ -44,10 +54,29 @@ function buildImageGenerationPrompt({ prompt, canvas }) {
     `Target canvas: ${formatCanvas(canvas)}.`,
     "Avoid watermarks, fake signatures, fake brands, and unreadable decorative text.",
     "If you cannot call the built-in image generation tool, return IMAGE_GENERATION_FAILED.",
+    references.length > 0 ? "" : "",
+    references.length > 0 ? "Reference images are available at these local file paths; inspect them and use them as visual references:" : "",
+    ...references,
     "",
     "Use this exact Chinese art brief:",
     prompt || ""
-  ].join("\n");
+  ].filter((line, index, lines) => line !== "" || lines[index - 1] !== "").join("\n");
+}
+
+function buildJsonEstimationPrompt({ prompt, referenceImages = {} }) {
+  const references = referenceImageLines(referenceImages);
+  return [
+    "You are the Inkspire environment-size estimation worker.",
+    "",
+    "Inspect the referenced local image paths when available and return exactly one JSON object.",
+    "Do not generate an image. Do not return Markdown.",
+    references.length > 0 ? "" : "",
+    references.length > 0 ? "Reference images are available at these local file paths:" : "",
+    ...references,
+    "",
+    "Use this exact Chinese estimation brief:",
+    prompt || ""
+  ].filter((line, index, lines) => line !== "" || lines[index - 1] !== "").join("\n");
 }
 
 function isPngBuffer(buffer) {
@@ -184,6 +213,23 @@ function diagnoseCodexImageGeneration({ eventsPath, outputPath } = {}) {
   };
 }
 
+function parseJsonObjectFromText(text) {
+  const trimmed = String(text || "").trim();
+  if (!trimmed) {
+    throw new Error("Codex JSON estimation returned no text");
+  }
+  try {
+    return JSON.parse(trimmed);
+  } catch (error) {
+    const start = trimmed.indexOf("{");
+    const end = trimmed.lastIndexOf("}");
+    if (start === -1 || end <= start) {
+      throw error;
+    }
+    return JSON.parse(trimmed.slice(start, end + 1));
+  }
+}
+
 function runCodexProcess({ command, args, cwd, eventsPath, outputPath, spawnImpl }) {
   return new Promise((resolve, reject) => {
     ensureDirectoryFor(eventsPath);
@@ -228,7 +274,8 @@ async function runCodexImageGeneration(options) {
     reasoningEffort: runtime.codexReasoningEffort,
     prompt: buildImageGenerationPrompt({
       prompt: options.prompt || "",
-      canvas: runtime.generationCanvas
+      canvas: runtime.generationCanvas,
+      referenceImages: options.referenceImages
     })
   });
 
@@ -269,9 +316,49 @@ async function runCodexImageGeneration(options) {
   };
 }
 
+async function runCodexJsonEstimation(options) {
+  const runtime = runtimeConfig(options.config);
+  const jobDir = options.jobDir || path.join(os.tmpdir(), `inkspire-size-estimation-${Date.now()}`);
+  const eventsPath = options.eventsPath || path.join(jobDir, "codex-size-events.jsonl");
+  const outputPath = options.outputPath || path.join(jobDir, "codex-size-stderr.log");
+  const command = runtime.codexCommand || "codex";
+  const args = buildCodexArgs({
+    model: runtime.codexModel,
+    reasoningEffort: runtime.codexReasoningEffort,
+    enableImageGeneration: false,
+    prompt: buildJsonEstimationPrompt({
+      prompt: options.prompt || "",
+      referenceImages: options.referenceImages
+    })
+  });
+
+  await runCodexProcess({
+    command,
+    args,
+    cwd: jobDir,
+    eventsPath,
+    outputPath,
+    spawnImpl: options.spawnImpl || spawn
+  });
+
+  const text = readJsonLines(eventsPath).map(eventText).filter(Boolean).join("\n");
+  return {
+    text,
+    json: parseJsonObjectFromText(text),
+    diagnostics: {
+      reason: "json_estimation",
+      stderr_tail: outputPath && fs.existsSync(outputPath)
+        ? fs.readFileSync(outputPath, "utf8").split(/\r?\n/).filter(Boolean).slice(-20).join("\n")
+        : ""
+    }
+  };
+}
+
 module.exports = {
   buildCodexArgs,
   buildImageGenerationPrompt,
+  buildJsonEstimationPrompt,
   diagnoseCodexImageGeneration,
-  runCodexImageGeneration
+  runCodexImageGeneration,
+  runCodexJsonEstimation
 };

@@ -85,6 +85,12 @@ function summarizeRecord(record) {
   if (record.user_id) {
     summary.user_id = record.user_id;
   }
+  if (record.generation_complexity) {
+    summary.generation_complexity = record.generation_complexity;
+  }
+  if (record.recommended_artwork_size) {
+    summary.recommended_artwork_size = record.recommended_artwork_size;
+  }
   return summary;
 }
 

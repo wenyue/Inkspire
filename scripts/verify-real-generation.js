@@ -40,15 +40,33 @@ async function assertWebpFile(dataDir, relativePath, label, { minBytes = 1024 } 
   return absolutePath;
 }
 
-async function createArtwork(app, payload, label) {
-  const response = await request(app)
+async function waitForJob(agent, jobId, label, { timeoutMs = 240000 } = {}) {
+  const startedAt = Date.now();
+  let lastJob = null;
+  while (Date.now() - startedAt < timeoutMs) {
+    const response = await agent.get(`/api/jobs/${jobId}`).expect(200);
+    lastJob = response.body;
+    if (lastJob.status === "succeeded") {
+      return lastJob;
+    }
+    if (lastJob.status === "failed") {
+      assert.fail(`${label} job failed: ${lastJob.error || JSON.stringify(lastJob.diagnostics || {})}`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
+  assert.fail(`${label} job timed out: ${JSON.stringify(lastJob)}`);
+}
+
+async function createArtwork(agent, payload, label) {
+  const response = await agent
     .post("/api/generations")
     .send(payload)
     .expect(201);
 
-  assert.equal(response.body.job.status, "succeeded", `${label} job failed: ${response.body.job.error || ""}`);
-  assert.equal(response.body.record.status, "succeeded", `${label} record failed`);
-  return response.body.record;
+  await waitForJob(agent, response.body.job.id, label);
+  const recordResponse = await agent.get(`/api/records/${response.body.record.id}`).expect(200);
+  assert.equal(recordResponse.body.status, "succeeded", `${label} record failed`);
+  return recordResponse.body;
 }
 
 async function main() {
@@ -57,14 +75,15 @@ async function main() {
   process.env.INKSPIRE_REAL_CODEX = "1";
 
   const app = createApp({ projectRoot, dataDir });
+  const agent = request.agent(app);
   const evidence = { dataDir, records: [] };
 
-  const health = await request(app).get("/api/health").expect(200);
+  const health = await agent.get("/api/health").expect(200);
   assert.equal(health.body.ok, true, `health check failed: ${JSON.stringify(health.body)}`);
   assert.equal(health.body.runtime.codex, "ready", "Codex CLI must be ready");
   assert.equal(health.body.runtime.webp, "ready", "WebP conversion must be ready");
 
-  const painting = await createArtwork(app, {
+  const painting = await createArtwork(agent, {
     type: "painting",
     answers: {
       work_type: "painting",
@@ -79,7 +98,7 @@ async function main() {
   const paintingPath = await assertWebpFile(dataDir, painting.artwork_path, "painting artwork");
   evidence.records.push({ id: painting.id, type: "painting", artwork: paintingPath });
 
-  const calligraphy = await createArtwork(app, {
+  const calligraphy = await createArtwork(agent, {
     type: "calligraphy",
     answers: {
       work_type: "calligraphy",
@@ -94,22 +113,23 @@ async function main() {
   const calligraphyPath = await assertWebpFile(dataDir, calligraphy.artwork_path, "calligraphy artwork");
   evidence.records.push({ id: calligraphy.id, type: "calligraphy", artwork: calligraphyPath });
 
-  const upload = await request(app)
+  const upload = await agent
     .post("/api/uploads/photo")
     .attach("photo", samplePhotoPng(), { filename: "room.png", contentType: "image/png" })
     .expect(201);
   await assertWebpFile(dataDir, upload.body.source_photo_path, "source photo", { minBytes: 1 });
 
-  const fusion = await request(app)
+  const fusion = await agent
     .post(`/api/records/${painting.id}/fusion`)
     .send({ source_photo_path: upload.body.source_photo_path })
     .expect(201);
-  assert.equal(fusion.body.job.status, "succeeded", `fusion job failed: ${fusion.body.job.error || ""}`);
-  assert.equal(fusion.body.record.has_fusion, true, "fusion record should mark has_fusion");
-  const fusionPath = await assertWebpFile(dataDir, fusion.body.record.fusion_path, "fusion render");
+  await waitForJob(agent, fusion.body.job.id, "fusion");
+  const fusionRecord = await agent.get(`/api/records/${painting.id}`).expect(200);
+  assert.equal(fusionRecord.body.has_fusion, true, "fusion record should mark has_fusion");
+  const fusionPath = await assertWebpFile(dataDir, fusionRecord.body.fusion_path, "fusion render");
   evidence.records[0].fusion = fusionPath;
 
-  const library = await request(app).get("/api/library").expect(200);
+  const library = await agent.get("/api/library").expect(200);
   const ids = library.body.records.map((record) => record.id);
   assert.ok(ids.includes(painting.id), "library should include painting");
   assert.ok(ids.includes(calligraphy.id), "library should include calligraphy");

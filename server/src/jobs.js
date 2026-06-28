@@ -1,8 +1,15 @@
 const crypto = require("node:crypto");
 const fs = require("node:fs/promises");
 const path = require("node:path");
+const sharp = require("sharp");
 const { convertPngToWebp } = require("./imagePipeline");
-const { buildArtworkPrompt, buildFusionPrompt } = require("./prompts");
+const { buildArtworkPrompt, buildFusionPrompt, buildSizeEstimationPrompt } = require("./prompts");
+const {
+  estimateFromEnvironment,
+  normalizeGenerationComplexity,
+  resolveOrientation,
+  sizeFromComplexityAndAspectRatio
+} = require("./sizeEstimation");
 const { resolveRecordAssetPath, validateRecordAssetPath } = require("./storage");
 
 function newId(prefix) {
@@ -13,9 +20,44 @@ function qualityFromConfig(config) {
   return config.app?.image?.webpQuality || config.image?.webpQuality || 82;
 }
 
+const DEFAULT_DECIDE_VALUES = new Set(["由墨起决定", "由墨起決定", "Let Inkspire decide"]);
+
+const PAINTING_TITLE_POOLS = {
+  "山水": ["云岫清音", "溪山入梦", "烟雨归岚", "松风远壑"],
+  "花鸟": ["花影和鸣", "春枝含韵", "疏香栖羽", "晴芳入画"],
+  "人物": ["高士临风", "古意风骨", "清谈入画", "松下逸思"],
+  default: ["墨韵清居", "晴窗入画", "素卷含章", "清境生香"]
+};
+
+function meaningfulAnswer(value) {
+  return typeof value === "string" && value.trim() && !DEFAULT_DECIDE_VALUES.has(value.trim())
+    ? value.trim()
+    : "";
+}
+
+function stableIndex(parts, count) {
+  if (count <= 0) return 0;
+  const source = parts.filter(Boolean).join("|") || "inkspire";
+  let hash = 0;
+  for (let index = 0; index < source.length; index += 1) {
+    hash = Math.imul(31, hash) + source.charCodeAt(index);
+  }
+  return Math.abs(hash) % count;
+}
+
+function paintingTitleFromAnswers(answers = {}) {
+  const subject = meaningfulAnswer(answers.painting_subject);
+  const mood = meaningfulAnswer(answers.painting_mood);
+  const palette = meaningfulAnswer(answers.painting_palette);
+  const composition = meaningfulAnswer(answers.painting_composition);
+  const detail = meaningfulAnswer(answers.painting_detail);
+  const pool = PAINTING_TITLE_POOLS[subject] || PAINTING_TITLE_POOLS.default;
+  return pool[stableIndex([subject, mood, palette, composition, detail], pool.length)];
+}
+
 function titleFromRequest(type, answers = {}) {
   if (type === "calligraphy" && answers.text) return answers.text;
-  if (type === "painting" && answers.painting_subject) return answers.painting_subject;
+  if (type === "painting") return paintingTitleFromAnswers(answers);
   return type === "calligraphy" ? "书法作品" : "中国画作品";
 }
 
@@ -26,6 +68,8 @@ function relativeRecordPath(recordId, fileName) {
 const VALID_ORIGIN_TABS = new Set(["studio", "library", "experts"]);
 const VALID_OPERATIONS = new Set(["create", "adjust"]);
 const SOURCE_PHOTO_FILES = new Set(["source-photo.webp"]);
+const ARTWORK_FILES = new Set(["artwork.webp"]);
+const COMPLEXITY_STRENGTH = { small: 1, medium: 2, large: 3 };
 
 function diagnosticsFromError(error) {
   return error?.diagnostics || { reason: "runner_error" };
@@ -59,6 +103,13 @@ function requireEnvironmentImage(record, sourcePhotoPath = "") {
     throw badRequest("Environment image is required");
   }
   return nextSourcePhotoPath;
+}
+
+function requireArtworkImage(record) {
+  if (!record.artwork_path) {
+    throw badRequest("Artwork image is required");
+  }
+  return record.artwork_path;
 }
 
 function createJobManager({ config, storage, runner }) {
@@ -107,6 +158,107 @@ function createJobManager({ config, storage, runner }) {
         : record.recommended_artwork_size,
       diagnostics: record.diagnostics && typeof record.diagnostics === "object" ? { ...record.diagnostics } : record.diagnostics
     };
+  }
+
+  function promptResolvedOrientation(record) {
+    return {
+      orientation: record.resolved_orientation || "unknown",
+      source: record.orientation_source || "unknown"
+    };
+  }
+
+  function resolveRecordOrientation(record) {
+    const resolved = resolveOrientation({
+      answers: record.answers || {},
+      conversationNotes: record.conversation_notes || ""
+    });
+    if (resolved.source !== "default") return resolved;
+    if (["portrait", "landscape", "square"].includes(record.resolved_orientation)) {
+      return {
+        orientation: record.resolved_orientation,
+        source: record.orientation_source || "record"
+      };
+    }
+    return resolved;
+  }
+
+  async function estimateArtworkRecordFromEnvironment(record) {
+    if (!record.source_photo_path) return;
+    const existingComplexity = normalizeGenerationComplexity(record.generation_complexity);
+    const resolvedOrientation = resolveRecordOrientation(record);
+    record.resolved_orientation = resolvedOrientation.orientation;
+    record.orientation_source = resolvedOrientation.source;
+    const prompt = buildSizeEstimationPrompt({
+      record,
+      answers: record.answers || {},
+      conversationNotes: record.conversation_notes || "",
+      resolvedOrientation,
+      config
+    });
+    const estimate = await estimateFromEnvironment({
+      runner,
+      record,
+      prompt,
+      resolvedOrientation,
+      fallbackSize: record.recommended_artwork_size || null,
+      referenceImages: environmentReferenceImages(record),
+      fallbackComplexity: existingComplexity
+    });
+    const estimatedComplexity = normalizeGenerationComplexity(estimate.generation_complexity);
+    record.generation_complexity = COMPLEXITY_STRENGTH[estimatedComplexity] > COMPLEXITY_STRENGTH[existingComplexity]
+      ? estimatedComplexity
+      : existingComplexity;
+    record.recommended_artwork_size = estimate.recommended_artwork_size;
+  }
+
+  async function estimateFusionRecordFromEnvironment(record) {
+    if (!record.source_photo_path) return;
+    const existingComplexity = normalizeGenerationComplexity(record.generation_complexity);
+    const resolvedOrientation = resolveRecordOrientation(record);
+    record.resolved_orientation = resolvedOrientation.orientation;
+    record.orientation_source = resolvedOrientation.source;
+    const prompt = buildSizeEstimationPrompt({
+      record,
+      answers: record.answers || {},
+      conversationNotes: record.conversation_notes || "",
+      resolvedOrientation,
+      config
+    });
+    const estimate = await estimateFromEnvironment({
+      runner,
+      record,
+      prompt,
+      resolvedOrientation,
+      fallbackSize: record.recommended_artwork_size || null,
+      referenceImages: environmentReferenceImages(record),
+      fallbackComplexity: existingComplexity
+    });
+    const estimatedComplexity = normalizeGenerationComplexity(estimate.generation_complexity);
+    record.generation_complexity = COMPLEXITY_STRENGTH[estimatedComplexity] > COMPLEXITY_STRENGTH[existingComplexity]
+      ? estimatedComplexity
+      : existingComplexity;
+    record.recommended_artwork_size = estimate.recommended_artwork_size;
+  }
+
+  async function updateArtworkRecommendationFromPng(record, pngPath) {
+    if (record.source_photo_path) return;
+    const metadata = await sharp(await fs.readFile(pngPath)).metadata();
+    const width = Number(metadata.width || 0);
+    const height = Number(metadata.height || 0);
+    if (!width || !height) return;
+    const aspectRatio = width / height;
+    const resolvedOrientation = resolveOrientation({
+      answers: record.answers || {},
+      conversationNotes: record.conversation_notes || "",
+      aspectRatio
+    });
+    record.resolved_orientation = resolvedOrientation.orientation;
+    record.orientation_source = resolvedOrientation.source;
+    record.recommended_artwork_size = sizeFromComplexityAndAspectRatio({
+      generationComplexity: record.generation_complexity,
+      aspectRatio,
+      orientation: resolvedOrientation.orientation
+    });
   }
 
   function countJobs(userId, predicate) {
@@ -310,13 +462,39 @@ function createJobManager({ config, storage, runner }) {
     });
   }
 
+  function fusionReferenceImages(record) {
+    return {
+      environment: resolveRecordAssetPath(storage.dataDir, record.source_photo_path, SOURCE_PHOTO_FILES),
+      artwork: resolveRecordAssetPath(storage.dataDir, requireArtworkImage(record), ARTWORK_FILES)
+    };
+  }
+
+  function environmentReferenceImages(record) {
+    return {
+      environment: resolveRecordAssetPath(storage.dataDir, record.source_photo_path, SOURCE_PHOTO_FILES)
+    };
+  }
+
+  async function runFusionRender(record, outputPngPath) {
+    const referenceImages = fusionReferenceImages(record);
+    const prompt = buildFusionPrompt({ record, config, referenceImages });
+    return runRunnerWithRetry({
+      stage: "fusion_render",
+      prompt,
+      record,
+      outputPngPath,
+      referenceImages
+    });
+  }
+
   async function runImmediateArtwork({
     userId = "",
     type,
     answers = {},
     conversationNotes = "",
     sourcePhotoPath = "",
-    recommendedArtworkSize = null
+    recommendedArtworkSize = null,
+    generationComplexity = "medium"
   }) {
     const ownerId = normalizeUserId(userId);
     return runLegacyLocked("artwork", async () => {
@@ -326,7 +504,8 @@ function createJobManager({ config, storage, runner }) {
       const createdAt = new Date().toISOString();
       const title = titleFromRequest(type, answers);
       const ownedSourcePhotoPath = await copySourcePhotoForRecord(storage, recordId, sourcePhotoPath);
-      const job = createLegacyJob("artwork", recordId, { type, title });
+      const normalizedGenerationComplexity = normalizeGenerationComplexity(generationComplexity);
+      const resolvedOrientation = resolveOrientation({ answers, conversationNotes });
       const record = {
         id: recordId,
         user_id: ownerId,
@@ -336,19 +515,32 @@ function createJobManager({ config, storage, runner }) {
         answers,
         conversation_notes: conversationNotes,
         source_photo_path: ownedSourcePhotoPath,
+        generation_complexity: normalizedGenerationComplexity,
+        resolved_orientation: resolvedOrientation.orientation,
+        orientation_source: resolvedOrientation.source,
         recommended_artwork_size: recommendedArtworkSize,
         artwork_path: artworkPath,
         favorite: true,
         status: "running",
         diagnostics: null
       };
+      await estimateArtworkRecordFromEnvironment(record);
+      const job = createLegacyJob("artwork", recordId, { type, title });
 
       job.status = "running";
       job.started_at = new Date().toISOString();
       await saveRecordSerial(record, ownerId);
       try {
         const prompt = config.prompts?.[type]
-          ? buildArtworkPrompt({ type, answers, conversationNotes, config })
+          ? buildArtworkPrompt({
+            type,
+            answers,
+            conversationNotes,
+            generationComplexity: record.generation_complexity,
+            recommendedArtworkSize: record.recommended_artwork_size,
+            resolvedOrientation: promptResolvedOrientation(record),
+            config
+          })
           : "";
         const result = await runRunnerWithRetry({
           stage: "artwork",
@@ -356,6 +548,7 @@ function createJobManager({ config, storage, runner }) {
           record,
           outputPngPath: pngPath
         });
+        await updateArtworkRecommendationFromPng(record, result.pngPath);
         await convertPngToWebp(result.pngPath, path.join(storage.dataDir, artworkPath), qualityFromConfig(config));
         record.status = "succeeded";
         record.diagnostics = result.diagnostics || null;
@@ -386,6 +579,7 @@ function createJobManager({ config, storage, runner }) {
         : storage.getRecord.bind(storage);
       const record = await getRecord(recordId, ownerId);
       const requestedSourcePhotoPath = requireEnvironmentImage(record, sourcePhotoPath);
+      requireArtworkImage(record);
       const ownedSourcePhotoPath = await copySourcePhotoForRecord(storage, recordId, requestedSourcePhotoPath);
       const fusionPath = relativeRecordPath(recordId, "fusion.webp");
       const pngPath = path.join(storage.dataDir, "records", recordId, "fusion.png");
@@ -398,16 +592,11 @@ function createJobManager({ config, storage, runner }) {
       job.started_at = new Date().toISOString();
       record.status = "running";
       record.source_photo_path = ownedSourcePhotoPath;
+      await estimateFusionRecordFromEnvironment(record);
       await saveRecordSerial(record, ownerId);
 
       try {
-        const prompt = config.prompts?.fusion ? buildFusionPrompt({ record, config }) : "";
-        const result = await runRunnerWithRetry({
-          stage: "fusion_render",
-          prompt,
-          record,
-          outputPngPath: pngPath
-        });
+        const result = await runFusionRender(record, pngPath);
         await convertPngToWebp(result.pngPath, path.join(storage.dataDir, fusionPath), qualityFromConfig(config));
         record.fusion_path = fusionPath;
         record.has_fusion = true;
@@ -458,23 +647,28 @@ function createJobManager({ config, storage, runner }) {
       await saveRecordSerial(task.record, task.userId);
       flushWaiters();
 
-      const prompt = task.stage === "artwork"
-        ? (config.prompts?.[task.type]
-          ? buildArtworkPrompt({
-            type: task.type,
-            answers: task.answers,
-            conversationNotes: task.conversationNotes,
-            config
-          })
-          : "")
-        : (config.prompts?.fusion ? buildFusionPrompt({ record: task.record, config }) : "");
+      const result = task.stage === "artwork"
+        ? await runRunnerWithRetry({
+          stage: task.stage,
+          prompt: config.prompts?.[task.type]
+            ? buildArtworkPrompt({
+              type: task.type,
+              answers: task.answers,
+              conversationNotes: task.conversationNotes,
+              generationComplexity: task.record.generation_complexity,
+              recommendedArtworkSize: task.record.recommended_artwork_size,
+              resolvedOrientation: promptResolvedOrientation(task.record),
+              config
+            })
+            : "",
+          record: task.record,
+          outputPngPath: task.outputPngPath
+        })
+        : await runFusionRender(task.record, task.outputPngPath);
 
-      const result = await runRunnerWithRetry({
-        stage: task.stage,
-        prompt,
-        record: task.record,
-        outputPngPath: task.outputPngPath
-      });
+      if (task.stage === "artwork") {
+        await updateArtworkRecommendationFromPng(task.record, result.pngPath);
+      }
 
       await convertPngToWebp(
         result.pngPath,
@@ -528,12 +722,15 @@ function createJobManager({ config, storage, runner }) {
     conversationNotes = "",
     sourcePhotoPath = "",
     recommendedArtworkSize = null,
+    generationComplexity = "medium",
     originTab = "studio",
     operation = "create"
   }) {
     const ownerId = normalizeUserId(userId);
     const normalizedOriginTab = normalizeOriginTab(originTab);
     const normalizedOperation = normalizeOperation(operation);
+    const normalizedGenerationComplexity = normalizeGenerationComplexity(generationComplexity);
+    const resolvedOrientation = resolveOrientation({ answers, conversationNotes });
     if (!ownerId) {
       return runImmediateArtwork({
         userId: ownerId,
@@ -541,7 +738,8 @@ function createJobManager({ config, storage, runner }) {
         answers,
         conversationNotes,
         sourcePhotoPath,
-        recommendedArtworkSize
+        recommendedArtworkSize,
+        generationComplexity: normalizedGenerationComplexity
       });
     }
     const reservation = reserveActiveSlot(ownerId, normalizedOriginTab);
@@ -574,12 +772,21 @@ function createJobManager({ config, storage, runner }) {
       answers,
       conversation_notes: conversationNotes,
       source_photo_path: ownedSourcePhotoPath,
+      generation_complexity: normalizedGenerationComplexity,
+      resolved_orientation: resolvedOrientation.orientation,
+      orientation_source: resolvedOrientation.source,
       recommended_artwork_size: recommendedArtworkSize,
       artwork_path: artworkPath,
       favorite: true,
       status: "queued",
       diagnostics: null
     };
+    try {
+      await estimateArtworkRecordFromEnvironment(record);
+    } catch (error) {
+      releaseActiveSlot(ownerId, normalizedOriginTab);
+      throw error;
+    }
     const job = {
       id: newId("job"),
       user_id: ownerId,
@@ -607,6 +814,7 @@ function createJobManager({ config, storage, runner }) {
         title: record.title,
         answers,
         conversationNotes,
+        generationComplexity: record.generation_complexity,
         sourcePhotoPath: ownedSourcePhotoPath,
         originTab: normalizedOriginTab,
         operation: normalizedOperation,
@@ -649,6 +857,7 @@ function createJobManager({ config, storage, runner }) {
         : storage.getRecord.bind(storage);
       const record = await getRecord(recordId, ownerId);
       const requestedSourcePhotoPath = requireEnvironmentImage(record, sourcePhotoPath);
+      requireArtworkImage(record);
       const ownedSourcePhotoPath = await copySourcePhotoForRecord(storage, recordId, requestedSourcePhotoPath);
       const createdAt = new Date().toISOString();
       const fusionPath = relativeRecordPath(recordId, "fusion.webp");
@@ -673,6 +882,7 @@ function createJobManager({ config, storage, runner }) {
 
       record.status = "queued";
       record.source_photo_path = ownedSourcePhotoPath;
+      await estimateFusionRecordFromEnvironment(record);
       await saveRecordSerial(record, ownerId);
 
       queuedJobs.push({
