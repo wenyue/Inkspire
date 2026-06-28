@@ -2,6 +2,7 @@ const { spawn } = require("node:child_process");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
+const { performance } = require("node:perf_hooks");
 
 const pngSignature = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 const safetyPattern = /\b(content policy|policy violation|violates policy|blocked by policy|refused by policy|request was refused|refusal|disallowed|moderation|safety policy|unsafe content|sensitive content|not allowed|cannot comply|can't comply)\b/i;
@@ -232,6 +233,7 @@ function parseJsonObjectFromText(text) {
 
 function runCodexProcess({ command, args, cwd, eventsPath, outputPath, spawnImpl }) {
   return new Promise((resolve, reject) => {
+    const startedAt = performance.now();
     ensureDirectoryFor(eventsPath);
     ensureDirectoryFor(outputPath);
     fs.mkdirSync(cwd, { recursive: true });
@@ -251,11 +253,14 @@ function runCodexProcess({ command, args, cwd, eventsPath, outputPath, spawnImpl
     child.on("close", (code) => {
       fs.writeFileSync(eventsPath, Buffer.concat(stdoutChunks));
       fs.writeFileSync(outputPath, Buffer.concat(stderrChunks));
+      const codexProcessMs = Math.max(0, Math.round(performance.now() - startedAt));
       if (code !== 0) {
-        reject(new Error(`Codex exited with code ${code}`));
+        const error = new Error(`Codex exited with code ${code}`);
+        error.codexProcessMs = codexProcessMs;
+        reject(error);
         return;
       }
-      resolve();
+      resolve({ codexProcessMs });
     });
   });
 }
@@ -279,7 +284,7 @@ async function runCodexImageGeneration(options) {
     })
   });
 
-  await runCodexProcess({
+  const processResult = await runCodexProcess({
     command,
     args,
     cwd: jobDir,
@@ -307,6 +312,7 @@ async function runCodexImageGeneration(options) {
 
   validatePngFile(outputPngPath);
   const diagnostics = diagnoseCodexImageGeneration({ eventsPath, outputPath });
+  diagnostics.codex_process_ms = processResult.codexProcessMs;
   if (imageSource === "generated_images_fallback") {
     diagnostics.reason = imageSource;
   }
@@ -332,7 +338,7 @@ async function runCodexJsonEstimation(options) {
     })
   });
 
-  await runCodexProcess({
+  const processResult = await runCodexProcess({
     command,
     args,
     cwd: jobDir,
@@ -347,6 +353,7 @@ async function runCodexJsonEstimation(options) {
     json: parseJsonObjectFromText(text),
     diagnostics: {
       reason: "json_estimation",
+      codex_process_ms: processResult.codexProcessMs,
       stderr_tail: outputPath && fs.existsSync(outputPath)
         ? fs.readFileSync(outputPath, "utf8").split(/\r?\n/).filter(Boolean).slice(-20).join("\n")
         : ""

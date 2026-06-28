@@ -93,6 +93,52 @@ test("artwork prompt includes recommended production size when available", () =>
   assert.match(prompt, /按玄关墙面估算/);
 });
 
+test("artwork prompt asks to generate only the artwork without external decorations", () => {
+  const config = loadConfig(root);
+  const paintingPrompt = buildArtworkPrompt({
+    type: "painting",
+    answers: {
+      painting_subject: "山水"
+    },
+    config
+  });
+  const calligraphyPrompt = buildArtworkPrompt({
+    type: "calligraphy",
+    answers: {
+      text: "明月松间照"
+    },
+    config
+  });
+
+  assert.match(paintingPrompt, /只生成作品本身/);
+  assert.match(paintingPrompt, /不要添加作品外的装饰/);
+  assert.match(paintingPrompt, /相框/);
+  assert.match(paintingPrompt, /墙面/);
+  assert.match(calligraphyPrompt, /只生成作品本身/);
+  assert.match(calligraphyPrompt, /不要添加作品外的装饰/);
+});
+
+test("artwork prompt renders configured sections instead of hardcoded rule blocks", () => {
+  const config = loadConfig(root);
+  config.prompts.painting.sections = [
+    {
+      title: "测试规则",
+      lines: ["配置规则 {{painting_subject}}"]
+    }
+  ];
+
+  const prompt = buildArtworkPrompt({
+    type: "painting",
+    answers: {
+      painting_subject: "山水"
+    },
+    config
+  });
+
+  assert.match(prompt, /测试规则/);
+  assert.match(prompt, /配置规则 山水/);
+});
+
 test("size estimation prompt asks for JSON only with final orientation, answers, and notes", () => {
   const prompt = buildSizeEstimationPrompt({
     record: { id: "record-size", type: "painting" },
@@ -113,6 +159,28 @@ test("size estimation prompt asks for JSON only with final orientation, answers,
   assert.match(prompt, /环境图片不能改变/);
   assert.match(prompt, /painting_subject/);
   assert.match(prompt, /希望竖幅挂在玄关/);
+});
+
+test("size estimation prompt renders rules and schema from config", () => {
+  const config = loadConfig(root);
+  config.prompts.sizeEstimationPrompt.responseRules = ["配置响应规则"];
+  config.prompts.sizeEstimationPrompt.schema = {
+    custom_field: "string"
+  };
+
+  const prompt = buildSizeEstimationPrompt({
+    record: { id: "record-size-config", type: "painting" },
+    answers: {
+      work_type: "painting"
+    },
+    resolvedOrientation: { orientation: "square", source: "test" },
+    config
+  });
+
+  assert.match(prompt, /配置响应规则/);
+  assert.match(prompt, /custom_field/);
+  assert.match(prompt, /square/);
+  assert.match(prompt, /test/);
 });
 
 test("fusion prompt contains 融合图, 雅化, 美光, original photo path, and artwork path", () => {
@@ -164,6 +232,29 @@ test("fusion prompt asks for a rendered placement instead of a flat overlay", ()
   assert.match(prompt, /重新渲染/);
   assert.match(prompt, /透视/);
   assert.match(prompt, /阴影/);
+});
+
+test("fusion prompt renders static requirement sections from config", () => {
+  const config = loadConfig(root);
+  config.prompts.fusion.sections = [
+    {
+      title: "测试融合规则",
+      lines: ["配置融合规则 {{relationship}}"]
+    }
+  ];
+
+  const prompt = buildFusionPrompt({
+    record: {
+      id: "fusion-config",
+      source_photo_path: "records/fusion-config/source-photo.webp",
+      artwork_path: "records/fusion-config/artwork.webp",
+      relationship: "挂入玄关"
+    },
+    config
+  });
+
+  assert.match(prompt, /测试融合规则/);
+  assert.match(prompt, /配置融合规则 挂入玄关/);
 });
 
 test("fusion prompt includes recommended artwork size with real size feeling", () => {

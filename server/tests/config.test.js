@@ -52,6 +52,15 @@ test("loads required Inkspire configuration", () => {
   assert.match(config.prompts.painting.system, /中国画/);
   assert.match(config.prompts.calligraphy.system, /书法/);
   assert.match(config.prompts.fusion.system, /融合图/);
+  assert.match(config.prompts.painting.brief, /中国画/);
+  assert.ok(Array.isArray(config.prompts.painting.sections));
+  assert.match(config.prompts.calligraphy.brief, /书法作品/);
+  assert.ok(Array.isArray(config.prompts.calligraphy.sections));
+  assert.match(config.prompts.fusion.brief, /真实摆放效果图/);
+  assert.ok(Array.isArray(config.prompts.fusion.sections));
+  assert.equal(config.prompts.sizeEstimationPrompt.system, "你是墨起的环境图片尺寸与复杂度估算助手。");
+  assert.match(config.prompts.sizeEstimationPrompt.responseRules[0], /只返回 JSON/);
+  assert.equal(config.prompts.sizeEstimationPrompt.schema.generation_complexity, "small | medium | large");
 });
 
 test("allows platform production contact to be configured from environment", () => {

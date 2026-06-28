@@ -41,7 +41,8 @@ function loadConfig(projectRoot = path.resolve(__dirname, "../..")) {
   const prompts = {
     painting: readJson(path.join(configDir, "prompts", "painting.json")),
     calligraphy: readJson(path.join(configDir, "prompts", "calligraphy.json")),
-    fusion: readJson(path.join(configDir, "prompts", "fusion.json"))
+    fusion: readJson(path.join(configDir, "prompts", "fusion.json")),
+    sizeEstimationPrompt: readJson(path.join(configDir, "prompts", "sizeEstimationPrompt.json"))
   };
 
   requireArray(questions.painting, "painting questions");

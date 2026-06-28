@@ -57,6 +57,17 @@ test("saveRecord writes record JSON, updates library, and getRecord returns it",
         height_cm: 90,
         reason: "按作品复杂度和画面比例估算。"
       },
+      generation_profile: {
+        created_at: "2026-06-24T12:00:00.000Z",
+        total_ms: 1234,
+        stages: {
+          codex_artwork: { total_ms: 1000, count: 1 },
+          webp_conversion: { total_ms: 20, count: 1 }
+        },
+        attempts: [
+          { stage: "artwork", attempt: 1, status: "succeeded", duration_ms: 1000 }
+        ]
+      },
       favorite: true,
       status: "succeeded",
       answers: { painting_subject: "山水" }
@@ -66,6 +77,8 @@ test("saveRecord writes record JSON, updates library, and getRecord returns it",
     await storage.saveRecord(record);
 
     assert.deepEqual(await storage.getRecord("artwork-1"), record);
+    const [summary] = await storage.listLibrary();
+    assert.equal(Object.hasOwn(summary, "generation_profile"), false);
     const Database = require("better-sqlite3");
     const db = new Database(path.join(temp, "inkspire.db"), { readonly: true });
     try {
@@ -169,28 +182,68 @@ test("listLibrary returns spec summaries sorted newest first", async () => {
       answers: { painting_subject: "花鸟" }
     });
     await storage.saveRecord({
-      id: "newer",
+      id: "running-work",
       type: "calligraphy",
-      title: "新作",
+      title: "生成中",
       created_at: "2026-06-24T11:00:00.000Z",
-      artwork_path: "records/newer/artwork.webp",
-      fusion_path: "records/newer/fusion.webp",
+      artwork_path: "records/running-work/artwork.webp",
+      fusion_path: "records/running-work/fusion.webp",
       favorite: true,
       status: "running",
       answers: { calligraphy_script: "行书" }
     });
+    await storage.saveRecord({
+      id: "fused-work",
+      type: "calligraphy",
+      title: "已有效果图",
+      created_at: "2026-06-24T11:30:00.000Z",
+      artwork_path: "records/fused-work/artwork.webp",
+      fusion_path: "records/fused-work/fusion.webp",
+      favorite: true,
+      status: "succeeded",
+      answers: { calligraphy_script: "行书" }
+    });
+    await storage.saveRecord({
+      id: "queued-work",
+      type: "painting",
+      title: "排队中",
+      created_at: "2026-06-24T12:00:00.000Z",
+      artwork_path: "records/queued-work/artwork.webp",
+      favorite: true,
+      status: "queued"
+    });
+    await storage.saveRecord({
+      id: "failed-work",
+      type: "painting",
+      title: "失败作",
+      created_at: "2026-06-24T13:00:00.000Z",
+      artwork_path: "records/failed-work/artwork.webp",
+      favorite: true,
+      status: "failed"
+    });
 
     assert.deepEqual(await storage.listLibrary(), [
       {
-        id: "newer",
+        id: "failed-work",
         user_id: "",
-        created_at: "2026-06-24T11:00:00.000Z",
+        created_at: "2026-06-24T13:00:00.000Z",
+        type: "painting",
+        title: "失败作",
+        thumbnail_path: "records/failed-work/artwork.webp",
+        has_fusion: false,
+        favorite: true,
+        status: "failed"
+      },
+      {
+        id: "fused-work",
+        user_id: "",
+        created_at: "2026-06-24T11:30:00.000Z",
         type: "calligraphy",
-        title: "新作",
-        thumbnail_path: "records/newer/fusion.webp",
+        title: "已有效果图",
+        thumbnail_path: "records/fused-work/artwork.webp",
         has_fusion: true,
         favorite: true,
-        status: "running"
+        status: "succeeded"
       },
       {
         id: "older",

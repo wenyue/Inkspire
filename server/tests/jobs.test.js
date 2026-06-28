@@ -6,7 +6,21 @@ const path = require("node:path");
 const { PNG } = require("pngjs");
 const sharp = require("sharp");
 const { createStorage } = require("../src/storage");
-const { createJobManager } = require("../src/jobs");
+const { createJobManager: createRawJobManager } = require("../src/jobs");
+const sizeEstimationPrompt = require("../../config/prompts/sizeEstimationPrompt.json");
+
+function createJobManager(options) {
+  return createRawJobManager({
+    ...options,
+    config: {
+      ...options.config,
+      prompts: {
+        sizeEstimationPrompt,
+        ...(options.config?.prompts || {})
+      }
+    }
+  });
+}
 
 async function withTempStore(fn) {
   const temp = await fs.mkdtemp(path.join(os.tmpdir(), "inkspire-jobs-"));
@@ -170,7 +184,7 @@ test("painting title becomes an elegant artwork name instead of the subject cate
     assert.notEqual(record.title, "山水");
     assert.notEqual(record.title, "中国画作品");
     assert.equal(job.title, record.title);
-    assert.match(record.title, /云|溪|山|岫|清|泉|烟|雨/);
+    assert.match(record.title, /^[\u3400-\u9fff]{4,}$/);
   });
 });
 
@@ -410,7 +424,16 @@ test("fusion job sends a realistic placement prompt to the image runner", async 
         prompts: {
           fusion: {
             system: "效果图系统提示",
-            template: "效果图模板 {{painting}} {{calligraphy}} {{relationship}}"
+            template: "效果图模板 {{painting}} {{calligraphy}} {{relationship}}",
+            sections: [
+              {
+                title: "融合图要求",
+                lines: [
+                  "生成真实摆放效果图。",
+                  "这不是简单叠加。"
+                ]
+              }
+            ]
           }
         },
         questions: {}
@@ -468,7 +491,16 @@ test("fusion job estimates and stores recommended size before AI render", async 
         prompts: {
           fusion: {
             system: "效果图系统提示",
-            template: "效果图模板 {{painting}} {{calligraphy}} {{relationship}}"
+            template: "效果图模板 {{painting}} {{calligraphy}} {{relationship}}",
+            sections: [
+              {
+                title: "融合图要求",
+                lines: [
+                  "生成真实摆放效果图。",
+                  "这不是简单叠加。"
+                ]
+              }
+            ]
           }
         },
         questions: {}
@@ -539,6 +571,79 @@ test("fusion job estimates and stores recommended size before AI render", async 
     assert.equal(fused.recommended_artwork_size.width_cm, 110);
     assert.equal(fused.recommended_artwork_size.height_cm, 60);
     assert.equal(fused.generation_complexity, "large");
+  });
+});
+
+test("successful artwork generation persists a long-term generation profile", async () => {
+  await withTempStore(async (temp) => {
+    const storage = createStorage(temp);
+    const sourcePhotoPath = await writeSourcePhotoImage(temp);
+    const manager = createJobManager({
+      config: { app: { image: { webpQuality: 82 } }, prompts: {}, questions: {} },
+      storage,
+      runner: fakeRunner(120)
+    });
+
+    const { job, record } = await manager.createArtwork({ type: "painting", answers: {}, sourcePhotoPath });
+    await manager.waitForIdle();
+    const stored = await storage.getRecord(record.id);
+    const finalJob = manager.getJob(job.id);
+
+    assert.equal(stored.generation_profile.created_at, record.generation_profile.created_at);
+    assert.equal(typeof stored.generation_profile.total_ms, "number");
+    assert.ok(stored.generation_profile.total_ms >= 0);
+    assert.equal(stored.generation_profile.stages.copy_source_photo.count, 1);
+    assert.equal(stored.generation_profile.stages.size_estimation.count, 1);
+    assert.equal(stored.generation_profile.stages.codex_artwork.count, 1);
+    assert.equal(stored.generation_profile.stages.webp_conversion.count, 1);
+    assert.equal(stored.generation_profile.stages.record_save.count >= 1, true);
+    assert.deepEqual(stored.generation_profile.attempts.map((attempt) => attempt.stage), ["size_estimation", "artwork"]);
+    assert.deepEqual(stored.generation_profile.attempts.map((attempt) => attempt.status), ["succeeded", "succeeded"]);
+    assert.deepEqual(finalJob.generation_profile, stored.generation_profile);
+  });
+});
+
+test("successful fusion generation persists a long-term generation profile", async () => {
+  await withTempStore(async (temp) => {
+    const storage = createStorage(temp);
+    const sourcePhotoPath = await writeSourcePhotoImage(temp);
+    const manager = createJobManager({
+      config: {
+        app: { image: { webpQuality: 82 } },
+        prompts: {
+          fusion: {
+            system: "效果图系统提示",
+            template: "效果图模板 {{painting}} {{calligraphy}} {{relationship}}",
+            sections: [
+              {
+                title: "融合图要求",
+                lines: [
+                  "生成真实摆放效果图。",
+                  "这不是简单叠加。"
+                ]
+              }
+            ]
+          }
+        },
+        questions: {}
+      },
+      storage,
+      runner: fakeRunner(140)
+    });
+
+    const { record } = await manager.createArtwork({ type: "painting", answers: {}, sourcePhotoPath });
+    await manager.waitForIdle();
+    const { job } = await manager.createFusion({ recordId: record.id });
+    await manager.waitForIdle();
+    const stored = await storage.getRecord(record.id);
+    const finalJob = manager.getJob(job.id);
+
+    assert.equal(stored.generation_profile.stages.copy_source_photo.count, 1);
+    assert.equal(stored.generation_profile.stages.size_estimation.count, 1);
+    assert.equal(stored.generation_profile.stages.codex_fusion_render.count, 1);
+    assert.equal(stored.generation_profile.stages.webp_conversion.count, 1);
+    assert.deepEqual(stored.generation_profile.attempts.map((attempt) => attempt.stage), ["size_estimation", "fusion_render"]);
+    assert.deepEqual(finalJob.generation_profile, stored.generation_profile);
   });
 });
 
@@ -1108,6 +1213,9 @@ test("artwork failure records failed status and diagnostics", async () => {
     assert.equal(record.status, "failed");
     assert.equal(stored.status, "failed");
     assert.equal(stored.diagnostics.possible_safety_block, true);
+    assert.equal(stored.generation_profile.attempts[0].status, "failed");
+    assert.equal(stored.generation_profile.attempts[0].error, "fake policy refusal");
+    assert.equal(manager.getJob(job.id).generation_profile.attempts[0].status, "failed");
     assert.match(manager.getJob(job.id).error, /fake policy refusal/);
   });
 });
@@ -1228,6 +1336,9 @@ test("artwork generation retries once before recording failure", async () => {
     assert.equal(record.status, "succeeded");
     assert.equal(stored.status, "succeeded");
     assert.equal(stored.diagnostics.reason, "retry_success");
+    assert.deepEqual(stored.generation_profile.attempts.map((attempt) => attempt.status), ["failed", "succeeded"]);
+    assert.equal(stored.generation_profile.attempts[0].error, "temporary codex issue");
+    assert.equal(stored.generation_profile.attempts[1].stage, "artwork");
     assert.equal((await fs.readFile(path.join(temp, record.artwork_path))).subarray(0, 4).toString("ascii"), "RIFF");
   });
 });
@@ -1244,7 +1355,16 @@ test("fusion generation calls the image runner for a second-pass render and pres
         prompts: {
           fusion: {
             system: "效果图系统提示",
-            template: "效果图模板 {{painting}} {{calligraphy}} {{relationship}}"
+            template: "效果图模板 {{painting}} {{calligraphy}} {{relationship}}",
+            sections: [
+              {
+                title: "融合图要求",
+                lines: [
+                  "生成真实摆放效果图。",
+                  "这不是简单叠加。"
+                ]
+              }
+            ]
           }
         },
         questions: {}

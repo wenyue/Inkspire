@@ -63,6 +63,7 @@ function notFound(id) {
 function summarizeRecord(record) {
   const fusionPath = record.fusion_path || record.fusionPath;
   const artworkPath = record.artwork_path || record.artworkPath;
+  const thumbnailPath = record.thumbnail_path || record.thumbnailPath;
 
   const summary = {
     id: record.id,
@@ -70,7 +71,7 @@ function summarizeRecord(record) {
     created_at: record.created_at || record.createdAt || null,
     type: record.type,
     title: record.title || "",
-    thumbnail_path: record.thumbnail_path || record.thumbnailPath || fusionPath || artworkPath || null,
+    thumbnail_path: thumbnailPath && !thumbnailPath.endsWith("/fusion.webp") ? thumbnailPath : artworkPath || null,
     has_fusion:
       typeof record.has_fusion === "boolean" ? record.has_fusion : Boolean(fusionPath),
     favorite: Boolean(record.favorite),
@@ -459,9 +460,43 @@ function createStorage(dataDir) {
   async function listLibrary(userId = "") {
     await ensureStore();
     const rows = withDb((db) => userId
-      ? db.prepare("SELECT record_json FROM records WHERE user_id = ? OR user_id = '' ORDER BY created_at DESC").all(userId)
-      : db.prepare("SELECT record_json FROM records WHERE user_id = '' ORDER BY created_at DESC").all());
+      ? db.prepare(`
+        SELECT record_json
+        FROM records
+        WHERE (user_id = ? OR user_id = '')
+          AND status NOT IN ('queued', 'running')
+        ORDER BY created_at DESC
+      `).all(userId)
+      : db.prepare(`
+        SELECT record_json
+        FROM records
+        WHERE user_id = ''
+          AND status NOT IN ('queued', 'running')
+        ORDER BY created_at DESC
+      `).all());
     return rows.map((row) => summarizeRecord(parseJson(row.record_json)));
+  }
+
+  async function listKeptRecordTitles(userId = "") {
+    await ensureStore();
+    const rows = withDb((db) => userId
+      ? db.prepare(`
+        SELECT title
+        FROM records
+        WHERE (user_id = ? OR user_id = '')
+          AND favorite != 0
+          AND title != ''
+        ORDER BY created_at DESC
+      `).all(userId)
+      : db.prepare(`
+        SELECT title
+        FROM records
+        WHERE user_id = ''
+          AND favorite != 0
+          AND title != ''
+        ORDER BY created_at DESC
+      `).all());
+    return rows.map((row) => row.title).filter(Boolean);
   }
 
   async function saveProductionOrder(order, userId = "") {
@@ -497,6 +532,7 @@ function createStorage(dataDir) {
     getRecord,
     getRecordForUser,
     listLibrary,
+    listKeptRecordTitles,
     saveProductionOrder,
     productionOrderExists,
     getProductionOrder

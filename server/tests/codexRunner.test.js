@@ -108,6 +108,8 @@ test("extracts latest image_generation_end PNG base64 from JSONL events", async 
     assert.equal(result.pngPath, path.join(temp, "result.png"));
     assert.deepEqual(await fs.readFile(result.pngPath), latest);
     assert.equal(result.diagnostics.image_event_result_count, 2);
+    assert.equal(typeof result.diagnostics.codex_process_ms, "number");
+    assert.ok(result.diagnostics.codex_process_ms >= 0);
   });
 });
 
@@ -166,6 +168,8 @@ test("runs Codex JSON estimation without requiring an output PNG path", async ()
     assert.equal(result.json.generation_complexity, "large");
     assert.equal(result.json.recommended_artwork_size.width_cm, 60);
     assert.match(result.text, /generation_complexity/);
+    assert.equal(typeof result.diagnostics.codex_process_ms, "number");
+    assert.ok(result.diagnostics.codex_process_ms >= 0);
   });
 });
 

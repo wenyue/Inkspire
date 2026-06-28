@@ -576,6 +576,108 @@ describe("App", () => {
     expect(screen.queryByRole("button", { name: "生成" })).not.toBeInTheDocument();
   });
 
+  it("keeps the final photo step after switching from studio to library and back", async () => {
+    const user = userEvent.setup();
+    renderApp({ initialRoute: "/studio" });
+
+    await completePaintingQuestions(user);
+    expect(screen.getByRole("heading", { name: "可选：添加环境照片" })).toBeInTheDocument();
+    expect(window.location.search).toBe("?step=photo");
+
+    await user.click(screen.getByRole("button", { name: "藏卷" }));
+    expect(await screen.findByRole("heading", { name: "藏卷还空着" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "画案" }));
+
+    expect(await screen.findByRole("heading", { name: "可选：添加环境照片" })).toBeInTheDocument();
+    expect(screen.getByText("第 3 / 3 步")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "先定作品类型" })).not.toBeInTheDocument();
+    expect(window.location.search).toBe("?step=photo");
+  });
+
+  it("keeps a later painting question step after switching from studio to library and back", async () => {
+    configResponse = {
+      ...publicConfig,
+      questions: {
+        ...publicConfig.questions,
+        painting: [
+          publicConfig.questions.painting[0],
+          {
+            ...publicConfig.questions.painting[0],
+            id: "painting_palette",
+            title: {
+              "zh-Hans": "偏好哪种设色？",
+              "zh-Hant": "偏好哪種設色？",
+              en: "Which color treatment do you prefer?"
+            },
+            options: {
+              "zh-Hans": ["水墨", "青绿", "浅绛", "由墨起决定"],
+              "zh-Hant": ["水墨", "青綠", "淺絳", "由墨起決定"],
+              en: ["Ink wash", "Blue-green", "Light umber", "Let Inkspire decide"]
+            }
+          }
+        ]
+      }
+    };
+    const user = userEvent.setup();
+    renderApp({ initialRoute: "/studio" });
+
+    await user.click(await screen.findByRole("button", { name: "国画" }));
+    await user.click(screen.getByRole("button", { name: "山水" }));
+    expect(screen.getByRole("heading", { name: "偏好哪种设色？" })).toBeInTheDocument();
+    expect(screen.getByText("第 3 / 4 步")).toBeInTheDocument();
+    expect(window.location.search).toBe("?step=question&index=1");
+
+    await user.click(screen.getByRole("button", { name: "藏卷" }));
+    expect(await screen.findByRole("heading", { name: "藏卷还空着" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "画案" }));
+
+    expect(await screen.findByRole("heading", { name: "偏好哪种设色？" })).toBeInTheDocument();
+    expect(screen.getByText("第 3 / 4 步")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "先定作品类型" })).not.toBeInTheDocument();
+    expect(window.location.search).toBe("?step=question&index=1");
+  });
+
+  it("writes question answers to the studio draft before the next render cycle", async () => {
+    configResponse = {
+      ...publicConfig,
+      questions: {
+        ...publicConfig.questions,
+        painting: [
+          publicConfig.questions.painting[0],
+          {
+            ...publicConfig.questions.painting[0],
+            id: "painting_palette",
+            title: {
+              "zh-Hans": "偏好哪种设色？",
+              "zh-Hant": "偏好哪種設色？",
+              en: "Which color treatment do you prefer?"
+            },
+            options: {
+              "zh-Hans": ["水墨", "青绿", "浅绛", "由墨起决定"],
+              "zh-Hant": ["水墨", "青綠", "淺絳", "由墨起決定"],
+              en: ["Ink wash", "Blue-green", "Light umber", "Let Inkspire decide"]
+            }
+          }
+        ]
+      }
+    };
+    renderApp({ initialRoute: "/studio" });
+
+    fireEvent.click(await screen.findByRole("button", { name: "国画" }));
+    fireEvent.click(screen.getByRole("button", { name: "山水" }));
+
+    const draft = JSON.parse(window.localStorage.getItem("inkspire.studioDraft.v1") ?? "{}") as {
+      answers?: Record<string, string>;
+    };
+    expect(draft.answers).toMatchObject({
+      work_type: "painting",
+      painting_subject: "山水"
+    });
+    expect(screen.getByRole("heading", { name: "偏好哪种设色？" })).toBeInTheDocument();
+  });
+
   it("warns before uploading an oversized setup photo", async () => {
     configResponse = {
       ...publicConfig,
@@ -2731,6 +2833,51 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: "藏卷" }));
     expect(await screen.findByRole("img", { name: "作品图" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "藏卷" })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("does not show queued or running records in the library", async () => {
+    libraryRecords = [
+      {
+        id: "queued-record",
+        type: "painting",
+        title: "排队作品",
+        thumbnail_path: "records/queued-record/artwork.webp",
+        artwork_path: "records/queued-record/artwork.webp",
+        status: "queued",
+        favorite: true
+      },
+      {
+        id: "running-record",
+        type: "calligraphy",
+        title: "生成中作品",
+        thumbnail_path: "records/running-record/artwork.webp",
+        artwork_path: "records/running-record/artwork.webp",
+        status: "running",
+        favorite: true
+      },
+      {
+        id: "failed-record",
+        type: "painting",
+        title: "失败作品",
+        status: "failed",
+        favorite: true
+      },
+      {
+        id: "finished-record",
+        type: "painting",
+        title: "完成作品",
+        thumbnail_path: "records/finished-record/artwork.webp",
+        artwork_path: "records/finished-record/artwork.webp",
+        status: "succeeded",
+        favorite: true
+      }
+    ];
+    renderApp({ initialRoute: "/library" });
+
+    expect(await screen.findByRole("button", { name: /查看作品 完成作品/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /查看作品 失败作品/ })).toBeInTheDocument();
+    expect(screen.queryByText("排队作品")).not.toBeInTheDocument();
+    expect(screen.queryByText("生成中作品")).not.toBeInTheDocument();
   });
 
   it("keeps browser back at the current tab root instead of crossing tabs", async () => {

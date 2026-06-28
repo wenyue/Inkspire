@@ -46,7 +46,7 @@ describe("Library", () => {
     expect(screen.queryByText("画")).not.toBeInTheDocument();
   });
 
-  it("uses fusion thumbnails when a record has a fusion render", () => {
+  it("uses artwork thumbnails when a record has a fusion render", () => {
     render(
       <Library
         records={[
@@ -67,7 +67,7 @@ describe("Library", () => {
 
     expect(screen.getByRole("img", { name: "清风入怀" })).toHaveAttribute(
       "src",
-      "/api/records/record-2/images/fusion"
+      "/api/records/record-2/images/artwork"
     );
     expect(screen.getByText("作品与效果图")).toBeInTheDocument();
   });

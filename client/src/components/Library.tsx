@@ -27,12 +27,9 @@ interface LibraryProps {
   onFavoriteToggle?: (record: LibraryRecord, favorite: boolean) => void;
 }
 
-function imageKind(record: LibraryRecord): "artwork" | "fusion" | null {
+function imageKind(record: LibraryRecord): "artwork" | null {
   if (record.status === "failed") {
     return null;
-  }
-  if (record.fusion_path || record.has_fusion || record.thumbnail_path?.endsWith("/fusion.webp")) {
-    return "fusion";
   }
   if (record.artwork_path || record.thumbnail_path) {
     return "artwork";

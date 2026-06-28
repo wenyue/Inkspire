@@ -158,6 +158,26 @@ test("browser back stays on the selected bottom tab root", async ({ page }) => {
   await expect(page.getByText("先定作品类型")).toBeHidden();
 });
 
+test("studio keeps the current question step after switching to library and back", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/studio");
+
+  await page.getByRole("button", { name: "国画" }).click();
+  await page.getByRole("button", { name: "山水" }).click();
+  await expect(page.getByRole("heading", { name: "偏好哪种设色？" })).toBeVisible();
+  await expect(page.getByText("第 3 / 7 步")).toBeVisible();
+  await expect(page).toHaveURL(/\/studio\?step=question&index=1$/);
+
+  await page.getByRole("button", { name: "藏卷", exact: true }).click();
+  await expect(page).toHaveURL(/\/library$/);
+
+  await page.getByRole("button", { name: "画案", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "偏好哪种设色？" })).toBeVisible();
+  await expect(page.getByText("第 3 / 7 步")).toBeVisible();
+  await expect(page.getByText("先定作品类型")).toBeHidden();
+  await expect(page).toHaveURL(/\/studio\?step=question&index=1$/);
+});
+
 test("camera photo entry applies and generates fusion output", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");

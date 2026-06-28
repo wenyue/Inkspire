@@ -40,6 +40,30 @@ async function assertWebpFile(dataDir, relativePath, label, { minBytes = 1024 } 
   return absolutePath;
 }
 
+function profileSummary(record, label) {
+  const profile = record.generation_profile;
+  assert.ok(profile, `${label} generation_profile is missing`);
+  assert.equal(typeof profile.total_ms, "number", `${label} total_ms is missing`);
+  assert.ok(profile.total_ms >= 0, `${label} total_ms must be non-negative`);
+  assert.ok(profile.stages && typeof profile.stages === "object", `${label} stages are missing`);
+  assert.ok(Array.isArray(profile.attempts), `${label} attempts are missing`);
+  return {
+    total_ms: profile.total_ms,
+    stages: Object.fromEntries(
+      Object.entries(profile.stages).map(([name, value]) => [name, {
+        total_ms: value.total_ms,
+        count: value.count
+      }])
+    ),
+    attempts: profile.attempts.map((attempt) => ({
+      stage: attempt.stage,
+      attempt: attempt.attempt,
+      status: attempt.status,
+      duration_ms: attempt.duration_ms
+    }))
+  };
+}
+
 async function waitForJob(agent, jobId, label, { timeoutMs = 240000 } = {}) {
   const startedAt = Date.now();
   let lastJob = null;
@@ -96,7 +120,12 @@ async function main() {
     conversationNotes: "真实验收：清雅水墨山水，留白充足，适合手机端预览。"
   }, "painting");
   const paintingPath = await assertWebpFile(dataDir, painting.artwork_path, "painting artwork");
-  evidence.records.push({ id: painting.id, type: "painting", artwork: paintingPath });
+  evidence.records.push({
+    id: painting.id,
+    type: "painting",
+    artwork: paintingPath,
+    generation_profile: profileSummary(painting, "painting")
+  });
 
   const calligraphy = await createArtwork(agent, {
     type: "calligraphy",
@@ -111,7 +140,12 @@ async function main() {
     conversationNotes: "真实验收：明月松间照，行书，素宣纸，清雅留白。"
   }, "calligraphy");
   const calligraphyPath = await assertWebpFile(dataDir, calligraphy.artwork_path, "calligraphy artwork");
-  evidence.records.push({ id: calligraphy.id, type: "calligraphy", artwork: calligraphyPath });
+  evidence.records.push({
+    id: calligraphy.id,
+    type: "calligraphy",
+    artwork: calligraphyPath,
+    generation_profile: profileSummary(calligraphy, "calligraphy")
+  });
 
   const upload = await agent
     .post("/api/uploads/photo")
@@ -128,6 +162,7 @@ async function main() {
   assert.equal(fusionRecord.body.has_fusion, true, "fusion record should mark has_fusion");
   const fusionPath = await assertWebpFile(dataDir, fusionRecord.body.fusion_path, "fusion render");
   evidence.records[0].fusion = fusionPath;
+  evidence.records[0].fusion_generation_profile = profileSummary(fusionRecord.body, "fusion");
 
   const library = await agent.get("/api/library").expect(200);
   const ids = library.body.records.map((record) => record.id);

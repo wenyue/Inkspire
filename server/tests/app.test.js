@@ -178,6 +178,73 @@ test("POST /api/generations creates a job and eventually a record with artwork",
   });
 });
 
+test("painting titles avoid kept user history and ignore removed records", async () => {
+  await withTempApp(async ({ app }) => {
+    const firstUser = request.agent(app);
+    const secondUser = request.agent(app);
+    const answers = { painting_subject: "山水" };
+
+    const firstCreated = await firstUser
+      .post("/api/generations")
+      .send({ type: "painting", answers })
+      .expect(201);
+    await waitForJob(firstUser, firstCreated.body.job.id);
+    const firstRecord = await firstUser.get(`/api/records/${firstCreated.body.record.id}`).expect(200);
+
+    const secondCreated = await firstUser
+      .post("/api/generations")
+      .send({ type: "painting", answers })
+      .expect(201);
+    await waitForJob(firstUser, secondCreated.body.job.id);
+    const secondRecord = await firstUser.get(`/api/records/${secondCreated.body.record.id}`).expect(200);
+
+    assert.notEqual(secondRecord.body.title, firstRecord.body.title);
+
+    await firstUser
+      .post(`/api/records/${firstRecord.body.id}/favorite`)
+      .send({ favorite: false })
+      .expect(200);
+
+    const thirdCreated = await firstUser
+      .post("/api/generations")
+      .send({ type: "painting", answers })
+      .expect(201);
+    await waitForJob(firstUser, thirdCreated.body.job.id);
+    const thirdRecord = await firstUser.get(`/api/records/${thirdCreated.body.record.id}`).expect(200);
+
+    assert.equal(thirdRecord.body.title, firstRecord.body.title);
+
+    const otherUserCreated = await secondUser
+      .post("/api/generations")
+      .send({ type: "painting", answers })
+      .expect(201);
+    await waitForJob(secondUser, otherUserCreated.body.job.id);
+    const otherUserRecord = await secondUser.get(`/api/records/${otherUserCreated.body.record.id}`).expect(200);
+
+    assert.equal(otherUserRecord.body.title, firstRecord.body.title);
+  });
+});
+
+test("painting title pools provide more than four kept titles before ordinal fallback", async () => {
+  await withTempApp(async ({ app }) => {
+    const agent = request.agent(app);
+    const titles = [];
+
+    for (let index = 0; index < 5; index += 1) {
+      const created = await agent
+        .post("/api/generations")
+        .send({ type: "painting", answers: { painting_subject: "山水" } })
+        .expect(201);
+      await waitForJob(agent, created.body.job.id);
+      const record = await agent.get(`/api/records/${created.body.record.id}`).expect(200);
+      titles.push(record.body.title);
+    }
+
+    assert.equal(new Set(titles).size, 5);
+    assert.equal(titles.some((title) => /\s其\d+$/.test(title)), false);
+  });
+});
+
 test("generation route preserves origin tab and operation metadata", async () => {
   const app = createApp({
     projectRoot: root,
@@ -294,7 +361,7 @@ test("regenerate and fusion routes pass origin tab and operation metadata", asyn
   assert.equal(calls[1].payload.operation, "create");
 });
 
-test("POST /api/uploads/photo returns source_photo_path and inferred artwork size", async () => {
+test("POST /api/uploads/photo returns source_photo_path without inferred artwork size", async () => {
   await withTempApp(async ({ app, temp }) => {
     const response = await request(app)
       .post("/api/uploads/photo")
@@ -306,13 +373,7 @@ test("POST /api/uploads/photo returns source_photo_path and inferred artwork siz
     assert.equal(Object.hasOwn(response.body, "original_photo_path"), false);
     assert.equal(response.body.scene.width, 2);
     assert.equal(response.body.scene.height, 2);
-    assert.deepEqual(response.body.recommended_artwork_size, {
-      preset_id: "square_scene",
-      label: "方形点景",
-      width_cm: 50,
-      height_cm: 50,
-      reason: "根据环境图片比例推算，适合作为方形点景作品。"
-    });
+    assert.equal(Object.hasOwn(response.body, "recommended_artwork_size"), false);
     assert.equal((await fs.readFile(path.join(temp, response.body.source_photo_path))).subarray(8, 12).toString("ascii"), "WEBP");
   });
 });
@@ -543,6 +604,37 @@ test("GET /api/library returns the generated record", async () => {
     assert.equal(response.body.records[0].id, created.body.record.id);
     assert.equal(response.body.records[0].favorite, true);
     assert.equal(response.body.records[0].thumbnail_path, created.body.record.artwork_path);
+  });
+});
+
+test("GET /api/library hides queued or running generation records until completion", async () => {
+  const releases = [];
+  await withTempApp(async ({ app }) => {
+    const agent = request.agent(app);
+    const created = await agent
+      .post("/api/generations")
+      .send({ type: "calligraphy", answers: { text: "明月松间照" } })
+      .expect(201);
+
+    const generatingLibrary = await agent.get("/api/library").expect(200);
+    assert.deepEqual(generatingLibrary.body.records, []);
+
+    await waitUntil(() => releases.length === 1);
+    releases[0]();
+    await waitForJob(agent, created.body.job.id);
+
+    const completedLibrary = await agent.get("/api/library").expect(200);
+    assert.equal(completedLibrary.body.records.length, 1);
+    assert.equal(completedLibrary.body.records[0].id, created.body.record.id);
+  }, {
+    runner: async ({ outputPngPath }) => {
+      await new Promise((resolve) => {
+        releases.push(resolve);
+      });
+      await fs.mkdir(path.dirname(outputPngPath), { recursive: true });
+      await fs.writeFile(outputPngPath, pngBuffer());
+      return { pngPath: outputPngPath, diagnostics: { reason: "slow_runner" } };
+    }
   });
 });
 

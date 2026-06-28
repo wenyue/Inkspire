@@ -1,6 +1,7 @@
 const crypto = require("node:crypto");
 const fs = require("node:fs/promises");
 const path = require("node:path");
+const { performance } = require("node:perf_hooks");
 const sharp = require("sharp");
 const { convertPngToWebp } = require("./imagePipeline");
 const { buildArtworkPrompt, buildFusionPrompt, buildSizeEstimationPrompt } = require("./prompts");
@@ -23,10 +24,78 @@ function qualityFromConfig(config) {
 const DEFAULT_DECIDE_VALUES = new Set(["由墨起决定", "由墨起決定", "Let Inkspire decide"]);
 
 const PAINTING_TITLE_POOLS = {
-  "山水": ["云岫清音", "溪山入梦", "烟雨归岚", "松风远壑"],
-  "花鸟": ["花影和鸣", "春枝含韵", "疏香栖羽", "晴芳入画"],
-  "人物": ["高士临风", "古意风骨", "清谈入画", "松下逸思"],
-  default: ["墨韵清居", "晴窗入画", "素卷含章", "清境生香"]
+  "山水": [
+    "云岫清音", "溪山入梦", "烟雨归岚", "松风远壑",
+    "寒江初霁", "碧峰听泉", "层峦抱月", "秋壑含烟",
+    "远岫生云", "石径松声", "澄江晚照", "空山新雨",
+    "苍崖观瀑", "云水归心", "雪岭晴岚", "山居听雨",
+    "溪桥晓色", "林泉清响", "烟岚叠翠", "孤峰入画",
+    "晴川远黛", "暮山含紫", "松壑流泉", "云峰问道",
+    "青嶂浮岚", "江天一色", "月照寒潭", "翠谷鸣泉",
+    "千峰积翠", "平湖落照", "风过层林", "云开见岳",
+    "幽涧听松", "石壁藏云", "长溪映月", "雁过寒山",
+    "山雨欲来", "江岸归舟", "晨岚初起", "水墨千岩",
+    "碧水遥岑", "古寺钟声", "高岭浮云", "野渡横舟",
+    "霜林晚晴", "春山可望", "夏木成荫", "秋水无尘",
+    "冬岭凝辉", "远山如黛", "云深不知", "松月清辉",
+    "岩泉夜语", "翠岫流光", "江村烟树", "湖山清远",
+    "万壑松风", "一溪云影", "峰回水转", "林壑幽居",
+    "暮霭归山", "晓云出岫", "青山入怀", "清溪照影"
+  ],
+  "花鸟": [
+    "花影和鸣", "春枝含韵", "疏香栖羽", "晴芳入画",
+    "梅边听雪", "兰风拂袖", "竹影栖禽", "菊露凝香",
+    "荷香映月", "桃溪春晓", "杏雨轻飞", "梨云带露",
+    "海棠眠雨", "芙蓉照水", "桂影流金", "芍药含烟",
+    "牡丹初醒", "紫藤垂韵", "鸢尾迎风", "山茶映雪",
+    "玉兰清晓", "芭蕉听雨", "石榴含丹", "木槿朝华",
+    "凌霄向日", "蔷薇小院", "茉莉晚香", "水仙临镜",
+    "瑞草呈祥", "翠羽停枝", "双燕裁春", "白鹭窥荷",
+    "黄鹂报晓", "喜鹊登梅", "鸳鸯戏水", "鹭影横塘",
+    "雀语花间", "雁影秋枝", "鹤影松阴", "鹰扬秋空",
+    "锦鸡披彩", "孔雀开屏", "蝶过春丛", "蜂来小径",
+    "红叶栖禽", "绿萼含香", "新篁啼鸟", "老梅横枝",
+    "池荷映禽", "石上兰芽", "晴窗花信", "雨后芳菲",
+    "月下疏香", "风前翠羽", "繁花照影", "一枝春信",
+    "幽兰吐秀", "芳林晓霁", "露重花醒", "香径听莺",
+    "碧叶藏声", "春水照禽", "秋英含露", "寒梅报春"
+  ],
+  "人物": [
+    "高士临风", "古意风骨", "清谈入画", "松下逸思",
+    "琴心远韵", "对月吟怀", "竹下清坐", "溪边问道",
+    "倚杖观云", "临水照影", "执卷听风", "煮茶候月",
+    "山窗读易", "石几挥毫", "松阴听琴", "云亭闲话",
+    "策杖寻幽", "踏雪访梅", "泛舟听雨", "抱琴归山",
+    "拈花微笑", "观瀑忘机", "采芝入谷", "闲庭步月",
+    "秋窗展卷", "春台对弈", "夏榻纳凉", "冬炉论画",
+    "素衣清赏", "青衫远眺", "红袖添香", "白发谈玄",
+    "童子问松", "渔父归舟", "樵客听泉", "书生策马",
+    "隐者眠云", "诗客寻芳", "雅士观荷", "行者过桥",
+    "禅心坐石", "酒意看山", "笛声入暮", "箫韵随风",
+    "衣袂含烟", "眉目如水", "清姿照影", "逸气横生",
+    "临风怀远", "凭栏望月", "折梅寄意", "披云访友",
+    "墨客归来", "画者凝神", "茶客忘言", "棋客落子",
+    "幽人独坐", "闲僧听雨", "少年踏歌", "佳人采莲",
+    "客从云外", "人在画中", "风骨清奇", "心远地偏"
+  ],
+  default: [
+    "墨韵清居", "晴窗入画", "素卷含章", "清境生香",
+    "心画初成", "雅意成章", "一室生辉", "纸上清风",
+    "墨色流光", "云章初展", "静境含光", "清供入怀",
+    "素心映象", "雅韵初开", "方寸见境", "逸笔成趣",
+    "空灵有象", "意象生辉", "澄怀观道", "静水流深",
+    "清辉满壁", "墨境微澜", "幽光入室", "新意含真",
+    "一卷清气", "笔底春秋", "画里乾坤", "心象成景",
+    "淡墨生烟", "轻岚入卷", "光影和鸣", "雅室添韵",
+    "清赏无尘", "素壁生华", "诗意栖居", "墨香盈室",
+    "闲窗有梦", "静案生春", "清音入画", "余韵悠然",
+    "玄远清和", "温润成境", "明净含章", "逸境初成",
+    "一念成画", "万象归心", "澄明之境", "清雅有光",
+    "素雅成章", "轻烟入墨", "风物含情", "画意初晴",
+    "墨里见山", "心中有境", "静里生光", "雅集成图",
+    "浮光入卷", "远意成诗", "灵境初开", "清梦入纸",
+    "澹然成趣", "和气致祥", "嘉景新成", "墨起新篇"
+  ]
 };
 
 function meaningfulAnswer(value) {
@@ -46,13 +115,34 @@ function stableIndex(parts, count) {
 }
 
 function paintingTitleFromAnswers(answers = {}) {
+  return paintingTitleCandidatesFromAnswers(answers)[0];
+}
+
+function paintingTitleCandidatesFromAnswers(answers = {}) {
   const subject = meaningfulAnswer(answers.painting_subject);
   const mood = meaningfulAnswer(answers.painting_mood);
   const palette = meaningfulAnswer(answers.painting_palette);
   const composition = meaningfulAnswer(answers.painting_composition);
   const detail = meaningfulAnswer(answers.painting_detail);
   const pool = PAINTING_TITLE_POOLS[subject] || PAINTING_TITLE_POOLS.default;
-  return pool[stableIndex([subject, mood, palette, composition, detail], pool.length)];
+  const start = stableIndex([subject, mood, palette, composition, detail], pool.length);
+  return pool.slice(start).concat(pool.slice(0, start));
+}
+
+function unusedTitle(candidates, usedTitles) {
+  for (const candidate of candidates) {
+    if (!usedTitles.has(candidate)) {
+      return candidate;
+    }
+  }
+  const fallback = candidates[0] || "中国画作品";
+  let ordinal = 2;
+  let candidate = `${fallback} 其${ordinal}`;
+  while (usedTitles.has(candidate)) {
+    ordinal += 1;
+    candidate = `${fallback} 其${ordinal}`;
+  }
+  return candidate;
 }
 
 function titleFromRequest(type, answers = {}) {
@@ -73,6 +163,70 @@ const COMPLEXITY_STRENGTH = { small: 1, medium: 2, large: 3 };
 
 function diagnosticsFromError(error) {
   return error?.diagnostics || { reason: "runner_error" };
+}
+
+function elapsedMs(startedAt) {
+  return Math.max(0, Math.round(performance.now() - startedAt));
+}
+
+function createGenerationProfile() {
+  return {
+    created_at: new Date().toISOString(),
+    total_ms: 0,
+    stages: {},
+    attempts: []
+  };
+}
+
+function cloneProfile(profile) {
+  return profile && typeof profile === "object" ? JSON.parse(JSON.stringify(profile)) : profile;
+}
+
+function addProfileStage(profile, stage, durationMs) {
+  if (!profile || !stage) return;
+  const current = profile.stages[stage] || { total_ms: 0, count: 0 };
+  profile.stages[stage] = {
+    total_ms: current.total_ms + Math.max(0, Math.round(durationMs)),
+    count: current.count + 1
+  };
+}
+
+async function measureProfileStage(profile, stage, fn) {
+  const startedAt = performance.now();
+  try {
+    return await fn();
+  } finally {
+    addProfileStage(profile, stage, elapsedMs(startedAt));
+  }
+}
+
+async function recordRunnerAttempt(profile, stage, attempt, fn) {
+  const startedAt = performance.now();
+  try {
+    const result = await fn();
+    profile?.attempts.push({
+      stage,
+      attempt,
+      status: "succeeded",
+      duration_ms: elapsedMs(startedAt)
+    });
+    return result;
+  } catch (error) {
+    profile?.attempts.push({
+      stage,
+      attempt,
+      status: "failed",
+      duration_ms: elapsedMs(startedAt),
+      error: error.message
+    });
+    throw error;
+  }
+}
+
+function finishProfile(profile, startedAt) {
+  if (profile) {
+    profile.total_ms = elapsedMs(startedAt);
+  }
 }
 
 function badRequest(message) {
@@ -136,6 +290,18 @@ function createJobManager({ config, storage, runner }) {
     return VALID_OPERATIONS.has(operation) ? operation : "create";
   }
 
+  async function titleForNewArtwork(type, answers = {}, userId = "") {
+    if (type !== "painting" || !userId || typeof storage.listKeptRecordTitles !== "function") {
+      return titleFromRequest(type, answers);
+    }
+    const usedTitles = new Set(
+      (await storage.listKeptRecordTitles(userId))
+        .map((title) => (typeof title === "string" ? title.trim() : ""))
+        .filter(Boolean)
+    );
+    return unusedTitle(paintingTitleCandidatesFromAnswers(answers), usedTitles);
+  }
+
   function tabKey(userId, originTab) {
     return `${normalizeUserId(userId)}:${normalizeOriginTab(originTab)}`;
   }
@@ -144,7 +310,8 @@ function createJobManager({ config, storage, runner }) {
     if (!job) return null;
     return {
       ...job,
-      diagnostics: job.diagnostics && typeof job.diagnostics === "object" ? { ...job.diagnostics } : job.diagnostics
+      diagnostics: job.diagnostics && typeof job.diagnostics === "object" ? { ...job.diagnostics } : job.diagnostics,
+      generation_profile: cloneProfile(job.generation_profile)
     };
   }
 
@@ -156,7 +323,8 @@ function createJobManager({ config, storage, runner }) {
       recommended_artwork_size: record.recommended_artwork_size && typeof record.recommended_artwork_size === "object"
         ? { ...record.recommended_artwork_size }
         : record.recommended_artwork_size,
-      diagnostics: record.diagnostics && typeof record.diagnostics === "object" ? { ...record.diagnostics } : record.diagnostics
+      diagnostics: record.diagnostics && typeof record.diagnostics === "object" ? { ...record.diagnostics } : record.diagnostics,
+      generation_profile: cloneProfile(record.generation_profile)
     };
   }
 
@@ -182,7 +350,7 @@ function createJobManager({ config, storage, runner }) {
     return resolved;
   }
 
-  async function estimateArtworkRecordFromEnvironment(record) {
+  async function estimateArtworkRecordFromEnvironment(record, profile = null) {
     if (!record.source_photo_path) return;
     const existingComplexity = normalizeGenerationComplexity(record.generation_complexity);
     const resolvedOrientation = resolveRecordOrientation(record);
@@ -195,15 +363,15 @@ function createJobManager({ config, storage, runner }) {
       resolvedOrientation,
       config
     });
-    const estimate = await estimateFromEnvironment({
-      runner,
+    const estimate = await measureProfileStage(profile, "size_estimation", () => estimateFromEnvironment({
+      runner: (runnerOptions) => recordRunnerAttempt(profile, "size_estimation", 1, () => runner(runnerOptions)),
       record,
       prompt,
       resolvedOrientation,
       fallbackSize: record.recommended_artwork_size || null,
       referenceImages: environmentReferenceImages(record),
       fallbackComplexity: existingComplexity
-    });
+    }));
     const estimatedComplexity = normalizeGenerationComplexity(estimate.generation_complexity);
     record.generation_complexity = COMPLEXITY_STRENGTH[estimatedComplexity] > COMPLEXITY_STRENGTH[existingComplexity]
       ? estimatedComplexity
@@ -211,7 +379,7 @@ function createJobManager({ config, storage, runner }) {
     record.recommended_artwork_size = estimate.recommended_artwork_size;
   }
 
-  async function estimateFusionRecordFromEnvironment(record) {
+  async function estimateFusionRecordFromEnvironment(record, profile = null) {
     if (!record.source_photo_path) return;
     const existingComplexity = normalizeGenerationComplexity(record.generation_complexity);
     const resolvedOrientation = resolveRecordOrientation(record);
@@ -224,15 +392,15 @@ function createJobManager({ config, storage, runner }) {
       resolvedOrientation,
       config
     });
-    const estimate = await estimateFromEnvironment({
-      runner,
+    const estimate = await measureProfileStage(profile, "size_estimation", () => estimateFromEnvironment({
+      runner: (runnerOptions) => recordRunnerAttempt(profile, "size_estimation", 1, () => runner(runnerOptions)),
       record,
       prompt,
       resolvedOrientation,
       fallbackSize: record.recommended_artwork_size || null,
       referenceImages: environmentReferenceImages(record),
       fallbackComplexity: existingComplexity
-    });
+    }));
     const estimatedComplexity = normalizeGenerationComplexity(estimate.generation_complexity);
     record.generation_complexity = COMPLEXITY_STRENGTH[estimatedComplexity] > COMPLEXITY_STRENGTH[existingComplexity]
       ? estimatedComplexity
@@ -395,11 +563,11 @@ function createJobManager({ config, storage, runner }) {
     runningCount -= 1;
   }
 
-  async function runRunnerWithRetry(options) {
+  async function runRunnerWithRetry(options, profile = null) {
     let lastError;
     for (let attempt = 0; attempt < 2; attempt += 1) {
       try {
-        return await runner(options);
+        return await recordRunnerAttempt(profile, options.stage, attempt + 1, () => runner(options));
       } catch (error) {
         lastError = error;
       }
@@ -462,6 +630,15 @@ function createJobManager({ config, storage, runner }) {
     });
   }
 
+  async function saveRecordProfiled(record, userId = "", { persistProfile = false, profileStartedAt = null } = {}) {
+    const profile = record.generation_profile;
+    await measureProfileStage(profile, "record_save", () => saveRecordSerial(record, userId));
+    if (persistProfile) {
+      finishProfile(profile, profileStartedAt ?? performance.now());
+      await saveRecordSerial(record, userId);
+    }
+  }
+
   function fusionReferenceImages(record) {
     return {
       environment: resolveRecordAssetPath(storage.dataDir, record.source_photo_path, SOURCE_PHOTO_FILES),
@@ -478,13 +655,13 @@ function createJobManager({ config, storage, runner }) {
   async function runFusionRender(record, outputPngPath) {
     const referenceImages = fusionReferenceImages(record);
     const prompt = buildFusionPrompt({ record, config, referenceImages });
-    return runRunnerWithRetry({
+    return measureProfileStage(record.generation_profile, "codex_fusion_render", () => runRunnerWithRetry({
       stage: "fusion_render",
       prompt,
       record,
       outputPngPath,
       referenceImages
-    });
+    }, record.generation_profile));
   }
 
   async function runImmediateArtwork({
@@ -498,12 +675,18 @@ function createJobManager({ config, storage, runner }) {
   }) {
     const ownerId = normalizeUserId(userId);
     return runLegacyLocked("artwork", async () => {
+      const profileStartedAt = performance.now();
+      const generationProfile = createGenerationProfile();
       const recordId = newId("record");
       const artworkPath = relativeRecordPath(recordId, "artwork.webp");
       const pngPath = path.join(storage.dataDir, "records", recordId, "artwork.png");
       const createdAt = new Date().toISOString();
-      const title = titleFromRequest(type, answers);
-      const ownedSourcePhotoPath = await copySourcePhotoForRecord(storage, recordId, sourcePhotoPath);
+      const title = await titleForNewArtwork(type, answers, ownerId);
+      const ownedSourcePhotoPath = await measureProfileStage(
+        generationProfile,
+        "copy_source_photo",
+        () => copySourcePhotoForRecord(storage, recordId, sourcePhotoPath)
+      );
       const normalizedGenerationComplexity = normalizeGenerationComplexity(generationComplexity);
       const resolvedOrientation = resolveOrientation({ answers, conversationNotes });
       const record = {
@@ -522,14 +705,16 @@ function createJobManager({ config, storage, runner }) {
         artwork_path: artworkPath,
         favorite: true,
         status: "running",
-        diagnostics: null
+        diagnostics: null,
+        generation_profile: generationProfile
       };
-      await estimateArtworkRecordFromEnvironment(record);
+      await estimateArtworkRecordFromEnvironment(record, generationProfile);
       const job = createLegacyJob("artwork", recordId, { type, title });
+      job.generation_profile = generationProfile;
 
       job.status = "running";
       job.started_at = new Date().toISOString();
-      await saveRecordSerial(record, ownerId);
+      await saveRecordProfiled(record, ownerId);
       try {
         const prompt = config.prompts?.[type]
           ? buildArtworkPrompt({
@@ -542,14 +727,14 @@ function createJobManager({ config, storage, runner }) {
             config
           })
           : "";
-        const result = await runRunnerWithRetry({
+        const result = await measureProfileStage(generationProfile, "codex_artwork", () => runRunnerWithRetry({
           stage: "artwork",
           prompt,
           record,
           outputPngPath: pngPath
-        });
+        }, generationProfile));
         await updateArtworkRecommendationFromPng(record, result.pngPath);
-        await convertPngToWebp(result.pngPath, path.join(storage.dataDir, artworkPath), qualityFromConfig(config));
+        await measureProfileStage(generationProfile, "webp_conversion", () => convertPngToWebp(result.pngPath, path.join(storage.dataDir, artworkPath), qualityFromConfig(config)));
         record.status = "succeeded";
         record.diagnostics = result.diagnostics || null;
         delete record.error;
@@ -564,9 +749,11 @@ function createJobManager({ config, storage, runner }) {
         job.diagnostics = record.diagnostics;
       } finally {
         job.completed_at = new Date().toISOString();
+        finishProfile(generationProfile, profileStartedAt);
+        job.generation_profile = generationProfile;
       }
 
-      await saveRecordSerial(record, ownerId);
+      await saveRecordProfiled(record, ownerId, { persistProfile: true, profileStartedAt });
       return { job: cloneJob(job), record: cloneRecord(record) };
     });
   }
@@ -574,30 +761,38 @@ function createJobManager({ config, storage, runner }) {
   async function runImmediateFusion({ userId = "", recordId, sourcePhotoPath = "" }) {
     const ownerId = normalizeUserId(userId);
     return runLegacyLocked("fusion_render", async () => {
+      const profileStartedAt = performance.now();
+      const generationProfile = createGenerationProfile();
       const getRecord = typeof storage.getRecordForUser === "function"
         ? storage.getRecordForUser.bind(storage)
         : storage.getRecord.bind(storage);
       const record = await getRecord(recordId, ownerId);
       const requestedSourcePhotoPath = requireEnvironmentImage(record, sourcePhotoPath);
       requireArtworkImage(record);
-      const ownedSourcePhotoPath = await copySourcePhotoForRecord(storage, recordId, requestedSourcePhotoPath);
+      const ownedSourcePhotoPath = await measureProfileStage(
+        generationProfile,
+        "copy_source_photo",
+        () => copySourcePhotoForRecord(storage, recordId, requestedSourcePhotoPath)
+      );
       const fusionPath = relativeRecordPath(recordId, "fusion.webp");
       const pngPath = path.join(storage.dataDir, "records", recordId, "fusion.png");
       const job = createLegacyJob("fusion_render", recordId, {
         type: record.type,
         title: record.title || titleFromRequest(record.type, record.answers || {})
       });
+      record.generation_profile = generationProfile;
+      job.generation_profile = generationProfile;
 
       job.status = "running";
       job.started_at = new Date().toISOString();
       record.status = "running";
       record.source_photo_path = ownedSourcePhotoPath;
-      await estimateFusionRecordFromEnvironment(record);
-      await saveRecordSerial(record, ownerId);
+      await estimateFusionRecordFromEnvironment(record, generationProfile);
+      await saveRecordProfiled(record, ownerId);
 
       try {
         const result = await runFusionRender(record, pngPath);
-        await convertPngToWebp(result.pngPath, path.join(storage.dataDir, fusionPath), qualityFromConfig(config));
+        await measureProfileStage(generationProfile, "webp_conversion", () => convertPngToWebp(result.pngPath, path.join(storage.dataDir, fusionPath), qualityFromConfig(config)));
         record.fusion_path = fusionPath;
         record.has_fusion = true;
         record.fusion_status = "succeeded";
@@ -616,9 +811,11 @@ function createJobManager({ config, storage, runner }) {
         job.diagnostics = record.diagnostics;
       } finally {
         job.completed_at = new Date().toISOString();
+        finishProfile(generationProfile, profileStartedAt);
+        job.generation_profile = generationProfile;
       }
 
-      await saveRecordSerial(record, ownerId);
+      await saveRecordProfiled(record, ownerId, { persistProfile: true, profileStartedAt });
       return { job: cloneJob(job), record: cloneRecord(record) };
     });
   }
@@ -633,6 +830,7 @@ function createJobManager({ config, storage, runner }) {
   }
 
   async function startTask(task) {
+    const profile = task.record.generation_profile;
     incrementRunningSlot(task.userId);
     task.job.status = "running";
     task.job.started_at = new Date().toISOString();
@@ -645,15 +843,15 @@ function createJobManager({ config, storage, runner }) {
 
     try {
       if (task.stage === "artwork") {
-        await estimateArtworkRecordFromEnvironment(task.record);
+        await estimateArtworkRecordFromEnvironment(task.record, profile);
       } else {
-        await estimateFusionRecordFromEnvironment(task.record);
+        await estimateFusionRecordFromEnvironment(task.record, profile);
       }
-      await saveRecordSerial(task.record, task.userId);
+      await saveRecordProfiled(task.record, task.userId);
       flushWaiters();
 
       const result = task.stage === "artwork"
-        ? await runRunnerWithRetry({
+        ? await measureProfileStage(profile, "codex_artwork", () => runRunnerWithRetry({
           stage: task.stage,
           prompt: config.prompts?.[task.type]
             ? buildArtworkPrompt({
@@ -668,18 +866,18 @@ function createJobManager({ config, storage, runner }) {
             : "",
           record: task.record,
           outputPngPath: task.outputPngPath
-        })
+        }, profile))
         : await runFusionRender(task.record, task.outputPngPath);
 
       if (task.stage === "artwork") {
         await updateArtworkRecommendationFromPng(task.record, result.pngPath);
       }
 
-      await convertPngToWebp(
+      await measureProfileStage(profile, "webp_conversion", () => convertPngToWebp(
         result.pngPath,
         path.join(storage.dataDir, task.outputWebpPath),
         qualityFromConfig(config)
-      );
+      ));
 
       task.record.status = "succeeded";
       task.record.diagnostics = result.diagnostics || null;
@@ -705,13 +903,19 @@ function createJobManager({ config, storage, runner }) {
       }
     } finally {
       try {
-        await saveRecordSerial(task.record, task.userId);
+        finishProfile(profile, task.profileStartedAt);
+        task.job.generation_profile = profile;
+        await saveRecordProfiled(task.record, task.userId, {
+          persistProfile: true,
+          profileStartedAt: task.profileStartedAt
+        });
       } catch (error) {
         // Persisting the final state is best effort; the in-memory state remains updated.
       }
       task.job.status = finalJobStatus;
       task.job.error = finalJobError;
       task.job.diagnostics = task.record.diagnostics;
+      task.job.generation_profile = profile;
       task.job.completed_at = new Date().toISOString();
       releaseRunningSlot(task.userId);
       releaseActiveSlot(task.userId, task.originTab);
@@ -736,6 +940,8 @@ function createJobManager({ config, storage, runner }) {
     const normalizedOperation = normalizeOperation(operation);
     const normalizedGenerationComplexity = normalizeGenerationComplexity(generationComplexity);
     const resolvedOrientation = resolveOrientation({ answers, conversationNotes });
+    const profileStartedAt = performance.now();
+    const generationProfile = createGenerationProfile();
     if (!ownerId) {
       return runImmediateArtwork({
         userId: ownerId,
@@ -760,9 +966,14 @@ function createJobManager({ config, storage, runner }) {
     const recordId = newId("record");
     const createdAt = new Date().toISOString();
     const artworkPath = relativeRecordPath(recordId, "artwork.webp");
+    const title = await titleForNewArtwork(type, answers, ownerId);
     let ownedSourcePhotoPath;
     try {
-      ownedSourcePhotoPath = await copySourcePhotoForRecord(storage, recordId, sourcePhotoPath);
+      ownedSourcePhotoPath = await measureProfileStage(
+        generationProfile,
+        "copy_source_photo",
+        () => copySourcePhotoForRecord(storage, recordId, sourcePhotoPath)
+      );
     } catch (error) {
       releaseActiveSlot(ownerId, normalizedOriginTab);
       throw error;
@@ -773,7 +984,7 @@ function createJobManager({ config, storage, runner }) {
       user_id: ownerId,
       created_at: createdAt,
       type,
-      title: titleFromRequest(type, answers),
+      title,
       answers,
       conversation_notes: conversationNotes,
       source_photo_path: ownedSourcePhotoPath,
@@ -784,7 +995,8 @@ function createJobManager({ config, storage, runner }) {
       artwork_path: artworkPath,
       favorite: true,
       status: "queued",
-      diagnostics: null
+      diagnostics: null,
+      generation_profile: generationProfile
     };
     const job = {
       id: newId("job"),
@@ -800,12 +1012,13 @@ function createJobManager({ config, storage, runner }) {
       started_at: null,
       completed_at: null,
       error: "",
-      diagnostics: null
+      diagnostics: null,
+      generation_profile: generationProfile
     };
     jobs.set(job.id, job);
 
     try {
-      await saveRecordSerial(record, ownerId);
+      await saveRecordProfiled(record, ownerId);
       queuedJobs.push({
         userId: ownerId,
         stage: "artwork",
@@ -819,6 +1032,7 @@ function createJobManager({ config, storage, runner }) {
         operation: normalizedOperation,
         record,
         job,
+        profileStartedAt,
         outputPngPath: pngPath,
         outputWebpPath: artworkPath
       });
@@ -851,13 +1065,19 @@ function createJobManager({ config, storage, runner }) {
 
     let job;
     try {
+      const profileStartedAt = performance.now();
+      const generationProfile = createGenerationProfile();
       const getRecord = typeof storage.getRecordForUser === "function"
         ? storage.getRecordForUser.bind(storage)
         : storage.getRecord.bind(storage);
       const record = await getRecord(recordId, ownerId);
       const requestedSourcePhotoPath = requireEnvironmentImage(record, sourcePhotoPath);
       requireArtworkImage(record);
-      const ownedSourcePhotoPath = await copySourcePhotoForRecord(storage, recordId, requestedSourcePhotoPath);
+      const ownedSourcePhotoPath = await measureProfileStage(
+        generationProfile,
+        "copy_source_photo",
+        () => copySourcePhotoForRecord(storage, recordId, requestedSourcePhotoPath)
+      );
       const createdAt = new Date().toISOString();
       const fusionPath = relativeRecordPath(recordId, "fusion.webp");
       const pngPath = path.join(storage.dataDir, "records", recordId, "fusion.png");
@@ -875,13 +1095,15 @@ function createJobManager({ config, storage, runner }) {
         started_at: null,
         completed_at: null,
         error: "",
-        diagnostics: null
+        diagnostics: null,
+        generation_profile: generationProfile
       };
       jobs.set(job.id, job);
 
       record.status = "queued";
       record.source_photo_path = ownedSourcePhotoPath;
-      await saveRecordSerial(record, ownerId);
+      record.generation_profile = generationProfile;
+      await saveRecordProfiled(record, ownerId);
 
       queuedJobs.push({
         userId: ownerId,
@@ -893,6 +1115,7 @@ function createJobManager({ config, storage, runner }) {
         sourcePhotoPath: ownedSourcePhotoPath,
         originTab: normalizedOriginTab,
         operation: normalizedOperation,
+        profileStartedAt,
         outputPngPath: pngPath,
         outputWebpPath: fusionPath
       });

@@ -19,4 +19,6 @@ test("root package exposes repeatable real Codex verification", () => {
   assert.match(script, /\/api\/jobs\/\$\{jobId\}/);
   assert.match(script, /minBytes/);
   assert.match(script, /source photo["'][\s\S]*minBytes:\s*1/);
+  assert.match(script, /generation_profile/);
+  assert.match(script, /profileSummary/);
 });

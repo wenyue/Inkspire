@@ -47,6 +47,19 @@ export interface ArtworkSize {
   reason?: string;
 }
 
+export interface GenerationProfile {
+  created_at: string;
+  total_ms: number;
+  stages: Record<string, { total_ms: number; count: number }>;
+  attempts: Array<{
+    stage: string;
+    attempt: number;
+    status: "succeeded" | "failed";
+    duration_ms: number;
+    error?: string;
+  }>;
+}
+
 export interface PublicConfig extends QuestionConfig {
   name?: string;
   defaultLocale?: Locale;
@@ -74,6 +87,7 @@ export interface LibraryRecord {
   favorite?: boolean;
   status?: string;
   fusion_status?: string;
+  generation_profile?: GenerationProfile;
 }
 
 export interface GenerationRecord extends LibraryRecord {
@@ -94,6 +108,7 @@ export interface GenerationJob {
   started_at?: string | null;
   completed_at?: string | null;
   error?: string;
+  generation_profile?: GenerationProfile;
 }
 
 export interface GenerationStartResult {

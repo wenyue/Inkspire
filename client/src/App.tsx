@@ -106,7 +106,7 @@ function generationTime(record: LibraryRecord): number {
 
 function visibleLibraryRecords(records: LibraryRecord[]): LibraryRecord[] {
   return records
-    .filter((record) => record.favorite !== false)
+    .filter((record) => record.favorite !== false && record.status !== "queued" && record.status !== "running")
     .sort((a, b) => generationTime(b) - generationTime(a));
 }
 
@@ -907,7 +907,8 @@ export default function App() {
     }
     setShowProduction(false);
     setAdjustOpen(false);
-    const target = switchTabRoute(tabHistoryRef.current, tab);
+    const currentTabHistory = pushTabRoute(tabHistoryRef.current, pathWithSearch);
+    const target = switchTabRoute(currentTabHistory, tab);
     setTabHistory(target.state);
     setResultActionError("");
     setLibraryActionError("");

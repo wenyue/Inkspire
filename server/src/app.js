@@ -408,8 +408,7 @@ function createApp(options = {}) {
       responseBody = {
         record_id: recordId,
         source_photo_path: sourcePhotoPath,
-        scene,
-        recommended_artwork_size: inferArtworkSizeFromScene(metadata)
+        scene
       };
     } finally {
       await fs.promises.rm(req.file.path, { force: true });
