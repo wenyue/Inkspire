@@ -613,6 +613,57 @@ test("artwork creation returns immediately while runner continues in background"
   });
 });
 
+test("artwork creation with source photo returns before size estimation finishes", async () => {
+  await withTempStore(async (temp) => {
+    const sourcePhotoPath = await writeSourcePhotoImage(temp);
+    let releaseSizeEstimation;
+    let sizeEstimationStarted = false;
+    let settled = false;
+    const manager = createJobManager({
+      config: { app: { image: { webpQuality: 82 } }, prompts: {}, questions: {} },
+      storage: createStorage(temp),
+      runner: async ({ outputPngPath, stage }) => {
+        if (stage === "size_estimation") {
+          sizeEstimationStarted = true;
+          await new Promise((resolve) => {
+            releaseSizeEstimation = resolve;
+          });
+          return {
+            json: {
+              generation_complexity: "medium",
+              recommended_artwork_size: { width_cm: 45, height_cm: 70, reason: "测试环境估算" }
+            }
+          };
+        }
+        await fs.mkdir(path.dirname(outputPngPath), { recursive: true });
+        await fs.writeFile(outputPngPath, pngBuffer());
+        return { pngPath: outputPngPath, diagnostics: { reason: "artwork_success" } };
+      }
+    });
+
+    const resultPromise = manager.createArtwork({
+      userId: "user-a",
+      type: "painting",
+      answers: {},
+      sourcePhotoPath
+    });
+    resultPromise.then(() => {
+      settled = true;
+    });
+
+    await waitUntil(() => sizeEstimationStarted);
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    try {
+      assert.equal(settled, true);
+    } finally {
+      releaseSizeEstimation();
+      const result = await resultPromise;
+      await manager.waitForIdle();
+      assert.equal(manager.getJob(result.job.id, "user-a").status, "succeeded");
+    }
+  });
+});
+
 test("getJob keeps legacy lookup compatibility while enforcing explicit owner mismatch", async () => {
   await withTempStore(async (temp) => {
     let release;
@@ -835,6 +886,59 @@ test("user fusion creation returns immediately", async () => {
     await manager.waitForJobStart(result.job.id);
     await manager.waitForIdle();
     assert.equal(manager.getJob(result.job.id, "user-a").status, "succeeded");
+  });
+});
+
+test("user fusion creation returns before size estimation finishes", async () => {
+  await withTempStore(async (temp) => {
+    const sourcePhotoPath = await writeSourcePhotoImage(temp);
+    let blockFusionSizeEstimation = false;
+    let releaseSizeEstimation;
+    let sizeEstimationStarted = false;
+    let settled = false;
+    const manager = createJobManager({
+      config: { app: { image: { webpQuality: 82 } }, prompts: {}, questions: {} },
+      storage: createStorage(temp),
+      runner: async ({ outputPngPath, stage }) => {
+        if (stage === "size_estimation") {
+          if (blockFusionSizeEstimation) {
+            sizeEstimationStarted = true;
+            await new Promise((resolve) => {
+              releaseSizeEstimation = resolve;
+            });
+          }
+          return {
+            json: {
+              generation_complexity: "medium",
+              recommended_artwork_size: { width_cm: 45, height_cm: 70, reason: "测试环境估算" }
+            }
+          };
+        }
+        await fs.mkdir(path.dirname(outputPngPath), { recursive: true });
+        await fs.writeFile(outputPngPath, pngBuffer());
+        return { pngPath: outputPngPath, diagnostics: { reason: stage } };
+      }
+    });
+
+    const created = await manager.createArtwork({ userId: "user-a", type: "painting", answers: {}, sourcePhotoPath });
+    await manager.waitForIdle();
+    blockFusionSizeEstimation = true;
+
+    const resultPromise = manager.createFusion({ userId: "user-a", recordId: created.record.id });
+    resultPromise.then(() => {
+      settled = true;
+    });
+
+    await waitUntil(() => sizeEstimationStarted);
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    try {
+      assert.equal(settled, true);
+    } finally {
+      releaseSizeEstimation();
+      const result = await resultPromise;
+      await manager.waitForIdle();
+      assert.equal(manager.getJob(result.job.id, "user-a").status, "succeeded");
+    }
   });
 });
 

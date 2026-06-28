@@ -110,13 +110,6 @@ function montagePreviewImages(question: Question, locale: Locale): string[] {
   return images.length > 0 ? images : [localizedPreviewImage(question, locale)];
 }
 
-function optionPreviewFallback(question: Question, option: string, index: number): string {
-  if (question.id === "calligraphy_script") {
-    return ["◆", "●", "◇", "◎"][index] ?? "◆";
-  }
-  return ["◆", "●", "◇", "◎"][index] ?? "◆";
-}
-
 function continueLabel(locale: Locale): string {
   if (locale === "en") {
     return "Continue";
@@ -228,6 +221,39 @@ function studioStepUrlForState(
     return "/studio?step=photo";
   }
   return hasSourcePhoto || complexityStepComplete ? "/studio?step=notes" : "/studio?step=complexity";
+}
+
+interface PreviousStudioStepState {
+  config: PublicConfig;
+  answers: Answers;
+  photoStepComplete: boolean;
+  complexityStepComplete: boolean;
+  hasSourcePhoto: boolean;
+  notesFocusRequest: number;
+}
+
+export function previousStudioStepUrlForState({
+  config,
+  answers,
+  photoStepComplete,
+  complexityStepComplete,
+  hasSourcePhoto,
+  notesFocusRequest,
+}: PreviousStudioStepState): string {
+  if (isQuestionFlowComplete(config, answers) && complexityStepComplete && !hasSourcePhoto && notesFocusRequest <= 0) {
+    return studioStepUrlForState(config, answers, true, false, false);
+  }
+  if (photoStepComplete) {
+    return studioStepUrlForState(config, answers, false, false, false);
+  }
+  const questionIds = ["work_type", ...questionsForAnswers(config, answers).map((item) => item.id)];
+  const lastAnsweredId = [...questionIds].reverse().find((id) => answers[id]);
+  if (!lastAnsweredId) {
+    return studioStepUrlForState(config, answers, false, false, false);
+  }
+  const nextAnswers = { ...answers };
+  delete nextAnswers[lastAnsweredId];
+  return studioStepUrlForState(config, nextAnswers, false, false, false);
 }
 
 function readStudioStepQuery(search: string): StudioStepQuery | null {
@@ -512,12 +538,20 @@ export default function Studio({
   };
 
   const goBack = () => {
-    if (readStudioStepQuery(location.search) && typeof window !== "undefined") {
-      goToPreviousStudioStep();
-      window.history.back();
-      return;
-    }
+    const previousUrl = readStudioStepQuery(location.search)
+      ? previousStudioStepUrlForState({
+        config,
+        answers,
+        photoStepComplete,
+        complexityStepComplete,
+        hasSourcePhoto: Boolean(sourcePhotoPath),
+        notesFocusRequest,
+      })
+      : "";
     goToPreviousStudioStep();
+    if (previousUrl) {
+      navigate(previousUrl, { replace: true });
+    }
   };
 
   useEffect(() => () => {
@@ -676,25 +710,20 @@ export default function Studio({
             </div>
             {question ? (
               <>
-                <div className="preview-ink">
-                  <img
-                    className="question-preview-image"
-                    src={localizedPreviewImage(question, locale)}
-                    alt={localizedPreviewText(question, locale)}
-                  />
+                <div
+                  className="preview-ink"
+                  role="img"
+                  aria-label={localizedPreviewText(question, locale)}
+                >
                   <div
                     className="preview-montage"
                     data-count={montagePreviewImages(question, locale).length}
                     aria-hidden="true"
                   >
                     {montagePreviewImages(question, locale).map((src, index) => (
-                      <img
-                        key={`${src}-${index}`}
-                        className="montage-tile"
-                        src={src}
-                        alt=""
-                        aria-hidden="true"
-                      />
+                      <span key={`${src}-${index}`} className="montage-cell" aria-hidden="true">
+                        <img className="montage-tile" src={src} alt="" aria-hidden="true" />
+                      </span>
                     ))}
                   </div>
                 </div>
@@ -739,9 +768,6 @@ export default function Studio({
                           className="option-preview-frame"
                           aria-hidden="true"
                         >
-                          <span className="option-preview-fallback">
-                            {optionPreviewFallback(question, option, index)}
-                          </span>
                           <img
                             className="option-preview-image"
                             src={optionPreviewImage(question, index, locale)}

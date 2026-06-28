@@ -16,10 +16,6 @@ function localizedText(value: Record<string, string>, locale: Locale): string {
   return value[locale] ?? value["zh-Hans"] ?? Object.values(value)[0] ?? "";
 }
 
-function sampleFallback(image: string): string {
-  return image.includes("calligraphy") ? "书" : "画";
-}
-
 export default function Experts({
   experts,
   title,
@@ -54,7 +50,6 @@ export default function Experts({
               <div>
                 {expert.sampleImages.slice(0, 3).map((image, index) => (
                   <span className="expert-sample-frame" key={image}>
-                    <span className="expert-sample-fallback" aria-hidden="true">{sampleFallback(image)}</span>
                     <img src={image} alt={`${sampleHeading} ${index + 1}`} />
                   </span>
                 ))}

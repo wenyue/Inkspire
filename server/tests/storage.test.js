@@ -10,18 +10,32 @@ async function withTempStore(fn) {
   try {
     await fn(temp);
   } finally {
-    await fs.rm(temp, { recursive: true, force: true });
+    await fs.rm(temp, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
   }
 }
 
-test("ensureStore creates library.json and records directory", async () => {
+test("ensureStore creates SQLite database, schema, and records directory", async () => {
   await withTempStore(async (temp) => {
     const storage = createStorage(temp);
 
     await storage.ensureStore();
 
-    assert.deepEqual(JSON.parse(await fs.readFile(path.join(temp, "library.json"), "utf8")), []);
     assert.equal((await fs.stat(path.join(temp, "records"))).isDirectory(), true);
+    assert.equal((await fs.stat(path.join(temp, "inkspire.db"))).isFile(), true);
+
+    const Database = require("better-sqlite3");
+    const db = new Database(path.join(temp, "inkspire.db"), { readonly: true });
+    try {
+      const tables = db
+        .prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name")
+        .all()
+        .map((row) => row.name);
+      assert.deepEqual(tables, ["meta", "production_orders", "records"]);
+      const schemaVersion = db.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get();
+      assert.equal(schemaVersion.value, "1");
+    } finally {
+      db.close();
+    }
   });
 });
 
@@ -51,32 +65,92 @@ test("saveRecord writes record JSON, updates library, and getRecord returns it",
     await storage.ensureStore();
     await storage.saveRecord(record);
 
-    assert.deepEqual(
-      JSON.parse(await fs.readFile(path.join(temp, "records", "artwork-1", "record.json"), "utf8")),
-      record
-    );
     assert.deepEqual(await storage.getRecord("artwork-1"), record);
-    assert.deepEqual(JSON.parse(await fs.readFile(path.join(temp, "library.json"), "utf8")), [
-      {
-        id: "artwork-1",
-        user_id: "",
-        created_at: "2026-06-24T12:00:00.000Z",
-        type: "painting",
-        title: "松风入画",
-        thumbnail_path: "records/artwork-1/artwork.webp",
-        has_fusion: false,
-        generation_complexity: "large",
-        recommended_artwork_size: {
-          preset_id: "complexity_large",
-          label: "丰富参考尺寸",
-          width_cm: 60,
-          height_cm: 90,
-          reason: "按作品复杂度和画面比例估算。"
-        },
-        favorite: true,
-        status: "succeeded"
-      }
-    ]);
+    const Database = require("better-sqlite3");
+    const db = new Database(path.join(temp, "inkspire.db"), { readonly: true });
+    try {
+      const row = db
+        .prepare("SELECT id, user_id, title, status, favorite, generation_complexity, record_json FROM records WHERE id = ?")
+        .get("artwork-1");
+      assert.equal(row.id, "artwork-1");
+      assert.equal(row.user_id, "");
+      assert.equal(row.title, "松风入画");
+      assert.equal(row.status, "succeeded");
+      assert.equal(row.favorite, 1);
+      assert.equal(row.generation_complexity, "large");
+      assert.deepEqual(JSON.parse(row.record_json), record);
+    } finally {
+      db.close();
+    }
+  });
+});
+
+test("saveRecord preserves library entries from concurrent writes", async () => {
+  await withTempStore(async (temp) => {
+    const storage = createStorage(temp);
+    const records = Array.from({ length: 12 }, (_, index) => ({
+      id: `concurrent-${index}`,
+      user_id: `user-${index}`,
+      type: "painting",
+      title: `并发作品 ${index}`,
+      created_at: `2026-06-25T10:${String(index).padStart(2, "0")}:00.000Z`,
+      artwork_path: `records/concurrent-${index}/artwork.webp`,
+      favorite: true,
+      status: "succeeded"
+    }));
+
+    await Promise.all(records.map((record) => storage.saveRecord(record, record.user_id)));
+
+    const libraries = await Promise.all(
+      records.map((record) => storage.listLibrary(record.user_id))
+    );
+
+    assert.deepEqual(
+      libraries.map((library) => library.map((record) => record.id)),
+      records.map((record) => [record.id])
+    );
+  });
+});
+
+test("user-owned records are indexed in SQLite without JSON library files", async () => {
+  await withTempStore(async (temp) => {
+    const storage = createStorage(temp);
+
+    await storage.saveRecord({
+      id: "mine",
+      user_id: "user-a",
+      created_at: "2026-06-25T10:00:00.000Z",
+      type: "painting",
+      artwork_path: "records/mine/artwork.webp",
+      favorite: true,
+      status: "succeeded"
+    }, "user-a");
+    await storage.saveRecord({
+      id: "legacy",
+      created_at: "2026-06-25T10:01:00.000Z",
+      type: "calligraphy",
+      artwork_path: "records/legacy/artwork.webp",
+      favorite: true,
+      status: "succeeded"
+    });
+
+    await assert.rejects(fs.access(path.join(temp, "library.json")));
+    await assert.rejects(fs.access(path.join(temp, "libraries", "user-a.json")));
+
+    const Database = require("better-sqlite3");
+    const db = new Database(path.join(temp, "inkspire.db"), { readonly: true });
+    try {
+      assert.deepEqual(
+        db.prepare("SELECT id, user_id FROM records ORDER BY id").all(),
+        [
+          { id: "legacy", user_id: "" },
+          { id: "mine", user_id: "user-a" }
+        ]
+      );
+    } finally {
+      db.close();
+    }
+    assert.deepEqual((await storage.listLibrary("user-a")).map((record) => record.id), ["legacy", "mine"]);
   });
 });
 
@@ -169,7 +243,6 @@ test("ensureStore marks stale active records interrupted on startup", async () =
       status: "queued",
       fusion_status: "running"
     })}\n`);
-
     const storage = createStorage(temp);
     await storage.ensureStore();
 
@@ -185,6 +258,109 @@ test("ensureStore marks stale active records interrupted on startup", async () =
       ["stale-fusion", "succeeded"],
       ["stale-artwork", "failed"]
     ]);
+  });
+});
+
+test("ensureStore cleans active database records instead of scanning every record directory", async () => {
+  await withTempStore(async (temp) => {
+    await fs.mkdir(path.join(temp, "records", "inactive-broken"), { recursive: true });
+    await fs.writeFile(path.join(temp, "records", "inactive-broken", "record.json"), "{not-json");
+    await fs.mkdir(path.join(temp, "records", "stale-active"), { recursive: true });
+    await fs.writeFile(path.join(temp, "records", "stale-active", "record.json"), `${JSON.stringify({
+      id: "stale-active",
+      user_id: "user-a",
+      created_at: "2026-06-25T10:00:00.000Z",
+      type: "painting",
+      artwork_path: "records/stale-active/artwork.webp",
+      favorite: true,
+      status: "running"
+    })}\n`);
+
+    const storage = createStorage(temp);
+    await storage.ensureStore();
+
+    const staleActive = await storage.getRecord("stale-active");
+    assert.equal(staleActive.status, "failed");
+  });
+});
+
+test("ensureStore imports legacy record JSON files into SQLite once", async () => {
+  await withTempStore(async (temp) => {
+    await fs.mkdir(path.join(temp, "records", "legacy-record"), { recursive: true });
+    const legacyRecord = {
+      id: "legacy-record",
+      user_id: "user-a",
+      created_at: "2026-06-25T10:00:00.000Z",
+      type: "painting",
+      title: "旧文件作品",
+      artwork_path: "records/legacy-record/artwork.webp",
+      favorite: true,
+      status: "succeeded"
+    };
+    await fs.writeFile(path.join(temp, "records", "legacy-record", "record.json"), `${JSON.stringify(legacyRecord)}\n`);
+
+    const storage = createStorage(temp);
+    await storage.ensureStore();
+
+    assert.deepEqual(await storage.getRecord("legacy-record"), legacyRecord);
+    assert.deepEqual((await storage.listLibrary("user-a")).map((record) => record.id), ["legacy-record"]);
+
+    await fs.writeFile(path.join(temp, "records", "legacy-record", "record.json"), `${JSON.stringify({ ...legacyRecord, title: "不应再次导入" })}\n`);
+    const secondStorage = createStorage(temp);
+    await secondStorage.ensureStore();
+
+    assert.equal((await secondStorage.getRecord("legacy-record")).title, "旧文件作品");
+  });
+});
+
+test("ensureStore skips damaged legacy JSON files during import", async () => {
+  await withTempStore(async (temp) => {
+    await fs.mkdir(path.join(temp, "records", "bad-record"), { recursive: true });
+    await fs.writeFile(path.join(temp, "records", "bad-record", "record.json"), "{not-json");
+
+    const storage = createStorage(temp);
+    await storage.ensureStore();
+
+    assert.deepEqual(await storage.listLibrary("user-a"), []);
+  });
+});
+
+test("ensureStore imports legacy production order JSON files into SQLite once", async () => {
+  await withTempStore(async (temp) => {
+    await fs.mkdir(path.join(temp, "orders"), { recursive: true });
+    const legacyOrder = {
+      id: "ord-aaaaaaaa",
+      user_id: "user-a",
+      created_at: "2026-06-25T10:00:00.000Z",
+      record_id: "legacy-record",
+      expert_id: "wu_jiayin"
+    };
+    await fs.writeFile(path.join(temp, "orders", "ord-aaaaaaaa.json"), `${JSON.stringify(legacyOrder)}\n`);
+
+    const storage = createStorage(temp);
+    await storage.ensureStore();
+
+    assert.equal(await storage.productionOrderExists("ord-aaaaaaaa"), true);
+    assert.deepEqual(await storage.getProductionOrder("ord-aaaaaaaa"), legacyOrder);
+  });
+});
+
+test("saveProductionOrder stores orders in SQLite", async () => {
+  await withTempStore(async (temp) => {
+    const storage = createStorage(temp);
+    const order = {
+      id: "ord-bbbbbbbb",
+      user_id: "user-a",
+      created_at: "2026-06-25T10:00:00.000Z",
+      record_id: "record-a",
+      expert_id: "wu_jiayin"
+    };
+
+    await storage.saveProductionOrder(order, "user-a");
+
+    assert.equal(await storage.productionOrderExists("ord-bbbbbbbb"), true);
+    assert.deepEqual(await storage.getProductionOrder("ord-bbbbbbbb"), order);
+    await assert.rejects(fs.access(path.join(temp, "orders", "ord-bbbbbbbb.json")));
   });
 });
 

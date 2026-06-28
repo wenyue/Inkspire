@@ -1,6 +1,8 @@
 import { defineConfig, devices } from "@playwright/test";
 
 const managedE2eServer = process.env.INKSPIRE_MANAGED_E2E_SERVER === "1";
+const webPort = process.env.INKSPIRE_WEB_PORT || "5173";
+const webUrl = `http://127.0.0.1:${webPort}`;
 
 export default defineConfig({
   testDir: "./e2e",
@@ -9,7 +11,7 @@ export default defineConfig({
     timeout: 10_000
   },
   use: {
-    baseURL: "http://127.0.0.1:5173",
+    baseURL: webUrl,
     trace: "on-first-retry"
   },
   webServer: managedE2eServer ? undefined : {
@@ -20,7 +22,7 @@ export default defineConfig({
       PORT: "3101",
       INKSPIRE_API_TARGET: "http://127.0.0.1:3101"
     },
-    url: "http://127.0.0.1:5173",
+    url: webUrl,
     reuseExistingServer: false,
     timeout: 120_000
   },
@@ -28,6 +30,14 @@ export default defineConfig({
     {
       name: "chromium",
       use: { ...devices["Desktop Chrome"] }
+    },
+    {
+      name: "firefox",
+      use: { ...devices["Desktop Firefox"] }
+    },
+    {
+      name: "webkit",
+      use: { ...devices["Desktop Safari"] }
     }
   ]
 });

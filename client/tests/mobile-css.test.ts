@@ -73,6 +73,14 @@ describe("mobile touch targets", () => {
     expect(blockFor(".result-grid img,\n.image-placeholder")).toContain("object-fit: contain");
   });
 
+  it("keeps image loading surfaces empty instead of patterned placeholders", () => {
+    expect(blockFor(".preview-ink")).not.toMatch(/background:/);
+    expect(blockFor(".preview-montage")).not.toMatch(/background:/);
+    expect(blockFor(".option-preview-frame")).not.toMatch(/background:/);
+    expect(blockFor(".expert-sample-frame")).not.toMatch(/background:/);
+    expect(blockFor(".result-grid img,\n.image-placeholder")).not.toMatch(/background:/);
+  });
+
   it("keeps library titles to one line with ellipsis", () => {
     const titleBlock = blockFor(".library-copy strong");
 

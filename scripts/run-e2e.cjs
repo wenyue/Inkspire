@@ -1,18 +1,36 @@
 const { spawn } = require("node:child_process");
 const http = require("node:http");
+const net = require("node:net");
 const path = require("node:path");
 
 const root = path.resolve(__dirname, "..");
-const apiPort = process.env.PORT || "3101";
-const apiTarget = process.env.INKSPIRE_API_TARGET || `http://127.0.0.1:${apiPort}`;
-const env = {
-  ...process.env,
-  INKSPIRE_E2E: "1",
-  INKSPIRE_DATA_DIR: ".e2e-data",
-  PORT: apiPort,
-  INKSPIRE_API_TARGET: apiTarget,
-  INKSPIRE_MANAGED_E2E_SERVER: "1"
-};
+
+function canConnect(port, host) {
+  return new Promise((resolve) => {
+    const socket = net.createConnection({ port, host });
+    socket.once("connect", () => {
+      socket.destroy();
+      resolve(true);
+    });
+    socket.once("error", () => resolve(false));
+    socket.setTimeout(1000, () => {
+      socket.destroy();
+      resolve(false);
+    });
+  });
+}
+
+async function isPortInUse(port) {
+  return (await canConnect(port, "127.0.0.1")) || (await canConnect(port, "::1"));
+}
+
+async function findAvailablePort(preferredPort) {
+  let port = Number(preferredPort);
+  while (await isPortInUse(port)) {
+    port += 1;
+  }
+  return String(port);
+}
 
 function waitForUrl(url, label = url, timeoutMs = 120000, isReady = (status) => status >= 200 && status < 300) {
   const started = Date.now();
@@ -51,7 +69,7 @@ function waitForUrl(url, label = url, timeoutMs = 120000, isReady = (status) => 
   });
 }
 
-function spawnChild(command, args, options = {}) {
+function spawnChild(command, args, env, options = {}) {
   return spawn(command, args, {
     cwd: root,
     env,
@@ -74,7 +92,20 @@ function waitForClose(child, timeoutMs = 10000) {
 }
 
 async function main() {
-  const server = spawnChild(process.execPath, ["scripts/e2e-dev-server.cjs"]);
+  const apiPort = await findAvailablePort(process.env.PORT || "3101");
+  const webPort = await findAvailablePort(process.env.INKSPIRE_WEB_PORT || "5173");
+  const apiTarget = process.env.INKSPIRE_API_TARGET || `http://127.0.0.1:${apiPort}`;
+  const webTarget = `http://127.0.0.1:${webPort}`;
+  const env = {
+    ...process.env,
+    INKSPIRE_E2E: "1",
+    INKSPIRE_DATA_DIR: ".e2e-data",
+    PORT: apiPort,
+    INKSPIRE_API_TARGET: apiTarget,
+    INKSPIRE_MANAGED_E2E_SERVER: "1",
+    INKSPIRE_WEB_PORT: webPort
+  };
+  const server = spawnChild(process.execPath, ["scripts/e2e-dev-server.cjs"], env);
   let finished = false;
 
   const stopServer = async () => {
@@ -101,7 +132,7 @@ async function main() {
 
   try {
     await Promise.all([
-      waitForUrl("http://127.0.0.1:5173", "Vite dev server"),
+      waitForUrl(webTarget, "Vite dev server"),
       waitForUrl(`${apiTarget}/api/health`, "API health", 120000, (status, body) => {
         if (status < 200 || status >= 300) {
           return false;
@@ -118,7 +149,7 @@ async function main() {
       path.join(root, "node_modules/@playwright/test/cli.js"),
       "test",
       ...process.argv.slice(2)
-    ]);
+    ], env);
 
     const code = await new Promise((resolve) => {
       playwright.on("exit", resolve);

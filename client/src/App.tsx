@@ -88,6 +88,7 @@ function parseRecordRoute(pathname: string): { recordId: string; mode: RecordRou
 }
 
 const LOCALE_KEY = "inkspire.locale";
+const IMAGE_VIEWER_POP_EVENT = "inkspire:image-viewer-pop";
 
 const tabIcons = {
   studio: Brush,
@@ -147,6 +148,10 @@ function jobOperation(job: GenerationJob): GenerationOperation {
 function jobStartedAt(job: GenerationJob): number {
   const createdAt = job.created_at ? new Date(job.created_at).getTime() : NaN;
   return Number.isNaN(createdAt) ? Date.now() : createdAt;
+}
+
+function pendingJobId(prefix: string, originTab: OriginTab): string {
+  return `${prefix}-${originTab}-${Date.now().toString(36)}`;
 }
 
 function generationPayloadForSession(payload: GenerationPayload): GenerationSession["payload"] {
@@ -299,9 +304,12 @@ export default function App() {
   const recordCacheRef = useRef<Map<string, GenerationRecord>>(new Map());
   const adjustSubmitRef = useRef(false);
   const tabHistoryRef = useRef(tabHistory);
-  const skipNextPopSyncRef = useRef(false);
+  const skipInitialPopSyncRef = useRef(true);
+  const lastHandledPopKeyRef = useRef<string | null>(null);
+  const preserveRecordRouteStateRef = useRef(false);
   const studioResultGuardRef = useRef(false);
   const studioResultPathRef = useRef("/studio");
+  const imageViewerHandledPopRef = useRef(false);
 
   const updateGenerationSessions = useCallback((updater: (sessions: GenerationSessionMap) => GenerationSessionMap) => {
     setGenerationSessions((current) => {
@@ -321,6 +329,17 @@ export default function App() {
   const clearGenerationSession = useCallback((originTab: OriginTab) => {
     updateGenerationSessions((sessions) => {
       if (!sessions[originTab]) {
+        return sessions;
+      }
+      const next = { ...sessions };
+      delete next[originTab];
+      return next;
+    });
+  }, [updateGenerationSessions]);
+
+  const clearGenerationSessionIfJob = useCallback((originTab: OriginTab, jobId: string) => {
+    updateGenerationSessions((sessions) => {
+      if (sessions[originTab]?.jobId !== jobId) {
         return sessions;
       }
       const next = { ...sessions };
@@ -369,6 +388,14 @@ export default function App() {
   }, [generationSessions]);
 
   useEffect(() => {
+    const onImageViewerPop = () => {
+      imageViewerHandledPopRef.current = true;
+    };
+    window.addEventListener(IMAGE_VIEWER_POP_EVENT, onImageViewerPop);
+    return () => window.removeEventListener(IMAGE_VIEWER_POP_EVENT, onImageViewerPop);
+  }, []);
+
+  useEffect(() => {
     tabHistoryRef.current = tabHistory;
     writeTabHistoryState(tabHistory);
   }, [tabHistory]);
@@ -377,14 +404,49 @@ export default function App() {
     window.localStorage.setItem(LOCALE_KEY, locale);
   }, [locale]);
 
+  const onStudioResult = Boolean(
+    recordRoute &&
+      recordRoute.mode === "result" &&
+      recordViewOpen &&
+      currentRecord &&
+      readSourceTab(location.search) === "studio"
+  );
+
   useEffect(() => {
-    const onPopState = () => {
+    if (!isKnownTopLevelPath(location.pathname) && !recordRoute) {
+      return;
+    }
+    if (navigationType === "POP") {
+      if (lastHandledPopKeyRef.current === location.key) {
+        if (onStudioResult) {
+          studioResultGuardRef.current = true;
+          studioResultPathRef.current = pathWithSearch;
+        }
+        return;
+      }
+      lastHandledPopKeyRef.current = location.key;
+      if (skipInitialPopSyncRef.current) {
+        skipInitialPopSyncRef.current = false;
+        studioResultGuardRef.current = onStudioResult;
+        if (onStudioResult) {
+          studioResultPathRef.current = pathWithSearch;
+        }
+        return;
+      }
+      if (imageViewerHandledPopRef.current) {
+        imageViewerHandledPopRef.current = false;
+        studioResultGuardRef.current = onStudioResult;
+        if (onStudioResult) {
+          studioResultPathRef.current = pathWithSearch;
+        }
+        return;
+      }
       if (studioResultGuardRef.current) {
+        preserveRecordRouteStateRef.current = true;
         navigate(studioResultPathRef.current, { replace: true });
         setPendingBackExit(true);
         return;
       }
-      skipNextPopSyncRef.current = true;
       const next = backCurrentTab(tabHistoryRef.current);
       setTabHistory(next.state);
       if (next.didGoBack && next.path === "/studio") {
@@ -400,28 +462,26 @@ export default function App() {
         setLibraryActionError("");
         setStudioResetRequest((request) => request + 1);
       }
-      navigate(next.path, { replace: true });
-    };
-    window.addEventListener("popstate", onPopState);
-    return () => window.removeEventListener("popstate", onPopState);
-  }, [currentRecord?.id, navigate]);
-
-  const onStudioResult = Boolean(
-    recordRoute &&
-      recordRoute.mode === "result" &&
-      recordViewOpen &&
-      currentRecord &&
-      readSourceTab(location.search) === "studio"
-  );
-
-  useEffect(() => {
+      if (next.path !== pathWithSearch) {
+        navigate(next.path, { replace: true });
+      }
+      studioResultGuardRef.current = false;
+      return;
+    }
+    lastHandledPopKeyRef.current = null;
+    skipInitialPopSyncRef.current = false;
+    setTabHistory((current) => (
+      navigationType === "REPLACE"
+        ? replaceTabRoute(current, pathWithSearch)
+        : pushTabRoute(current, pathWithSearch)
+    ));
     studioResultGuardRef.current = onStudioResult;
     if (onStudioResult) {
       studioResultPathRef.current = pathWithSearch;
     } else {
       setPendingBackExit(false);
     }
-  }, [onStudioResult, pathWithSearch]);
+  }, [currentRecord?.id, location.key, location.pathname, navigate, navigationType, onStudioResult, pathWithSearch, recordRoute?.mode, recordRoute?.recordId]);
 
   useEffect(() => {
     if (location.pathname === "/") {
@@ -437,22 +497,11 @@ export default function App() {
   }, [location.pathname, navigate, recordRoute]);
 
   useEffect(() => {
-    if (!isKnownTopLevelPath(location.pathname) && !recordRoute) {
-      return;
-    }
-    if (skipNextPopSyncRef.current && navigationType === "POP") {
-      skipNextPopSyncRef.current = false;
-      return;
-    }
-    setTabHistory((current) => (
-      navigationType === "REPLACE"
-        ? replaceTabRoute(current, pathWithSearch)
-        : pushTabRoute(current, pathWithSearch)
-    ));
-  }, [location.pathname, navigationType, pathWithSearch, recordRoute?.mode, recordRoute?.recordId]);
-
-  useEffect(() => {
     if (!recordRoute) {
+      if (preserveRecordRouteStateRef.current) {
+        preserveRecordRouteStateRef.current = false;
+        return;
+      }
       setAdjustOpen(false);
       setShowProduction(false);
       setRecordViewOpen(false);
@@ -504,6 +553,7 @@ export default function App() {
   const t = useMemo(() => createTranslator(locale, config.i18n), [config.i18n, locale]);
   const list = useMemo(() => createListTranslator(locale, config.i18n), [config.i18n, locale]);
   const productionEnabled = hasProductionContact(config);
+  const productionDialogOpen = showProduction && recordRoute?.mode === "production";
 
   const onResult = useCallback((record: GenerationRecord) => {
     recordCacheRef.current.set(record.id, record);
@@ -638,6 +688,24 @@ export default function App() {
     originTab: OriginTab = "studio",
     operation: GenerationOperation = "create"
   ) => {
+    const existingSession = generationSessionsRef.current[originTab];
+    const pendingId = pendingJobId("pending-fusion", originTab);
+    const startedAt = existingSession?.status === "running" ? existingSession.startedAt : Date.now();
+    const payload = {
+      ...(existingSession?.payload ?? {}),
+      source_photo_path: sourcePhotoPath || existingSession?.payload.source_photo_path
+    };
+    upsertGenerationSession({
+      originTab,
+      operation,
+      jobId: pendingId,
+      sourceRecordId: recordId,
+      resultRecordId: recordId,
+      startedAt,
+      status: "running",
+      payload
+    });
+
     try {
       const result = startResultWithFallbackMetadata(
         await createFusion(recordId, sourcePhotoPath, originTab, operation),
@@ -647,6 +715,7 @@ export default function App() {
       if (result.job?.status === "queued" || result.job?.status === "running") {
         upsertGenerationSession({
           ...runningSessionFromJob(result.job, { source_photo_path: sourcePhotoPath }, { originTab, operation }),
+          startedAt,
           sourceRecordId: recordId
         });
         navigate(fallbackPathForSource(originTab), { replace: true });
@@ -662,14 +731,26 @@ export default function App() {
       if (isGenerationLimitError(error)) {
         replaceActiveJobs((error.payload as GenerationStartResult).activeJobs ?? []);
       }
+      clearGenerationSessionIfJob(originTab, pendingId);
       throw error;
     }
-  }, [applyFinishedRecordForOrigin, clearGenerationSession, handleGenerationStart, navigate, replaceActiveJobs, upsertGenerationSession]);
+  }, [applyFinishedRecordForOrigin, clearGenerationSession, clearGenerationSessionIfJob, handleGenerationStart, navigate, replaceActiveJobs, upsertGenerationSession]);
 
   const startGenerationJob = useCallback(async (payload: GenerationPayload) => {
+    const originTab = payload.origin_tab ?? "studio";
+    const operation = payload.operation ?? "create";
+    const pendingId = pendingJobId("pending-generation", originTab);
+    const startedAt = Date.now();
+    upsertGenerationSession({
+      originTab,
+      operation,
+      jobId: pendingId,
+      startedAt,
+      status: "running",
+      payload: generationPayloadForSession(payload)
+    });
+
     try {
-      const originTab = payload.origin_tab ?? "studio";
-      const operation = payload.operation ?? "create";
       const result = startResultWithFallbackMetadata(
         await createGeneration(payload),
         { originTab, operation }
@@ -677,12 +758,12 @@ export default function App() {
       handleGenerationStart(result);
       if (result.job?.status === "queued" || result.job?.status === "running") {
         upsertGenerationSession({
-          ...runningSessionFromJob(result.job, generationPayloadForSession(payload), { originTab, operation })
+          ...runningSessionFromJob(result.job, generationPayloadForSession(payload), { originTab, operation }),
+          startedAt
         });
         navigate(fallbackPathForSource(originTab), { replace: true });
       }
       if (result.record && !result.job) {
-        clearGenerationSession(originTab);
         if (
           result.record.status === "succeeded"
           && payload.source_photo_path
@@ -694,15 +775,17 @@ export default function App() {
           await startFusionJob(result.record.id, result.record.source_photo_path, originTab, payload.operation ?? "create");
           return;
         }
+        clearGenerationSession(originTab);
         applyFinishedRecord(result.record);
       }
     } catch (error) {
       if (isGenerationLimitError(error)) {
         replaceActiveJobs((error.payload as GenerationStartResult).activeJobs ?? []);
       }
+      clearGenerationSessionIfJob(originTab, pendingId);
       throw error;
     }
-  }, [applyFinishedRecord, clearGenerationSession, handleGenerationStart, navigate, replaceActiveJobs, startFusionJob, upsertGenerationSession]);
+  }, [applyFinishedRecord, clearGenerationSession, clearGenerationSessionIfJob, handleGenerationStart, navigate, replaceActiveJobs, startFusionJob, upsertGenerationSession]);
 
   const finishRecordForJob = useCallback(async (job: GenerationJob, record: GenerationRecord) => {
     const metadata = generationJobMetadata(job, generationSessionsRef.current);
@@ -815,11 +898,11 @@ export default function App() {
   };
 
   const goToTab = (tab: Tab) => {
-    if (tab === "studio" && activeTab === "studio" && currentRecord && !adjustOpen && !showProduction) {
+    if (tab === "studio" && activeTab === "studio" && currentRecord && !adjustOpen && !productionDialogOpen) {
       startNewArtwork();
       return;
     }
-    if (tab === activeTab && !showProduction && !adjustOpen) {
+    if (tab === activeTab && !productionDialogOpen && !adjustOpen) {
       return;
     }
     setShowProduction(false);
@@ -1155,7 +1238,7 @@ export default function App() {
         })}
       </nav>
 
-      {showProduction && currentRecord && currentRecord.status !== "failed" ? (
+      {productionDialogOpen && currentRecord && currentRecord.status !== "failed" ? (
         <ProductionDialog
           expert={config.experts[0]}
           supportContact={config.productionContact}

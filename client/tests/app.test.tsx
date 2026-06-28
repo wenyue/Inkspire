@@ -208,6 +208,10 @@ describe("App", () => {
   let activeJobsResponse: unknown[] = [];
   let queuedGenerationJob: unknown | null = null;
   let jobResponses: Record<string, unknown> = {};
+  let holdGenerationResponse = false;
+  let releaseGenerationResponse: (() => void) | null = null;
+  let holdFusionResponse = false;
+  let releaseFusionResponse: (() => void) | null = null;
   let recordOneSourcePhotoPath = "";
   let recordOneGenerationComplexity: unknown;
 
@@ -220,6 +224,10 @@ describe("App", () => {
     activeJobsResponse = [];
     queuedGenerationJob = null;
     jobResponses = {};
+    holdGenerationResponse = false;
+    releaseGenerationResponse = null;
+    holdFusionResponse = false;
+    releaseFusionResponse = null;
     recordOneSourcePhotoPath = "";
     recordOneGenerationComplexity = undefined;
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -249,6 +257,20 @@ describe("App", () => {
       if (url.endsWith("/api/generations")) {
         const body = init?.body ? JSON.parse(String(init.body)) : {};
         recordOneGenerationComplexity = body.generation_complexity;
+        if (holdGenerationResponse) {
+          return new Promise<Response>((resolve) => {
+            releaseGenerationResponse = () => resolve(Response.json({
+              job: queuedGenerationJob ?? {
+                id: "job-held-generation",
+                recordId: "record-1",
+                stage: "artwork",
+                origin_tab: body.origin_tab ?? "studio",
+                operation: body.operation ?? "create",
+                status: "queued"
+              }
+            }, { status: 201 }));
+          });
+        }
         if (queuedGenerationJob) {
           return Response.json({ job: queuedGenerationJob }, { status: 201 });
         }
@@ -317,6 +339,21 @@ describe("App", () => {
               fusion_status: "failed"
             }
           }, { status: 201 });
+        }
+        if (holdFusionResponse) {
+          return new Promise<Response>((resolve) => {
+            releaseFusionResponse = () => resolve(Response.json({
+              record: {
+                id: "record-1",
+                type: "painting",
+                artwork_path: "records/record-1/artwork.webp",
+                fusion_path: "records/record-1/fusion.webp",
+                source_photo_path: body.source_photo_path || "records/upload-1/source-photo.webp",
+                status: "succeeded",
+                has_fusion: true
+              }
+            }, { status: 201 }));
+          });
         }
         return Response.json({
           record: {
@@ -398,10 +435,16 @@ describe("App", () => {
     });
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
     cleanup();
+    window.history.pushState(null, "", "/");
+    window.history.replaceState(null, "", "/");
     window.localStorage.clear();
     window.sessionStorage.clear();
+    vi.restoreAllMocks();
     vi.unstubAllGlobals();
   });
 
@@ -500,6 +543,24 @@ describe("App", () => {
     expect(styles).toMatch(/@media \(max-width:\s*520px\)[\s\S]*\.language-select-label[\s\S]*clip:\s*rect\(0 0 0 0\)/);
   });
 
+  it("hides bottom navigation while the image viewer is open and keeps the viewer back action compact", async () => {
+    const styles = await readFile(resolve(process.cwd(), "src/styles.css"), "utf8");
+
+    expect(styles).toMatch(/\.image-viewer-open\s+\.bottom-tabs\s*{[^}]*display:\s*none/s);
+    expect(styles).toMatch(/\.image-viewer-back\s*{[^}]*min-height:\s*38px/s);
+    expect(styles).toMatch(/\.image-viewer-back\s*{[^}]*font-size:\s*13px/s);
+  });
+
+  it("uses a gesture-first image viewer layout on narrow screens", async () => {
+    const styles = await readFile(resolve(process.cwd(), "src/styles.css"), "utf8");
+
+    expect(styles).toMatch(/\.image-viewer-stage\s*{[^}]*touch-action:\s*none/s);
+    expect(styles).toMatch(/\.image-viewer-mobile-hint\s*{/);
+    expect(styles).toMatch(/\.image-viewer-mobile-reset\s*{/);
+    expect(styles).toMatch(/@media \(max-width:\s*520px\)[\s\S]*\.image-viewer-controls\s*{[^}]*display:\s*none/s);
+    expect(styles).toMatch(/@media \(max-width:\s*520px\)[\s\S]*\.image-viewer-mobile-reset\s*{[^}]*display:\s*inline-grid/s);
+  });
+
   it("shows photo selection as the final explicit step", async () => {
     const user = userEvent.setup();
     renderApp();
@@ -545,27 +606,21 @@ describe("App", () => {
     expect(screen.queryByText("暂时无法完成，请稍后再试。")).not.toBeInTheDocument();
   });
 
-  it("uses decorative option fallbacks without repeating visible labels", async () => {
+  it("renders option preview images without repeating visible labels", async () => {
     const user = userEvent.setup();
     const { container } = renderApp();
 
     await screen.findByRole("button", { name: "国画" });
 
     expect(screen.getByRole("button", { name: "国画" }).textContent).not.toBe("国国画");
-    expect([...container.querySelectorAll(".option-preview-fallback")].map((item) => item.textContent?.trim())).toEqual([
-      "◆",
-      "●"
-    ]);
+    expect(container.querySelectorAll(".option-preview-fallback")).toHaveLength(0);
+    expect(container.querySelectorAll(".option-preview-image")).toHaveLength(2);
 
     await user.click(screen.getByRole("button", { name: "国画" }));
 
     expect(screen.getByRole("button", { name: "山水" }).textContent).not.toBe("山山水");
-    expect([...container.querySelectorAll(".option-preview-fallback")].map((item) => item.textContent?.trim())).toEqual([
-      "◆",
-      "●",
-      "◇",
-      "◎"
-    ]);
+    expect(container.querySelectorAll(".option-preview-fallback")).toHaveLength(0);
+    expect(container.querySelectorAll(".option-preview-image")).toHaveLength(4);
   });
 
   it("requires the photo step after branch questions before showing generation", async () => {
@@ -671,7 +726,7 @@ describe("App", () => {
 
     expect(screen.getByText("Choose the work type")).toBeInTheDocument();
     expect(screen.queryByText("选择国画或书法创作方向")).not.toBeInTheDocument();
-    expect(screen.getByRole("img", { name: "Preview the artwork direction" })).toHaveAttribute("src", expect.stringContaining("/previews/questions/"));
+    expect(screen.getByRole("img", { name: "Preview the artwork direction" })).toBeInTheDocument();
     const workTypePreviews = [...container.querySelectorAll(".option-preview-image")].map((image) => image.getAttribute("src"));
     expect(workTypePreviews).toHaveLength(2);
     expect(new Set(workTypePreviews).size).toBe(2);
@@ -679,21 +734,20 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: "Painting" }));
 
     expect(screen.getByRole("heading", { name: "What subject should the painting show?" })).toBeInTheDocument();
-    expect(screen.getByRole("img", { name: "What subject should the painting show?" })).toHaveAttribute("src", expect.stringContaining("/previews/questions/"));
+    expect(screen.getByRole("img", { name: "What subject should the painting show?" })).toBeInTheDocument();
     const subjectPreviews = [...container.querySelectorAll(".option-preview-image")].map((image) => image.getAttribute("src"));
     expect(subjectPreviews).toHaveLength(4);
     expect(new Set(subjectPreviews).size).toBe(4);
   });
 
-  it("shows decorative fallback marks for calligraphy option previews before images decode", async () => {
+  it("leaves option preview frames empty before images decode", async () => {
     const user = userEvent.setup();
     const { container } = renderApp();
 
     await user.click(await screen.findByRole("button", { name: "书法" }));
 
     expect(screen.getByRole("heading", { name: "偏好哪种书体？" })).toBeInTheDocument();
-    const fallbackGlyphs = [...container.querySelectorAll(".option-preview-fallback")].map((item) => item.textContent?.trim());
-    expect(fallbackGlyphs).toEqual(["◆", "●", "◇", "◎"]);
+    expect(container.querySelectorAll(".option-preview-fallback")).toHaveLength(0);
     expect(container.querySelectorAll(".option-preview-image")).toHaveLength(4);
   });
 
@@ -838,6 +892,21 @@ describe("App", () => {
 
     expect(await screen.findByText("想画什么主题？")).toBeInTheDocument();
     expect(window.location.search).toBe("?step=question&index=0");
+  });
+
+  it("uses an app URL replace instead of browser history for the in-app studio back button", async () => {
+    const user = userEvent.setup();
+    const historyBack = vi.spyOn(window.history, "back");
+    renderApp({ initialRoute: "/studio" });
+
+    await completePaintingWithoutPhoto(user);
+    expect(window.location.search).toBe("?step=notes");
+
+    await user.click(screen.getByRole("button", { name: "上一步" }));
+
+    expect(historyBack).not.toHaveBeenCalled();
+    expect(await screen.findByRole("heading", { name: "想让作品丰富到什么程度？" })).toBeInTheDocument();
+    expect(window.location.search).toBe("?step=complexity");
   });
 
   it("keeps generation as the only submit action after questions complete", async () => {
@@ -1115,6 +1184,34 @@ describe("App", () => {
     expect(window.location.pathname).toBe("/studio");
   });
 
+  it("shows Studio loading while the generation request is still pending", async () => {
+    holdGenerationResponse = true;
+    queuedGenerationJob = {
+      id: "job-studio-pending",
+      recordId: "record-1",
+      stage: "artwork",
+      origin_tab: "studio",
+      operation: "create",
+      status: "queued",
+    };
+    const user = userEvent.setup();
+    renderApp();
+
+    await completePaintingWithoutPhoto(user);
+    await user.click(screen.getByRole("button", { name: "生成" }));
+
+    try {
+      await waitFor(() => {
+        expect(generationRequestBodies()).toHaveLength(1);
+      });
+      await waitFor(() => {
+        expect(screen.getByRole("heading", { name: "艺术家正在构思" })).toBeInTheDocument();
+      });
+    } finally {
+      releaseGenerationResponse?.();
+    }
+  });
+
   it("shows the longer Studio loading estimate when an uploaded photo will create a preview", async () => {
     queuedGenerationJob = {
       id: "job-studio-create-preview",
@@ -1378,6 +1475,29 @@ describe("App", () => {
     expect(await screen.findByRole("img", { name: "作品图" })).toBeInTheDocument();
     expect(await screen.findByRole("img", { name: "效果图" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "调整作品" })).toBeInTheDocument();
+  });
+
+  it("keeps Studio loading visible while automatic fusion is pending", async () => {
+    holdFusionResponse = true;
+    const user = userEvent.setup();
+    renderApp();
+
+    const photo = new File(["sample"], "sample.png", { type: "image/png" });
+    await completePaintingWithPhoto(user, photo);
+    await user.click(screen.getByRole("button", { name: "生成" }));
+
+    await waitFor(() => {
+      expect(fetch).toHaveBeenCalledWith("/api/records/record-1/fusion", expect.objectContaining({ method: "POST" }));
+    });
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: "艺术家正在构思" })).toBeInTheDocument();
+    });
+    expect(screen.queryByRole("img", { name: "作品图" })).not.toBeInTheDocument();
+
+    releaseFusionResponse?.();
+
+    expect(await screen.findByRole("img", { name: "作品图" })).toBeInTheDocument();
+    expect(await screen.findByRole("img", { name: "效果图" })).toBeInTheDocument();
   });
 
   it("keeps a captured camera photo selected when the browser reports it through input", async () => {
@@ -2262,10 +2382,7 @@ describe("App", () => {
     expect(screen.getByText("中山大学中国美学博士")).toBeInTheDocument();
     expect(screen.getByText("风格样张")).toBeInTheDocument();
     expect(screen.getAllByRole("img", { name: /风格样张/ })).toHaveLength(2);
-    expect([...container.querySelectorAll(".expert-sample-fallback")].map((item) => item.textContent?.trim())).toEqual([
-      "书",
-      "画"
-    ]);
+    expect(container.querySelectorAll(".expert-sample-fallback")).toHaveLength(0);
     expect(screen.queryByText("联系方式待确认")).not.toBeInTheDocument();
   });
 
@@ -2397,42 +2514,61 @@ describe("App", () => {
     const viewer = screen.getByRole("dialog", { name: "作品图" });
     const viewerScope = within(viewer);
     expect(viewer).toBeInTheDocument();
+    expect(document.body).toHaveClass("image-viewer-open");
     expect(viewerScope.getByRole("img", { name: "作品图" })).toHaveAttribute(
       "src",
       "/api/records/record-1/images/artwork"
     );
 
+    const transformedContent = viewer.querySelector(".image-viewer-transform-content") as HTMLElement;
+    const transformedScale = () => Number(transformedContent.style.transform.match(/scale\(([^)]+)\)/)?.[1] ?? "1");
+
     await user.click(screen.getByRole("button", { name: "放大" }));
-    expect(viewerScope.getByRole("img", { name: "作品图" })).toHaveStyle({
-      transform: "translate(0px, 0px) scale(1.25)"
+    await waitFor(() => {
+      expect(transformedScale()).toBeGreaterThan(1);
     });
 
     await user.click(screen.getByRole("button", { name: "重置" }));
-    expect(viewerScope.getByRole("img", { name: "作品图" })).toHaveStyle({
-      transform: "translate(0px, 0px) scale(1)"
+    await waitFor(() => {
+      expect(transformedScale()).toBe(1);
     });
 
     await user.click(screen.getByRole("button", { name: "放大" }));
-    await user.click(screen.getByRole("button", { name: "缩小" }));
-    expect(viewerScope.getByRole("img", { name: "作品图" })).toHaveStyle({
-      transform: "translate(0px, 0px) scale(1)"
+    await waitFor(() => {
+      expect(transformedScale()).toBeGreaterThan(1.2);
+    });
+    const scaleBeforeZoomOut = transformedScale();
+    const zoomOutButton = screen.getByRole("button", { name: "缩小" });
+    await waitFor(() => {
+      expect(zoomOutButton).toBeEnabled();
+    });
+    await user.click(zoomOutButton);
+    await waitFor(() => {
+      expect(transformedScale()).toBeGreaterThanOrEqual(1);
+      expect(transformedScale()).toBeLessThan(scaleBeforeZoomOut);
     });
 
     const wheelViewer = screen.getByRole("dialog", { name: "作品图" });
-    const wheelViewerScope = within(wheelViewer);
     fireEvent.wheel(wheelViewer.querySelector(".image-viewer-stage") as Element, {
       deltaY: -100
     });
-    expect(wheelViewerScope.getByRole("img", { name: "作品图" })).toHaveStyle({
-      transform: "translate(0px, 0px) scale(1.25)"
+    await waitFor(() => {
+      expect(transformedScale()).toBeGreaterThan(1);
     });
 
     fireEvent.keyDown(window, { key: "Escape" });
-    expect(screen.queryByRole("dialog", { name: "作品图" })).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: "作品图" })).not.toBeInTheDocument();
+    });
+    expect(document.body).not.toHaveClass("image-viewer-open");
 
     await user.click(screen.getByRole("button", { name: "查看作品图" }));
+    expect(document.body).toHaveClass("image-viewer-open");
     await user.click(screen.getByRole("button", { name: "返回" }));
-    expect(screen.queryByRole("dialog", { name: "作品图" })).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: "作品图" })).not.toBeInTheDocument();
+    });
+    expect(document.body).not.toHaveClass("image-viewer-open");
     expect(screen.getByRole("button", { name: "制作作品" })).toBeInTheDocument();
   });
 
@@ -2451,6 +2587,35 @@ describe("App", () => {
       "src",
       "/api/records/record-1/images/fusion"
     );
+
+    await user.click(screen.getByRole("button", { name: "返回" }));
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: "效果图" })).not.toBeInTheDocument();
+    });
+  });
+
+  it("closes the result image viewer when browser back is used", async () => {
+    const user = userEvent.setup();
+    renderApp({ initialRoute: "/studio" });
+
+    await completePaintingWithoutPhoto(user);
+    await user.click(screen.getByRole("button", { name: "生成" }));
+    await user.click(await screen.findByRole("button", { name: "查看作品图" }));
+
+    expect(screen.getByRole("dialog", { name: "作品图" })).toBeInTheDocument();
+
+    await act(async () => {
+      window.history.back();
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: "作品图" })).not.toBeInTheDocument();
+    });
+    expect(document.body).not.toHaveClass("image-viewer-open");
+    expect(window.location.pathname).toBe("/records/record-1");
+    expect(window.location.search).toBe("?from=studio");
+    expect(screen.queryByText("确定要退出制作作品吗？")).not.toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "作品图" })).toBeInTheDocument();
   });
 
   it("keeps browser back inside the studio tab after generation", async () => {
@@ -2584,6 +2749,45 @@ describe("App", () => {
     expect(screen.queryByRole("heading", { name: "藏卷还空着" })).not.toBeInTheDocument();
   });
 
+  it("does not add a second window popstate listener for tab back handling", async () => {
+    const popstateListeners: EventListenerOrEventListenerObject[] = [];
+    const addEventListener = window.addEventListener.bind(window);
+    vi.spyOn(window, "addEventListener").mockImplementation((type, listener, options) => {
+      if (type === "popstate") {
+        popstateListeners.push(listener);
+      }
+      return addEventListener(type, listener, options);
+    });
+
+    renderApp({ initialRoute: "/studio" });
+
+    await screen.findByText("先定作品类型");
+    expect(popstateListeners).toHaveLength(1);
+  });
+
+  it("keeps browser back at the selected tab root after switching with bottom tabs", async () => {
+    const user = userEvent.setup();
+    renderApp({ initialRoute: "/studio" });
+
+    await screen.findByText("先定作品类型");
+    await user.click(screen.getByRole("button", { name: "藏卷" }));
+    expect(await screen.findByRole("heading", { name: "藏卷还空着" })).toBeInTheDocument();
+
+    await act(async () => {
+      window.history.back();
+    });
+
+    await waitFor(() => {
+      expect(window.location.pathname).toBe("/library");
+    });
+    expect(screen.getByRole("button", { name: "藏卷" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.queryByText("先定作品类型")).not.toBeInTheDocument();
+
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+  });
+
   it("keeps production browser back inside the source tab", async () => {
     libraryRecords = [{
       id: "record-1",
@@ -2653,6 +2857,30 @@ describe("App", () => {
 
     await user.click(screen.getByRole("button", { name: "返回" }));
     expect(screen.queryByRole("dialog", { name: "当前作品 作品图" })).not.toBeInTheDocument();
+    expect(screen.getByLabelText("调整这张作品")).toBeInTheDocument();
+  });
+
+  it("closes the adjust image viewer when browser back is used", async () => {
+    const user = userEvent.setup();
+    renderApp({ initialRoute: "/studio" });
+
+    await completePaintingWithoutPhoto(user);
+    await user.click(screen.getByRole("button", { name: "生成" }));
+    await user.click(await screen.findByRole("button", { name: "调整作品" }));
+    await user.click(screen.getByRole("button", { name: "查看当前作品 作品图" }));
+
+    expect(screen.getByRole("dialog", { name: "当前作品 作品图" })).toBeInTheDocument();
+
+    await act(async () => {
+      window.history.back();
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: "当前作品 作品图" })).not.toBeInTheDocument();
+    });
+    expect(document.body).not.toHaveClass("image-viewer-open");
+    expect(window.location.pathname).toBe("/records/record-1/adjust");
+    expect(window.location.search).toBe("?from=studio");
     expect(screen.getByLabelText("调整这张作品")).toBeInTheDocument();
   });
 

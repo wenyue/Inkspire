@@ -7,7 +7,8 @@ const env = {
   INKSPIRE_E2E: process.env.INKSPIRE_E2E || "1",
   INKSPIRE_DATA_DIR: process.env.INKSPIRE_DATA_DIR || ".e2e-data",
   PORT: process.env.PORT || "3101",
-  INKSPIRE_API_TARGET: process.env.INKSPIRE_API_TARGET || "http://127.0.0.1:3101"
+  INKSPIRE_API_TARGET: process.env.INKSPIRE_API_TARGET || "http://127.0.0.1:3101",
+  INKSPIRE_WEB_PORT: process.env.INKSPIRE_WEB_PORT || "5173"
 };
 
 const children = [
@@ -16,7 +17,14 @@ const children = [
     env,
     stdio: "inherit"
   }),
-  spawn(process.execPath, [path.join(root, "node_modules/vite/bin/vite.js"), "--host", "0.0.0.0"], {
+  spawn(process.execPath, [
+    path.join(root, "node_modules/vite/bin/vite.js"),
+    "--host",
+    "0.0.0.0",
+    "--port",
+    env.INKSPIRE_WEB_PORT,
+    "--strictPort"
+  ], {
     cwd: path.join(root, "client"),
     env,
     stdio: "inherit"

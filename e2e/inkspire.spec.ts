@@ -66,14 +66,32 @@ test("mobile user can complete Inkspire creation flow with mocked generation", a
   await expect(page.getByText("效果图", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "制作作品" })).toBeVisible();
 
+  await page.getByRole("button", { name: "查看作品图" }).click();
+  await expect(page.getByRole("dialog", { name: "作品图" })).toBeVisible();
+  await expect(page.locator(".image-viewer-transform-wrapper")).toBeVisible();
+  await expect(page.getByRole("button", { name: "重置缩放" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "画案", exact: true })).toBeHidden();
+  await page.goBack();
+  await expect(page.getByRole("dialog", { name: "作品图" })).toBeHidden();
+  await expect(page.getByRole("button", { name: "画案", exact: true })).toBeVisible();
+
   // Production dialog opens from the result and browser back closes it without losing the artwork.
   await page.getByRole("button", { name: "制作作品" }).click();
   await expect(page).toHaveURL(/\/records\/[^/]+\/production\?from=studio/);
   await expect(page.getByRole("dialog", { name: "制作作品" })).toBeVisible();
+  await page.goBack();
+  await expect(page).toHaveURL(/\/records\/[^/]+\?from=studio/);
+  await expect(page.getByRole("dialog", { name: "制作作品" })).toBeHidden();
+  await expect(page.getByRole("img", { name: "作品图" })).toBeVisible();
+
+  // Reload restores the production dialog, then the in-dialog close action returns to the artwork.
+  await page.getByRole("button", { name: "制作作品" }).click();
+  await expect(page).toHaveURL(/\/records\/[^/]+\/production\?from=studio/);
   await page.reload();
   await expect(page.getByRole("dialog", { name: "制作作品" })).toBeVisible();
   await expect(page.getByRole("img", { name: "作品图" })).toBeVisible();
-  await page.goBack();
+  await page.getByRole("button", { name: "关闭" }).click();
+  await expect(page).toHaveURL(/\/records\/[^/]+\?from=studio/);
   await expect(page.getByRole("dialog", { name: "制作作品" })).toBeHidden();
   await expect(page.getByRole("img", { name: "作品图" })).toBeVisible();
 
@@ -122,6 +140,22 @@ test("wide viewport shows artwork and fusion side by side", async ({ page }) => 
     return window.getComputedStyle(element).gridTemplateColumns.split(" ").length;
   });
   expect(resultColumns).toBeGreaterThan(1);
+});
+
+test("browser back stays on the selected bottom tab root", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/studio");
+
+  await expect(page.getByRole("button", { name: "画案", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await page.getByRole("button", { name: "藏卷", exact: true }).click();
+  await expect(page).toHaveURL(/\/library$/);
+  await expect(page.getByRole("button", { name: "藏卷", exact: true })).toHaveAttribute("aria-pressed", "true");
+
+  await page.goBack();
+
+  await expect(page).toHaveURL(/\/library$/);
+  await expect(page.getByRole("button", { name: "藏卷", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByText("先定作品类型")).toBeHidden();
 });
 
 test("camera photo entry applies and generates fusion output", async ({ page }) => {

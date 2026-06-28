@@ -1,10 +1,12 @@
-import { useEffect, useRef, useState } from "react";
-import type { PointerEvent, WheelEvent } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowLeft, Minus, Plus, RotateCcw } from "lucide-react";
+import { TransformComponent, TransformWrapper, type ReactZoomPanPinchContentRef } from "react-zoom-pan-pinch";
 
 const MIN_SCALE = 1;
 const MAX_SCALE = 4;
 const SCALE_STEP = 0.25;
+const VIEWER_HISTORY_KEY = "__inkspireImageViewer";
+const VIEWER_POP_EVENT = "inkspire:image-viewer-pop";
 
 interface ImageViewerProps {
   src: string;
@@ -12,26 +14,57 @@ interface ImageViewerProps {
   onClose: () => void;
 }
 
-interface Point {
-  x: number;
-  y: number;
+function imageViewerHistoryState(current: unknown): Record<string, unknown> {
+  return current && typeof current === "object"
+    ? { ...(current as Record<string, unknown>), [VIEWER_HISTORY_KEY]: true }
+    : { [VIEWER_HISTORY_KEY]: true };
 }
 
-function clampScale(value: number): number {
-  return Math.min(MAX_SCALE, Math.max(MIN_SCALE, Number(value.toFixed(2))));
+function isImageViewerHistoryState(current: unknown): boolean {
+  return Boolean(
+    current
+      && typeof current === "object"
+      && (current as Record<string, unknown>)[VIEWER_HISTORY_KEY] === true
+  );
 }
 
 export default function ImageViewer({ src, alt, onClose }: ImageViewerProps) {
-  const [scale, setScale] = useState(MIN_SCALE);
-  const [offset, setOffset] = useState<Point>({ x: 0, y: 0 });
-  const [dragStart, setDragStart] = useState<Point | null>(null);
   const [imageFailed, setImageFailed] = useState(false);
   const closeRef = useRef<HTMLButtonElement | null>(null);
+  const openRef = useRef(false);
+
+  const closeWithHistory = useCallback((): void => {
+    if (isImageViewerHistoryState(window.history.state)) {
+      window.history.back();
+      return;
+    }
+    onClose();
+  }, [onClose]);
 
   useEffect(() => {
-    setScale(MIN_SCALE);
-    setOffset({ x: 0, y: 0 });
-    setDragStart(null);
+    openRef.current = true;
+    document.body.classList.add("image-viewer-open");
+    window.history.pushState(imageViewerHistoryState(window.history.state), "", window.location.href);
+    return () => {
+      openRef.current = false;
+      document.body.classList.remove("image-viewer-open");
+    };
+  }, []);
+
+  useEffect(() => {
+    const onPopState = (event: PopStateEvent) => {
+      if (!openRef.current) {
+        return;
+      }
+      window.dispatchEvent(new CustomEvent(VIEWER_POP_EVENT));
+      event.stopImmediatePropagation();
+      onClose();
+    };
+    window.addEventListener("popstate", onPopState, true);
+    return () => window.removeEventListener("popstate", onPopState, true);
+  }, [onClose]);
+
+  useEffect(() => {
     setImageFailed(false);
     closeRef.current?.focus();
   }, [src]);
@@ -39,100 +72,82 @@ export default function ImageViewer({ src, alt, onClose }: ImageViewerProps) {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
-        onClose();
+        closeWithHistory();
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [onClose]);
-
-  const updateScale = (nextScale: number): void => {
-    const clamped = clampScale(nextScale);
-    setScale(clamped);
-    if (clamped === MIN_SCALE) {
-      setOffset({ x: 0, y: 0 });
-    }
-  };
-
-  const reset = (): void => {
-    setScale(MIN_SCALE);
-    setOffset({ x: 0, y: 0 });
-    setDragStart(null);
-  };
-
-  const onWheel = (event: WheelEvent<HTMLDivElement>): void => {
-    event.preventDefault();
-    updateScale(scale + (event.deltaY < 0 ? SCALE_STEP : -SCALE_STEP));
-  };
-
-  const onPointerDown = (event: PointerEvent<HTMLDivElement>): void => {
-    if (scale <= MIN_SCALE) {
-      return;
-    }
-    event.currentTarget.setPointerCapture(event.pointerId);
-    setDragStart({ x: event.clientX - offset.x, y: event.clientY - offset.y });
-  };
-
-  const onPointerMove = (event: PointerEvent<HTMLDivElement>): void => {
-    if (!dragStart) {
-      return;
-    }
-    setOffset({ x: event.clientX - dragStart.x, y: event.clientY - dragStart.y });
-  };
-
-  const stopDrag = (): void => {
-    setDragStart(null);
-  };
+  }, [closeWithHistory]);
 
   return (
     <div className="image-viewer" role="dialog" aria-modal="true" aria-label={alt}>
-      <button ref={closeRef} className="image-viewer-back" type="button" onClick={onClose}>
-        <ArrowLeft aria-hidden="true" size={18} />
+      <button ref={closeRef} className="image-viewer-back" type="button" onClick={closeWithHistory}>
+        <ArrowLeft aria-hidden="true" size={16} />
         返回
       </button>
-      <div
-        className={dragStart ? "image-viewer-stage dragging" : "image-viewer-stage"}
-        onWheel={onWheel}
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={stopDrag}
-        onPointerCancel={stopDrag}
+      <TransformWrapper
+        key={src}
+        minScale={MIN_SCALE}
+        maxScale={MAX_SCALE}
+        initialScale={MIN_SCALE}
+        centerOnInit
+        centerZoomedOut
+        limitToBounds
+        doubleClick={{ mode: "toggle", step: 1.5, animationTime: 160 }}
+        pinch={{ step: 7, allowPanning: true }}
+        panning={{ velocityDisabled: false }}
+        wheel={{ step: SCALE_STEP }}
       >
-        {imageFailed ? (
-          <div className="image-viewer-error" role="status">图片暂时无法查看</div>
-        ) : (
-          <img
-            className="image-viewer-image"
-            src={src}
-            alt={alt}
-            onError={() => setImageFailed(true)}
-            style={{
-              transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale})`
-            }}
-          />
+        {({ zoomIn, zoomOut, resetTransform }: ReactZoomPanPinchContentRef) => (
+          <>
+            <div className="image-viewer-stage">
+              {imageFailed ? (
+                <div className="image-viewer-error" role="status">图片暂时无法查看</div>
+              ) : (
+                <TransformComponent
+                  wrapperClass="image-viewer-transform-wrapper"
+                  contentClass="image-viewer-transform-content"
+                >
+                  <img
+                    className="image-viewer-image"
+                    src={src}
+                    alt={alt}
+                    onError={() => setImageFailed(true)}
+                  />
+                </TransformComponent>
+              )}
+            </div>
+            <div className="image-viewer-mobile-hint" aria-hidden="true">双指缩放 · 双击放大</div>
+            <button
+              type="button"
+              className="image-viewer-mobile-reset"
+              aria-label="重置缩放"
+              onClick={() => resetTransform(160)}
+            >
+              <RotateCcw aria-hidden="true" size={18} />
+            </button>
+            <div className="image-viewer-controls" aria-label="图片缩放控制">
+              <button
+                type="button"
+                aria-label="缩小"
+                onClick={() => zoomOut(SCALE_STEP, 120)}
+              >
+                <Minus aria-hidden="true" size={18} />
+              </button>
+              <button type="button" aria-label="重置" onClick={() => resetTransform(160)}>
+                <RotateCcw aria-hidden="true" size={18} />
+              </button>
+              <button
+                type="button"
+                aria-label="放大"
+                onClick={() => zoomIn(SCALE_STEP, 120)}
+              >
+                <Plus aria-hidden="true" size={18} />
+              </button>
+            </div>
+          </>
         )}
-      </div>
-      <div className="image-viewer-controls" aria-label="图片缩放控制">
-        <button
-          type="button"
-          aria-label="缩小"
-          onClick={() => updateScale(scale - SCALE_STEP)}
-          disabled={scale <= MIN_SCALE}
-        >
-          <Minus aria-hidden="true" size={18} />
-        </button>
-        <button type="button" aria-label="重置" onClick={reset}>
-          <RotateCcw aria-hidden="true" size={18} />
-        </button>
-        <button
-          type="button"
-          aria-label="放大"
-          onClick={() => updateScale(scale + SCALE_STEP)}
-          disabled={scale >= MAX_SCALE}
-        >
-          <Plus aria-hidden="true" size={18} />
-        </button>
-      </div>
+      </TransformWrapper>
     </div>
   );
 }

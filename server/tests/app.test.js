@@ -751,10 +751,16 @@ test("POST /api/records/:id/production-orders retries when a short order id alre
       .expect(201);
 
     assert.equal(response.body.order.id, "ord-bbbbbbbb");
-    assert.deepEqual(await fs.readdir(path.join(temp, "orders")).then((items) => items.sort()), [
-      "ord-aaaaaaaa.json",
-      "ord-bbbbbbbb.json"
-    ]);
+    const Database = require("better-sqlite3");
+    const db = new Database(path.join(temp, "inkspire.db"), { readonly: true });
+    try {
+      assert.deepEqual(
+        db.prepare("SELECT id FROM production_orders ORDER BY id").all().map((row) => row.id),
+        ["ord-aaaaaaaa", "ord-bbbbbbbb"]
+      );
+    } finally {
+      db.close();
+    }
   }, {
     configure: (config) => {
       config.app.productionContact = { phone: "020-12345678", wechat: "" };

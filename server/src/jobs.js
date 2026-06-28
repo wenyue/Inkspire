@@ -644,6 +644,11 @@ function createJobManager({ config, storage, runner }) {
     }
 
     try {
+      if (task.stage === "artwork") {
+        await estimateArtworkRecordFromEnvironment(task.record);
+      } else {
+        await estimateFusionRecordFromEnvironment(task.record);
+      }
       await saveRecordSerial(task.record, task.userId);
       flushWaiters();
 
@@ -781,12 +786,6 @@ function createJobManager({ config, storage, runner }) {
       status: "queued",
       diagnostics: null
     };
-    try {
-      await estimateArtworkRecordFromEnvironment(record);
-    } catch (error) {
-      releaseActiveSlot(ownerId, normalizedOriginTab);
-      throw error;
-    }
     const job = {
       id: newId("job"),
       user_id: ownerId,
@@ -882,7 +881,6 @@ function createJobManager({ config, storage, runner }) {
 
       record.status = "queued";
       record.source_photo_path = ownedSourcePhotoPath;
-      await estimateFusionRecordFromEnvironment(record);
       await saveRecordSerial(record, ownerId);
 
       queuedJobs.push({
