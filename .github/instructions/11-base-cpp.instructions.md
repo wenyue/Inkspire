@@ -1,0 +1,4 @@
+---
+applyTo: "**/*.{cc,cpp,cxx,h,hpp,hxx}"
+---
+Apply @.agents/rules/11-base-cpp.md

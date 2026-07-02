@@ -30,7 +30,7 @@ the source.
 | Project rules    | `.agents/rules/<nn>-<name>.md`           |
 | Agent prompts    | `.agents/agents/<name>.md`               |
 | Project skills   | `.agents/skills/<skill>/SKILL.md`        |
-| Shared skills    | `.skillshare/skills/<skill>/SKILL.md`    |
+| Third-party skills | `.skillshare/skills/<skill>/SKILL.md`  |
 | Copilot guidance | `.github/instructions/*.instructions.md` |
 
 Core requirements:
@@ -99,8 +99,9 @@ paths.
 
 - Skills are portable units. Do not hardcode repository-specific paths into `SKILL.md`.
 - Inside `SKILL.md`, reference skill-owned files relative to the skill directory.
-- `.agents/skills/` is the runtime skill location. It can contain project-owned skills and synced
-  or linked shared skills from `.skillshare/skills/`.
+- `.agents/skills/` is the runtime skill location. It can contain project-owned skills, public
+  skills sourced from `wenyue/agents`, and third-party skills managed separately through
+  `.skillshare/skills/`.
 - Describe project targets semantically; let the agent resolve concrete paths at runtime.
 - Repository-specific policy belongs in `.agents/rules/`. Reusable workflow that would apply in
   another repo belongs in a skill.

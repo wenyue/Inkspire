@@ -78,9 +78,9 @@ Use when work is complete. Include changed files and verification when relevant.
 
 ```markdown
 ## ✅
-已更新 `client/src/components/Studio.tsx`，让图片步骤完成状态保持一致。
+已更新 `menu_owner_scope.dart`，让 owner 变更时正确刷新菜单状态。
 
-验证：已运行 `npm test --workspace client`。
+验证：已运行 `flutter test test/common/widgets/menu_owner_scope_test.dart`。
 ```
 
 ### ❌ Blocker
@@ -96,7 +96,8 @@ Use when the task cannot be completed.
 
 ### 🤖 Interaction
 
-Use when ambiguity, trade-offs, scope expansion, convention deviation, or missing info warrants user input.
+Use when ambiguity, trade-offs, scope expansion, convention deviation, or missing info warrants
+user input.
 
 Ask one question or present a small option set with a recommendation. Once `🤖` appears, end the
 reply.

@@ -1,5 +1,0 @@
----
-alwaysApply: false
-globs: client/**
----
-Apply @.agents/rules/21-frontend.md

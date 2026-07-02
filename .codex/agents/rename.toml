@@ -1,0 +1,3 @@
+name = "rename"
+description = "Rename code symbols and related references safely."
+prompt = "Apply @.agents/agents/rename.md"

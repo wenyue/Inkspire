@@ -1,118 +1,153 @@
 ---
 name: update-project-rules
 description: >-
-  Update repository agent rule sources and their platform wrappers. Use when Codex must sync
-  shared/base rules with a reference project, refresh project-owned rules from current repository
-  facts, update AGENTS.md, align Cursor/Claude/GitHub/Codex rule or agent wrappers, or reconcile
-  MCP/runtime config that follows the shared agent configuration structure.
+  Sync public agent rules, reusable skills, and reusable subagents from wenyue/agents into the
+  current repository, then create or refresh project-local rules, entry files, platform wrappers,
+  and optional third-party skill state.
 ---
 
 # Update Project Rules
 
-Update rule sources first. Then align every entry file, wrapper, and runtime config that follows
-from those sources.
+Synchronize public configuration from `wenyue/agents`, then update the current repository's local
+project rules from repository evidence.
 
 ## Core Rules
 
-- Use a rule-source workflow for `.agents/rules/*.md`: decide the rule range, scope, strength,
-  target files, source-of-truth role, wrapper mapping, and validation before editing.
-- Treat `.agents/rules/<nn>-<name>.md` as the source of truth for project rules.
+- Treat `wenyue/agents` as the default public configuration source.
+- Do not require the user to provide another repository as a comparison source.
+- Do not copy project facts from `wenyue/agents` into local `20+` rules. Local project rules must
+  be generated from the current repository's files, commands, tooling, modules, and runtime facts.
 - Do not stop at drift reports. Calling this skill means updating files unless the repository is
   already aligned or one unsafe ambiguity requires user input.
-- When the user explicitly asks only to explain, review, or evaluate this skill or the rule system,
-  do not edit files; report concrete recommendations instead.
-- Do not update wrappers as a substitute for updating stale rule sources.
-- Keep wrappers thin: platform metadata plus one `Apply @...` reference.
+- Keep wrappers thin: platform metadata plus one source reference.
+- Use repository-root-relative paths. Do not write machine-specific absolute paths into tracked
+  config.
+- Do not use skillshare to install or sync `wenyue/agents` public rules, skills, or subagents.
+  Skillshare is only for third-party skills that should remain independently upgradable.
 
-## Rule Ranges
+## Public Source Sets
 
-- `00-*` through `09-*`: shared/global rules. When a reference project is supplied, copy or sync
-  these from the reference unless the user explicitly says the current project is the source.
-- `10-*` through `19-*`: shared/base rules, usually language-level defaults. Use a reference
-  project heavily for structure and wording, but still verify the final content against the
-  current repository's actual language, tooling, lint, build, and generated-file setup.
-- `20-*` through `59-*`: project-owned rules. Update these from the current repository's actual
-  tools, languages, modules, domains, packages, and verification workflows. Use a reference project
-  only for structure or wording patterns.
-- Other numbered ranges: follow the repository's own numbering policy. If none exists, treat them
-  as project-owned.
+Public rules:
+
+- `.agents/rules/00-global-rule-config.md`
+- `.agents/rules/01-global-personality.md`
+- `.agents/rules/02-global-response-format.md`
+- `.agents/rules/03-global-skill-config.md`
+- `.agents/rules/10-base-code.md`
+- `.agents/rules/11-base-go.md`
+- `.agents/rules/11-base-flutter.md`
+- `.agents/rules/11-base-cpp.md`
+- `.agents/rules/12-base-arb.md`
+
+Public skills:
+
+- `.agents/skills/update-project-rules/`
+- `.agents/skills/refactor-code/`
+- `.agents/skills/rename/`
+- `.agents/skills/write-comment/`
+- `.agents/skills/debug-mode/`
+
+Public subagents:
+
+- `.agents/agents/rename.md`
+- `.agents/agents/verifier.md`
+
+Excluded examples:
+
+- `dart-verify`
+- `l10n`
+- `l10n-*`
+- business-specific skills
+- `create-icon`
+- `take-screenshot`
+- `get-runtime-errors`
+- `flutter-inspector-vm-connection`
+- `sentry-fix-issues`
 
 ## Workflow
 
-1. Read `AGENTS.md`, then all applicable `00-*` through `09-*` rules.
-2. Inventory current files:
-   - `.agents/rules/*.md`
-   - `AGENTS.md`
-   - `.cursor/rules/*.mdc`, `.claude/rules/*.md`, `.github/instructions/*.instructions.md`
-   - `.agents/agents/*.md`, `.cursor/agents/*.md`, `.claude/agents/*.md`,
-     `.codex/agents/*.toml`, `.github/agents/*.agent.md` when agents are in scope
-   - `.cursor/mcp.json`, `.claude/mcp.json`, `.codex/config.toml`, `.vscode/mcp.json`
-     when MCP/runtime config is in scope.
-3. If a reference project is supplied, inventory the same paths there.
-4. Decide the final rule source set before editing:
-   - which shared/global rules to copy or sync from the reference
-   - which base rules to adapt from the reference after current-repository fact checks
-   - which project-owned rules to create, rewrite, rename, or remove
-   - which current project facts must be preserved
-   - which reference-only facts must not be copied.
-   Record this as a short decision table before making broad edits.
-5. Update `.agents/rules/`:
-   - directly copy platform-neutral shared/global rule text when appropriate
-   - adapt shared/base language rules from both reference wording and current repository evidence
-   - adapt project-owned rules from current repository evidence
-   - keep repository-specific facts out of shared/base rules
-   - keep reusable workflow guidance in skills, not project policy rules.
-6. Align entry files and wrappers:
-   - update `AGENTS.md` when rule paths, scopes, strengths, or application order change
-   - create, rename, update, or remove rule wrappers to match the final rule source inventory
-   - update agent wrappers and runtime config when shared agent prompts or entries drift
-   - update MCP/runtime config only when it is part of the requested or discovered drift.
-7. Preserve existing project facts unless the user explicitly asks to change them.
+1. Read `AGENTS.md`, then all applicable `00-*` through `09-*` rules already present in the current
+   repository.
+2. Locate the public source from the repository reference, attached workspace context, or local path
+   provided to the coding agent. If the public source files are not readable, stop and ask the user
+   to provide access to `wenyue/agents` instead of inventing a download or install flow.
+3. Copy the public source sets into the current repository:
+   - public rules to `.agents/rules/`
+   - public skills to `.agents/skills/`
+   - public subagents to `.agents/agents/`
+4. Do not copy excluded skills, excluded subagents, project-owned rules, generated metadata, or
+   source repository runtime files.
+5. Create or update project-local rules from current repository evidence:
+   - `20-project-tools.md`: commands, MCP/runtime services, watcher facts, verification workflows,
+     and skill handoffs.
+   - `21-project-rules.md`: project APIs, wrappers, generated-file boundaries, lint interpretation,
+     lifecycle rules, and domain conventions.
+   - `22-project-structure.md`: top-level modules, feature layout, dependency direction, shared
+     locations, and configuration ownership.
+6. Update `AGENTS.md` from the public template while preserving current project facts in local
+   `20+` rules.
+7. Align wrappers for existing platforms:
+   - rule source `.agents/rules/<name>.md` maps to `.cursor/rules/<name>.mdc`,
+     `.claude/rules/<name>.md`, and `.github/instructions/<name>.instructions.md`.
+   - subagent source `.agents/agents/<name>.md` maps to `.cursor/agents/<name>.md`,
+     `.claude/agents/<name>.md`, `.codex/agents/<name>.toml`, and
+     `.github/agents/<name>.agent.md`.
+8. If the project intentionally uses skillshare for third-party skills, run
+   `skillshare update --all -p` and `skillshare sync -p`. Skip this step when no
+   `.skillshare/config.yaml` exists, and never use it to sync the `wenyue/agents` public source.
+9. Preserve existing project facts unless the user explicitly asks to change them.
 
-## Evidence Sources
+## Local Rule Guidance
 
-Use current repository evidence for every project-owned rule and for any base rule that mentions
-language tools or generated files. Prefer concrete files over assumptions, such as package
-manifests, build and lint config, test directories, CI or script commands, MCP config, generated
-file config, existing wrapper metadata, and the repository directory structure.
+### `20-project-tools.md`
+
+Record stable tooling facts: package manager, scripts, tests, builds, code generation, MCP servers,
+runtime services, ports, health checks, watcher markers, verification order, and task-specific
+skill handoffs.
+
+### `21-project-rules.md`
+
+Record project APIs and conventions: local hooks, services, routes, state management, theming,
+logging, storage, generated-file boundaries, custom lint interpretation, domain terms, prefixes,
+and lifecycle constraints.
+
+### `22-project-structure.md`
+
+Record layout and boundaries: top-level modules, feature layout, dependency direction, forbidden
+dependencies, shared locations, and configuration ownership. If dependency order is enforced by a
+real config file, link to that file instead of duplicating the full rule.
 
 ## Wrapper Maps
 
-- Rule source `.agents/rules/<name>.md` maps to:
-  - `.cursor/rules/<name>.mdc`
-  - `.claude/rules/<name>.md`
-  - `.github/instructions/<name>.instructions.md`
-- Agent source `.agents/agents/<name>.md` maps to:
-  - `.cursor/agents/<name>.md`
-  - `.claude/agents/<name>.md`
-  - `.codex/agents/<name>.toml`
-  - `.github/agents/<name>.agent.md`
-- MCP/runtime config uses the repository's shared platform files. Preserve platform schema
-  differences and keep server intent aligned across platforms.
-- Preserve required wrapper metadata or schema fields. Thin wrappers may keep platform metadata,
-  but their reusable instruction body should be only the `Apply @...` reference.
+Rule wrappers use:
+
+```text
+Apply @.agents/rules/<nn>-<name>.md
+```
+
+Subagent wrappers use:
+
+```text
+Apply @.agents/agents/<name>.md
+```
+
+Codex subagent wrappers may use TOML fields required by Codex, but the prompt body should still be
+only the source reference.
 
 ## Validation
 
 Run fresh checks before reporting completion:
 
 ```bash
-find .cursor/rules .claude/rules .github/instructions -type f \
-  \( -name '*.mdc' -o -name '*.md' -o -name '*.instructions.md' \) \
-  -print -exec rg -n '^Apply @\.agents/rules/[0-9][0-9]-.*\.md$' {} \;
-find .cursor/agents .claude/agents .github/agents -type f \
-  \( -name '*.md' -o -name '*.agent.md' \) \
-  -print -exec rg -n '^Apply @\.agents/agents/.*\.md$' {} \;
 rg -n '/ho''me/|/Us''ers/|[A-Z]:\\' AGENTS.md .agents .cursor .claude .codex .github .vscode || true
-rg -n 'copied fr''om|TODO sy''nc' AGENTS.md .agents .cursor .claude .codex .github .vscode || true
-awk 'length($0) > 120 { print FILENAME ":" FNR ":" length($0) ":" $0 }' <changed-files>
+rg -n 'copied fr''om|sync place''holder|wenyue/skills[.]git' \
+  AGENTS.md README.md .agents .cursor .claude .codex .github .vscode || true
+rg -n '^Apply @\.agents/rules/[0-9][0-9]-.*\.md$' .cursor/rules .claude/rules .github/instructions || true
+rg -n '^Apply @\.agents/agents/.*\.md$' .cursor/agents .claude/agents .github/agents || true
 ```
 
 If a listed directory does not exist, adjust the command to skip it instead of treating the missing
-directory as a rule failure. Replace `<changed-files>` with the actual changed file list.
-
-If a reference project was used, add its basename, old package names, and reference-only tool names
-to the stale-reference scan.
+directory as a rule failure.
 
 For documentation-only rule/config changes, skip language build or test commands unless code,
 generated files, or executable scripts changed.
@@ -120,7 +155,6 @@ generated files, or executable scripts changed.
 ## Output
 
 - List changed files, or state that no edits were required.
-- Summarize copied shared/base rules, adapted project-owned rules, and intentionally skipped
-  reference-only content.
-- Report configuration issues found, including fixed issues.
+- Summarize copied public rules, public skills, public subagents, and adapted project-local rules.
+- Report intentionally skipped excluded content.
 - Report validation commands and whether language build/test commands were skipped.

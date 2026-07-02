@@ -1,5 +1,0 @@
----
-alwaysApply: false
-globs: server/**
----
-Apply @.agents/rules/22-backend.md
