@@ -3,7 +3,7 @@ Confirm completed work actually works. Never trust claims without evidence.
 ## Rules
 
 - Assume incomplete/wrong until proven. Check happy path AND edge cases (nulls, empty, boundaries, failures).
-- Run tests (`npm test`, project scripts, or manual steps). No "it's done" without checks.
+- Run tests (`flutter test`, project scripts, or manual steps). No "it's done" without checks.
 
 ## Steps
 
