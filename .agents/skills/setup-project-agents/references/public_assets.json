@@ -1,0 +1,214 @@
+{
+  "source_repo": "https://github.com/wenyue/agents",
+  "source_ref": "master",
+  "mirror_delete": true,
+  "ignore": [
+    "__pycache__",
+    "__pycache__/**",
+    "**/__pycache__",
+    "**/__pycache__/**",
+    "*.pyc",
+    "**/*.pyc"
+  ],
+  "rules": [
+    {
+      "file": "00-global-rule-config.md",
+      "read_when": "Starting any repository task",
+      "strength": "Mandatory",
+      "section": "global",
+      "cursor": {
+        "description": "[mandatory] Rule strength, conflict precedence, and shared config policy",
+        "alwaysApply": true
+      },
+      "claude": {},
+      "github": {
+        "applyTo": "**"
+      }
+    },
+    {
+      "file": "01-global-personality.md",
+      "read_when": "Starting any repository task",
+      "strength": "Default",
+      "section": "global",
+      "cursor": {
+        "description": "[default] AI work philosophy and communication style",
+        "alwaysApply": true
+      },
+      "claude": {},
+      "github": {
+        "applyTo": "**"
+      }
+    },
+    {
+      "file": "02-global-response-format.md",
+      "read_when": "Starting any repository task",
+      "strength": "Default",
+      "section": "global",
+      "cursor": {
+        "description": "[default] Response format and tag protocol for agent replies",
+        "alwaysApply": true
+      },
+      "claude": {},
+      "github": {
+        "applyTo": "**"
+      }
+    },
+    {
+      "file": "03-global-skill-config.md",
+      "read_when": "Starting any repository task",
+      "strength": "Mandatory",
+      "section": "global",
+      "cursor": {
+        "description": "[mandatory] Skill and automation constraints",
+        "alwaysApply": true
+      },
+      "claude": {},
+      "github": {
+        "applyTo": "**"
+      }
+    },
+    {
+      "file": "10-base-code.md",
+      "read_when": "Working with code, reviews, or implementation design",
+      "strength": "Default",
+      "section": "base",
+      "cursor": {
+        "description": "[default] Cross-language code taste for ownership, extraction, state, and flow",
+        "globs": "**/*.{dart,cpp,c,h,hpp,cc,py,js,jsx,ts,tsx,sh}",
+        "alwaysApply": false
+      },
+      "claude": {
+        "paths": ["**/*.{dart,cpp,c,h,hpp,cc,py,js,jsx,ts,tsx,sh}"]
+      },
+      "github": {
+        "applyTo": "**/*.{dart,cpp,c,h,hpp,cc,py,js,jsx,ts,tsx,sh}"
+      }
+    },
+    {
+      "file": "11-base-cpp.md",
+      "read_when": "Working with C++ files",
+      "strength": "Default",
+      "section": "base",
+      "cursor": {
+        "description": "[default] C++ style and conventions for native plugin and host code",
+        "globs": "**/*.cc,**/*.h",
+        "alwaysApply": false
+      },
+      "claude": {
+        "paths": ["**/*.cc", "**/*.h"]
+      },
+      "github": {
+        "applyTo": "**/*.cc,**/*.h"
+      }
+    },
+    {
+      "file": "11-base-flutter.md",
+      "read_when": "Working with Dart or Flutter code",
+      "strength": "Default",
+      "section": "base",
+      "cursor": {
+        "description": "[default] Project-neutral Dart and Flutter application defaults",
+        "globs": "**/*.dart",
+        "alwaysApply": false
+      },
+      "claude": {
+        "paths": ["**/*.dart"]
+      },
+      "github": {
+        "applyTo": "**/*.dart"
+      }
+    },
+    {
+      "file": "11-base-go.md",
+      "read_when": "Working with Go code",
+      "strength": "Default",
+      "section": "base",
+      "cursor": {
+        "description": "[default] Go style, package boundaries, errors, testing, and concurrency",
+        "globs": "**/*.go",
+        "alwaysApply": false
+      },
+      "claude": {
+        "paths": ["**/*.go"]
+      },
+      "github": {
+        "applyTo": "**/*.go"
+      }
+    },
+    {
+      "file": "12-base-arb.md",
+      "read_when": "Working with ARB localization files",
+      "strength": "Mandatory",
+      "section": "base",
+      "cursor": {
+        "description": "[mandatory] ARB localization, key naming, and metadata conventions",
+        "globs": "**/*.arb",
+        "alwaysApply": false
+      },
+      "claude": {
+        "paths": ["**/*.arb"]
+      },
+      "github": {
+        "applyTo": "**/*.arb"
+      }
+    }
+  ],
+  "skills": [
+    {"name": "debug-mode"},
+    {"name": "refactor-code"},
+    {"name": "rename"},
+    {"name": "setup-project-agents"},
+    {"name": "worktree-integrate"},
+    {"name": "write-comment"}
+  ],
+  "project_skill_generators": [
+    {"name": "worktree-environment-setup"}
+  ],
+  "agent_prompts": [
+    {
+      "name": "rename",
+      "description": "Renaming specialist for classes, functions, methods, variables, and other symbols.",
+      "model": "sonnet"
+    },
+    {
+      "name": "verifier",
+      "description": "Validates completed work after tasks are marked done.",
+      "model": "sonnet",
+      "readonly": true
+    }
+  ],
+  "platforms": {
+    "rule_wrappers": [
+      {
+        "template": "rule_wrapper.cursor.mdc",
+        "path": ".cursor/rules/{{rule.name}}.mdc"
+      },
+      {
+        "template": "rule_wrapper.claude.md",
+        "path": ".claude/rules/{{rule.file}}"
+      },
+      {
+        "template": "rule_wrapper.github.instructions.md",
+        "path": ".github/instructions/{{rule.name}}.instructions.md"
+      }
+    ],
+    "agent_wrappers": [
+      {
+        "template": "agent_wrapper.cursor.md",
+        "path": ".cursor/agents/{{agent.name}}.md"
+      },
+      {
+        "template": "agent_wrapper.claude.md",
+        "path": ".claude/agents/{{agent.name}}.md"
+      },
+      {
+        "template": "agent_wrapper.codex.toml",
+        "path": ".codex/agents/{{agent.name}}.toml"
+      },
+      {
+        "template": "agent_wrapper.github.agent.md",
+        "path": ".github/agents/{{agent.name}}.agent.md"
+      }
+    ]
+  }
+}

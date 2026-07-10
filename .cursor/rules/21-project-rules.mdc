@@ -1,0 +1,7 @@
+---
+description: "[project] 21-project-rules"
+globs: ""
+alwaysApply: true
+---
+
+Apply @.agents/rules/21-project-rules.md

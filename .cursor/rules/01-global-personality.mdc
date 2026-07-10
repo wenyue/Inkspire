@@ -1,4 +1,7 @@
 ---
+description: "[default] AI work philosophy and communication style"
+globs: ""
 alwaysApply: true
 ---
+
 Apply @.agents/rules/01-global-personality.md

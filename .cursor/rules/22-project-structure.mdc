@@ -1,0 +1,7 @@
+---
+description: "[project] 22-project-structure"
+globs: ""
+alwaysApply: true
+---
+
+Apply @.agents/rules/22-project-structure.md

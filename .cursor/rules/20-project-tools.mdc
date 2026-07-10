@@ -1,0 +1,7 @@
+---
+description: "[project] 20-project-tools"
+globs: ""
+alwaysApply: true
+---
+
+Apply @.agents/rules/20-project-tools.md

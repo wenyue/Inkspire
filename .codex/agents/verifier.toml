@@ -1,3 +1,5 @@
-name = "verifier"
-description = "Confirm completed work actually works."
-prompt = "Apply @.agents/agents/verifier.md"
+model = "gpt-5.4-mini"
+developer_instructions = """
+Follow `.agents/agents/verifier.md`.
+Keep this file thin and use the shared agent prompt as the source of truth.
+"""

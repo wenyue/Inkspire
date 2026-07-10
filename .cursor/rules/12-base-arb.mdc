@@ -1,0 +1,7 @@
+---
+description: "[mandatory] ARB localization, key naming, and metadata conventions"
+globs: **/*.arb
+alwaysApply: false
+---
+
+Apply @.agents/rules/12-base-arb.md

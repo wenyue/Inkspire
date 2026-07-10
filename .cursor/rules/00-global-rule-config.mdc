@@ -1,4 +1,7 @@
 ---
+description: "[mandatory] Rule strength, conflict precedence, and shared config policy"
+globs: ""
 alwaysApply: true
 ---
+
 Apply @.agents/rules/00-global-rule-config.md

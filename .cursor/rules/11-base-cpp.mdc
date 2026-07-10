@@ -1,0 +1,7 @@
+---
+description: "[default] C++ style and conventions for native plugin and host code"
+globs: **/*.cc,**/*.h
+alwaysApply: false
+---
+
+Apply @.agents/rules/11-base-cpp.md

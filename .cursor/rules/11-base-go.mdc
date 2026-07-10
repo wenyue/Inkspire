@@ -1,0 +1,7 @@
+---
+description: "[default] Go style, package boundaries, errors, testing, and concurrency"
+globs: **/*.go
+alwaysApply: false
+---
+
+Apply @.agents/rules/11-base-go.md

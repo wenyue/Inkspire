@@ -4,18 +4,38 @@ Strength: `Mandatory`
 
 Scope: Project overrides for workflow tools, worktrees, git, and prose outputs.
 
+## Subagent Delegation
+
+- The user authorizes Codex to spawn subagents when a task clearly benefits from bounded parallel
+  delegation. This does not require repeating the authorization for each individual task.
+- Keep delegated work concrete and self-contained. Assign disjoint ownership for code-editing
+  subtasks so parallel agents do not overlap write scopes.
+- Do not delegate the immediate blocking task when the main agent should handle it directly to keep
+  the critical path moving.
+- Report subagent usage in the final response, including the delegated purpose and whether any
+  delegated changes were integrated.
+
 ## Git And Worktree
 
-- Assume `master` is the working branch — do not switch branches or ask to confirm the branch
-  unless the user requests it.
-- Always operate in the current workspace. Do not create or switch into git worktrees.
-- Do not automatically call `git` tools or commands. Use `git` only when the user explicitly asks
-  for a git operation or asks to inspect git state.
-- Never create git commits unless the user explicitly asks. This applies even when an invoked skill
-  embeds `git commit` steps in its plans or prompts: skip those steps, do not pass them to
-  subagents, and do not generate them when writing new plans. If commits are ever needed, ask the
-  user first.
+- Delegate worktree timing, detection, consent, location, and creation to
+  `superpowers:using-git-worktrees`; do not define a second trigger policy here.
+- After creating a worktree, use the target repository's `worktree-environment-setup` skill when it
+  exists, then run the baseline verification required by `superpowers:using-git-worktrees`.
+- When worktree implementation is complete, use `worktree-integrate`. Its default review mode
+  returns changes to the current checkout as unstaged or untracked work while preserving the
+  current HEAD, index, and unrelated local changes.
+- Use `worktree-integrate` commit mode only when the user explicitly requests committed local
+  integration. The task's business changes must form one commit; a separate infrastructure commit
+  that adds a missing worktree directory to `.gitignore` is allowed on the current branch.
+- Use `superpowers:finishing-a-development-branch` for PR, keep-branch, or discard outcomes.
+- Never overwrite, stash, reset, clean, or silently discard pre-existing local changes. A same-file
+  overlap is not automatically a blocker: merge it when confidence is high and the result can be
+  verified; otherwise stop and ask.
+- Do not push or create a PR unless the user explicitly requests that remote action.
 
 ## Prose Output
 
-- Plans, design documents, and other non-code prose files must be written in Chinese.
+- Use Simplified Chinese for normal user-facing prose, design documents, and other non-code prose
+  files.
+- Use English for concrete Superpowers execution plans. This exception applies to step-by-step
+  implementation plans, not design documents.

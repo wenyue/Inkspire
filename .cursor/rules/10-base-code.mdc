@@ -1,0 +1,7 @@
+---
+description: "[default] Cross-language code taste for ownership, extraction, state, and flow"
+globs: **/*.{dart,cpp,c,h,hpp,cc,py,js,jsx,ts,tsx,sh}
+alwaysApply: false
+---
+
+Apply @.agents/rules/10-base-code.md

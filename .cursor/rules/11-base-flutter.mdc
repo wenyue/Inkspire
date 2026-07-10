@@ -1,0 +1,7 @@
+---
+description: "[default] Project-neutral Dart and Flutter application defaults"
+globs: **/*.dart
+alwaysApply: false
+---
+
+Apply @.agents/rules/11-base-flutter.md

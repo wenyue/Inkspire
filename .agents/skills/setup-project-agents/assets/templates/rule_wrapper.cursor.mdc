@@ -1,0 +1,7 @@
+---
+description: "{{rule.cursor_description}}"
+globs: {{rule.cursor_globs}}
+alwaysApply: {{rule.cursor_always_apply}}
+---
+
+Apply @{{rule.apply_ref}}

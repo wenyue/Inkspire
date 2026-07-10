@@ -1,0 +1,5 @@
+model = "gpt-5.4-mini"
+developer_instructions = """
+Follow `.agents/agents/rename.md`.
+Keep this file thin and use the shared agent prompt as the source of truth.
+"""
