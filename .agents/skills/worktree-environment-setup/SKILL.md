@@ -1,62 +1,66 @@
 ---
 name: worktree-environment-setup
-description: Prepare dependencies and validate required checked-in assets inside an already-created linked Inkspire Git worktree.
+description: Use when preparing an already-created linked Inkspire Git worktree before implementation begins.
 ---
 
 # Worktree Environment Setup
 
-用于已创建的 Inkspire linked worktree。只准备环境，不修改项目实现或生成资产。
+Use this skill only inside an already-created linked Inkspire worktree. Prepare the environment
+without changing the project implementation or generating assets.
 
 ## Procedure
 
-1. 定位仓库：
-   - 运行 `git rev-parse --show-toplevel`。
-   - 切换到返回的仓库根目录。
-   - 若命令失败，立即停止并按“失败报告”输出。
+1. Locate the repository:
+   - Run `git rev-parse --show-toplevel`.
+   - Change to the repository root returned by the command.
+   - If the command fails, stop immediately and use the failure report format below.
 
-2. 确认 linked worktree：
-   - 运行 `git rev-parse --path-format=absolute --git-dir`。
-   - 运行 `git rev-parse --path-format=absolute --git-common-dir`。
-   - 规范化两个绝对路径后比较；路径不同时，视为 linked worktree。
-   - 若 Git 不支持上述参数、命令失败或结果有歧义，则检查
-     `git worktree list --porcelain`。
-   - fallback 仅在当前仓库根目录对应次级 worktree 条目时接受；主工作树不合格。
-   - 无法确认 linked worktree 时立即停止。
+2. Confirm that the repository is a linked worktree:
+   - Run `git rev-parse --path-format=absolute --git-dir`.
+   - Run `git rev-parse --path-format=absolute --git-common-dir`.
+   - Normalize and compare the two absolute paths. Treat the repository as a linked worktree only
+     when the paths differ.
+   - If Git does not support these arguments, either command fails, or the result is ambiguous,
+     inspect `git worktree list --porcelain`.
+   - Accept the fallback only when the current repository root matches a secondary worktree entry.
+     The main worktree does not qualify.
+   - If a linked worktree cannot be confirmed, stop immediately.
 
-3. 检查工具链：
-   - 运行 `node --version`，解析 major version，必须为 `20` 或更高。
-   - 运行 `npm --version`，必须成功。
-   - 检查根目录存在 `package.json` 与 `package-lock.json`。
-   - 任一条件不满足时立即停止。
+3. Check the toolchain:
+   - Run `node --version`, parse the major version, and require version `20` or later.
+   - Run `npm --version` and require it to succeed.
+   - Confirm that both `package.json` and `package-lock.json` exist in the repository root.
+   - Stop immediately if any requirement is not met.
 
-4. 安装锁定依赖：
-   - 仅在仓库根目录运行 `npm ci`。
-   - 不得改用 `npm install`，不得更新 lockfile。
-   - 安装失败时立即停止。
+4. Install locked dependencies:
+   - Run only `npm ci` from the repository root.
+   - Do not substitute `npm install` or update the lockfile.
+   - Stop immediately if installation fails.
 
-5. 检查必需资产：
-   - 确认 `config/classic-artworks.json` 是文件。
-   - 确认 `client/public/classic-artworks` 是目录。
-   - 缺失时立即停止；不得下载或重建。
+5. Check required assets:
+   - Confirm that `config/classic-artworks.json` is a file.
+   - Confirm that `client/public/classic-artworks` is a directory.
+   - Stop immediately if either asset is missing. Do not download or rebuild the assets.
 
-6. 成功输出：
-   - 报告仓库根目录、linked worktree 已确认、Node/npm 版本、`npm ci` 成功，
-     以及两个资产路径存在。
-   - 到此停止，不运行其他步骤。
+6. Report success:
+   - Report the repository root, confirmation of the linked worktree, the Node and npm versions,
+     successful completion of `npm ci`, and the presence of both asset paths.
+   - Stop here. Do not run any additional steps.
 
 ## Failure Report
 
-任何步骤失败时，必须原样报告：
+If any step fails, report all of the following exactly:
 
-- `Step`: 失败步骤名称。
-- `Command`: 实际运行的命令；纯文件检查写明检查路径。
-- `Exit code`: 命令退出码；不适用时写 `N/A`。
-- `Output`: 与失败直接相关的 stdout/stderr 或缺失条件。
-- `Action`: 用户需要执行的最小修复动作。
+- `Step`: Name of the failed step.
+- `Command`: Command that was actually run, or the checked path for a file-only check.
+- `Exit code`: Command exit code, or `N/A` when not applicable.
+- `Output`: The stdout/stderr directly related to the failure, or the missing condition.
+- `Action`: The smallest corrective action the user must take.
 
-不得隐藏输出、猜测成功、继续后续步骤或自动采用替代方案。
+Do not hide output, assume success, continue to later steps, or automatically use an alternative.
 
 ## Prohibited Scope
 
-不得运行基线测试、类型检查或构建；不得实现、提交或集成代码；不得清理文件；
-不得创建或删除 worktree；不得同步 agents；不得下载或重建经典艺术品资源。
+Do not run baseline tests, type checks, or builds. Do not implement, commit, or integrate code. Do
+not clean files, create or remove worktrees, synchronize agents, or download or rebuild the classic
+artwork assets.
