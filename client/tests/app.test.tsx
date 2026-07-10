@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { PublicConfig } from "../src/api";
+import type { ClassicArtwork, PublicConfig } from "../src/api";
 import { getProgressLabel } from "../src/components/Studio";
 import type { Question } from "../src/domain";
 import { renderApp } from "./renderApp";
@@ -13,6 +13,40 @@ function generationRequestBodies(): Array<Record<string, unknown>> {
     .filter(([input]) => String(input).endsWith("/api/generations"))
     .map(([, init]) => init?.body ? JSON.parse(String(init.body)) as Record<string, unknown> : {});
 }
+
+const classicArtworkSample: ClassicArtwork[] = Array.from({ length: 100 }, (_, index) => ({
+  id: `classic-${index + 1}`,
+  title: {
+    "zh-Hans": index === 0 ? "溪山行旅图" : `古画 ${index + 1}`,
+    "zh-Hant": index === 0 ? "谿山行旅圖" : `古畫 ${index + 1}`,
+    en: index === 0 ? "Travelers among Mountains and Streams" : `Classic Painting ${index + 1}`
+  },
+  artist: {
+    "zh-Hans": index === 0 ? "范宽" : "佚名",
+    "zh-Hant": index === 0 ? "范寬" : "佚名",
+    en: index === 0 ? "Fan Kuan" : "Anonymous"
+  },
+  period: {
+    "zh-Hans": index === 0 ? "北宋" : "古代",
+    "zh-Hant": index === 0 ? "北宋" : "古代",
+    en: index === 0 ? "Northern Song" : "Ancient"
+  },
+  region: {
+    "zh-Hans": index < 80 ? "中国" : index < 98 ? "日本" : "韩国",
+    "zh-Hant": index < 80 ? "中國" : index < 98 ? "日本" : "韓國",
+    en: index < 80 ? "China" : index < 98 ? "Japan" : "Korea"
+  },
+  category: index < 40 ? "山水" : index < 80 ? "花鸟" : index < 98 ? "日本绘画" : "朝鲜绘画",
+  description: {
+    "zh-Hans": "用于测试的古代绘画介绍，强调作品本体、构图、笔墨和气韵。",
+    "zh-Hant": "用於測試的古代繪畫介紹，強調作品本體、構圖、筆墨和氣韻。",
+    en: "Classic painting description for tests."
+  },
+  image: `/classic-artworks/classic-${index + 1}.webp`,
+  thumbnail: `/classic-artworks/classic-${index + 1}-thumb.webp`,
+  reference_focus: "参考构图、笔墨和气韵，生成新的绘画作品。",
+  source_note: "测试数据"
+}));
 
 const publicConfig: PublicConfig = {
   questions: {
@@ -25,7 +59,8 @@ const publicConfig: PublicConfig = {
           "/previews/options/painting-subject-0-landscape.webp",
           "/previews/options/painting-subject-1-birds-flowers.webp",
           "/previews/options/painting-subject-2-figures.webp",
-          "/previews/options/painting-subject-3-inkspire-decide.webp"
+          "/previews/options/painting-subject-3-animals-fish.webp",
+          "/previews/options/painting-subject-4-studio-objects.webp"
         ],
         preview_prompt: {
           "zh-Hans": "中国画主题选择，留白构图",
@@ -33,16 +68,15 @@ const publicConfig: PublicConfig = {
           en: "Painting subject preview"
         },
         title: {
-          "zh-Hans": "想画什么主题？",
-          "zh-Hant": "想畫什麼主題？",
-          en: "What subject should the painting show?"
+          "zh-Hans": "想画什么内容？",
+          "zh-Hant": "想畫什麼內容？",
+          en: "What should the painting show?"
         },
         options: {
-          "zh-Hans": ["山水", "花鸟", "人物", "由墨起决定"],
-          "zh-Hant": ["山水", "花鳥", "人物", "由墨起決定"],
-          en: ["Landscape", "Birds and Flowers", "Figures", "Let Inkspire decide"]
-        },
-        default_option: "由墨起决定"
+          "zh-Hans": ["山水", "花鸟", "人物", "走兽游鱼", "文房雅物"],
+          "zh-Hant": ["山水", "花鳥", "人物", "走獸游魚", "文房雅物"],
+          en: ["Landscape", "Birds and Flowers", "Figures", "Animals and Fish", "Studio Objects"]
+        }
       }
     ],
     calligraphy: [
@@ -54,7 +88,8 @@ const publicConfig: PublicConfig = {
           "/previews/options/calligraphy-script-0-regular.webp",
           "/previews/options/calligraphy-script-1-running.webp",
           "/previews/options/calligraphy-script-2-cursive.webp",
-          "/previews/options/calligraphy-script-3-inkspire-decide.webp"
+          "/previews/options/calligraphy-script-3-clerical.webp",
+          "/previews/options/calligraphy-script-4-seal.webp"
         ],
         preview_prompt: {
           "zh-Hans": "书法字体选择，行草楷隶",
@@ -67,14 +102,14 @@ const publicConfig: PublicConfig = {
           en: "Which script do you prefer?"
         },
         options: {
-          "zh-Hans": ["楷书", "行书", "草书", "由墨起决定"],
-          "zh-Hant": ["楷書", "行書", "草書", "由墨起決定"],
-          en: ["Regular", "Running", "Cursive", "Let Inkspire decide"]
-        },
-        default_option: "由墨起决定"
+          "zh-Hans": ["楷书", "行书", "草书", "隶书", "篆书"],
+          "zh-Hant": ["楷書", "行書", "草書", "隸書", "篆書"],
+          en: ["Regular", "Running", "Cursive", "Clerical", "Seal"]
+        }
       }
     ]
   },
+  classicArtworks: classicArtworkSample,
   experts: [
     {
       id: "wu_jiayin",
@@ -529,7 +564,7 @@ describe("App", () => {
 
     await user.click(screen.getByRole("button", { name: "国画" }));
 
-    expect(screen.getByText("想画什么主题？")).toBeInTheDocument();
+    expect(screen.getByText("想画什么内容？")).toBeInTheDocument();
     expect(screen.queryByLabelText("相册")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("拍照")).not.toBeInTheDocument();
   });
@@ -611,9 +646,9 @@ describe("App", () => {
               en: "Which color treatment do you prefer?"
             },
             options: {
-              "zh-Hans": ["水墨", "青绿", "浅绛", "由墨起决定"],
-              "zh-Hant": ["水墨", "青綠", "淺絳", "由墨起決定"],
-              en: ["Ink wash", "Blue-green", "Light umber", "Let Inkspire decide"]
+              "zh-Hans": ["水墨", "青绿", "浅绛", "重彩"],
+              "zh-Hant": ["水墨", "青綠", "淺絳", "重彩"],
+              en: ["Ink Wash", "Blue-Green", "Light Umber", "Rich Color"]
             }
           }
         ]
@@ -655,9 +690,9 @@ describe("App", () => {
               en: "Which color treatment do you prefer?"
             },
             options: {
-              "zh-Hans": ["水墨", "青绿", "浅绛", "由墨起决定"],
-              "zh-Hant": ["水墨", "青綠", "淺絳", "由墨起決定"],
-              en: ["Ink wash", "Blue-green", "Light umber", "Let Inkspire decide"]
+              "zh-Hans": ["水墨", "青绿", "浅绛", "重彩"],
+              "zh-Hant": ["水墨", "青綠", "淺絳", "重彩"],
+              en: ["Ink Wash", "Blue-Green", "Light Umber", "Rich Color"]
             }
           }
         ]
@@ -716,13 +751,50 @@ describe("App", () => {
 
     expect(screen.getByRole("button", { name: "国画" }).textContent).not.toBe("国国画");
     expect(container.querySelectorAll(".option-preview-fallback")).toHaveLength(0);
-    expect(container.querySelectorAll(".option-preview-image")).toHaveLength(2);
+    expect(container.querySelectorAll(".option-preview-image")).toHaveLength(3);
 
     await user.click(screen.getByRole("button", { name: "国画" }));
 
     expect(screen.getByRole("button", { name: "山水" }).textContent).not.toBe("山山水");
     expect(container.querySelectorAll(".option-preview-fallback")).toHaveLength(0);
-    expect(container.querySelectorAll(".option-preview-image")).toHaveLength(4);
+    expect(container.querySelectorAll(".option-preview-image")).toHaveLength(5);
+  });
+
+  it("renders the question preview image as one hero image instead of a stitched option montage", async () => {
+    const user = userEvent.setup();
+    const { container } = renderApp();
+
+    const workTypeHero = await screen.findByRole("img", { name: "选择国画、书法或古代名作参考" });
+    expect(workTypeHero).toHaveClass("preview-hero-image");
+    expect(workTypeHero).toHaveAttribute("src", "/previews/questions/work-type.webp");
+    expect(container.querySelectorAll(".preview-montage")).toHaveLength(0);
+    expect(container.querySelectorAll(".montage-tile")).toHaveLength(0);
+
+    const workTypeOptionImages = [...container.querySelectorAll(".option-preview-image")]
+      .map((image) => image.getAttribute("src"));
+    expect(workTypeOptionImages).toEqual([
+      "/previews/options/work-type-0-painting.webp",
+      "/previews/options/work-type-1-calligraphy.webp",
+      "/previews/questions/painting-subject.webp"
+    ]);
+
+    await user.click(screen.getByRole("button", { name: "国画" }));
+
+    const subjectHero = await screen.findByRole("img", { name: "想画什么内容？" });
+    expect(subjectHero).toHaveClass("preview-hero-image");
+    expect(subjectHero).toHaveAttribute("src", "/previews/questions/painting-subject.webp");
+    expect(container.querySelectorAll(".preview-montage")).toHaveLength(0);
+    expect(container.querySelectorAll(".montage-tile")).toHaveLength(0);
+
+    const subjectOptionImages = [...container.querySelectorAll(".option-preview-image")]
+      .map((image) => image.getAttribute("src"));
+    expect(subjectOptionImages).toEqual([
+      "/previews/options/painting-subject-0-landscape.webp",
+      "/previews/options/painting-subject-1-birds-flowers.webp",
+      "/previews/options/painting-subject-2-figures.webp",
+      "/previews/options/painting-subject-3-animals-fish.webp",
+      "/previews/options/painting-subject-4-studio-objects.webp"
+    ]);
   });
 
   it("requires the photo step after branch questions before showing generation", async () => {
@@ -731,7 +803,7 @@ describe("App", () => {
 
     await user.click(await screen.findByRole("button", { name: "国画" }));
 
-    expect(screen.getByText("想画什么主题？")).toBeInTheDocument();
+    expect(screen.getByText("想画什么内容？")).toBeInTheDocument();
     expect(screen.queryByLabelText("相册")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("拍照")).not.toBeInTheDocument();
 
@@ -827,19 +899,19 @@ describe("App", () => {
     await user.selectOptions(screen.getByLabelText("语言"), "en");
 
     expect(screen.getByText("Choose the work type")).toBeInTheDocument();
-    expect(screen.queryByText("选择国画或书法创作方向")).not.toBeInTheDocument();
+    expect(screen.queryByText("选择国画、书法或古代名作参考")).not.toBeInTheDocument();
     expect(screen.getByRole("img", { name: "Preview the artwork direction" })).toBeInTheDocument();
     const workTypePreviews = [...container.querySelectorAll(".option-preview-image")].map((image) => image.getAttribute("src"));
-    expect(workTypePreviews).toHaveLength(2);
-    expect(new Set(workTypePreviews).size).toBe(2);
+    expect(workTypePreviews).toHaveLength(3);
+    expect(new Set(workTypePreviews).size).toBe(3);
 
     await user.click(screen.getByRole("button", { name: "Painting" }));
 
-    expect(screen.getByRole("heading", { name: "What subject should the painting show?" })).toBeInTheDocument();
-    expect(screen.getByRole("img", { name: "What subject should the painting show?" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "What should the painting show?" })).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "What should the painting show?" })).toBeInTheDocument();
     const subjectPreviews = [...container.querySelectorAll(".option-preview-image")].map((image) => image.getAttribute("src"));
-    expect(subjectPreviews).toHaveLength(4);
-    expect(new Set(subjectPreviews).size).toBe(4);
+    expect(subjectPreviews).toHaveLength(5);
+    expect(new Set(subjectPreviews).size).toBe(5);
   });
 
   it("leaves option preview frames empty before images decode", async () => {
@@ -850,7 +922,7 @@ describe("App", () => {
 
     expect(screen.getByRole("heading", { name: "偏好哪种书体？" })).toBeInTheDocument();
     expect(container.querySelectorAll(".option-preview-fallback")).toHaveLength(0);
-    expect(container.querySelectorAll(".option-preview-image")).toHaveLength(4);
+    expect(container.querySelectorAll(".option-preview-image")).toHaveLength(5);
   });
 
   it("advances the question flow after clicking 国画", async () => {
@@ -859,7 +931,7 @@ describe("App", () => {
 
     await user.click(await screen.findByRole("button", { name: "国画" }));
 
-    expect(screen.getByText("想画什么主题？")).toBeInTheDocument();
+    expect(screen.getByText("想画什么内容？")).toBeInTheDocument();
   });
 
   it("collects calligraphy text before generating", async () => {
@@ -891,17 +963,86 @@ describe("App", () => {
     });
   });
 
+  it("selects a classic painting and jumps directly to the photo step", async () => {
+    const user = userEvent.setup();
+    renderApp();
+
+    await user.click(await screen.findByRole("button", { name: "古代名作" }));
+
+    expect(await screen.findByRole("heading", { name: "选择古代名作" })).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: /古画|溪山行旅图/ })).toHaveLength(100);
+
+    await user.click(screen.getByRole("button", { name: /溪山行旅图/ }));
+
+    expect(await screen.findByRole("img", { name: "溪山行旅图" })).toHaveAttribute(
+      "src",
+      "/classic-artworks/classic-1.webp"
+    );
+    expect(screen.getByText(/范宽/)).toBeInTheDocument();
+    expect(screen.getByText(/用于测试的古代绘画介绍/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "选择此作品" }));
+
+    expect(await screen.findByText("可选：添加环境照片")).toBeInTheDocument();
+    expect(screen.getByLabelText("相册")).toBeInTheDocument();
+    expect(screen.queryByText("想画什么内容？")).not.toBeInTheDocument();
+    expect(screen.queryByText("偏好哪种书体？")).not.toBeInTheDocument();
+  });
+
+  it("submits classic painting generation as painting with classic reference answers", async () => {
+    const user = userEvent.setup();
+    renderApp();
+
+    await user.click(await screen.findByRole("button", { name: "古代名作" }));
+    await user.click(await screen.findByRole("button", { name: /溪山行旅图/ }));
+    await user.click(await screen.findByRole("button", { name: "选择此作品" }));
+    await user.click(screen.getByRole("button", { name: "不需要效果图，直接生成" }));
+    await user.click(screen.getByRole("button", { name: /均衡/ }));
+    await user.click(screen.getByRole("button", { name: "生成" }));
+
+    await waitFor(() => {
+      expect(fetch).toHaveBeenCalledWith("/api/generations", expect.objectContaining({
+        method: "POST",
+        body: expect.stringContaining("\"type\":\"painting\"")
+      }));
+    });
+
+    const body = generationRequestBodies()[0];
+    expect(body.type).toBe("painting");
+    expect(body.answers).toMatchObject({
+      work_type: "painting",
+      creation_mode: "classic_reference",
+      classic_artwork_id: "classic-1",
+      classic_artwork_title: "溪山行旅图",
+      classic_artwork_artist: "范宽"
+    });
+  });
+
+  it("can go back from the classic photo step to the classic picker", async () => {
+    const user = userEvent.setup();
+    renderApp();
+
+    await user.click(await screen.findByRole("button", { name: "古代名作" }));
+    await user.click(await screen.findByRole("button", { name: /溪山行旅图/ }));
+    await user.click(await screen.findByRole("button", { name: "选择此作品" }));
+
+    expect(await screen.findByLabelText("相册")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "上一步" }));
+
+    expect(await screen.findByRole("heading", { name: "选择古代名作" })).toBeInTheDocument();
+  });
+
   it("persists answered questions across remounts", async () => {
     const user = userEvent.setup();
     const view = renderApp();
 
     await user.click(await screen.findByRole("button", { name: "国画" }));
-    expect(screen.getByText("想画什么主题？")).toBeInTheDocument();
+    expect(screen.getByText("想画什么内容？")).toBeInTheDocument();
 
     view.unmount();
     renderApp();
 
-    expect(await screen.findByText("想画什么主题？")).toBeInTheDocument();
+    expect(await screen.findByText("想画什么内容？")).toBeInTheDocument();
     expect(screen.queryByText("先定作品类型")).not.toBeInTheDocument();
   });
 
@@ -992,7 +1133,7 @@ describe("App", () => {
       window.history.back();
     });
 
-    expect(await screen.findByText("想画什么主题？")).toBeInTheDocument();
+    expect(await screen.findByText("想画什么内容？")).toBeInTheDocument();
     expect(window.location.search).toBe("?step=question&index=0");
   });
 

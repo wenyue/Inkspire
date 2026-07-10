@@ -33,11 +33,12 @@ export const WORK_TYPE_QUESTION: Question = {
   preview_image: "/previews/questions/work-type.webp",
   option_preview_images: [
     "/previews/options/work-type-0-painting.webp",
-    "/previews/options/work-type-1-calligraphy.webp"
+    "/previews/options/work-type-1-calligraphy.webp",
+    "/previews/questions/painting-subject.webp"
   ],
   preview_prompt: {
-    "zh-Hans": "选择国画或书法创作方向",
-    "zh-Hant": "選擇國畫或書法創作方向",
+    "zh-Hans": "选择国画、书法或古代名作参考",
+    "zh-Hant": "選擇國畫、書法或古代名作參考",
     en: "Preview the artwork direction"
   },
   title: {
@@ -46,9 +47,9 @@ export const WORK_TYPE_QUESTION: Question = {
     en: "Choose the work type"
   },
   options: {
-    "zh-Hans": ["国画", "书法"],
-    "zh-Hant": ["國畫", "書法"],
-    en: ["Painting", "Calligraphy"]
+    "zh-Hans": ["国画", "书法", "古代名作"],
+    "zh-Hant": ["國畫", "書法", "古代名作"],
+    en: ["Painting", "Calligraphy", "Classic Artworks"]
   }
 };
 
@@ -58,6 +59,9 @@ export function optionValueForQuestion(question: Question, option: string, local
   }
 
   const index = question.options?.[locale]?.indexOf(option) ?? -1;
+  if (index === 2) {
+    return "classic_reference";
+  }
   return index === 1 ? "calligraphy" : "painting";
 }
 
@@ -71,12 +75,26 @@ export function workTypeFromAnswers(answers: Answers): WorkType | null {
     : null;
 }
 
+export function isChoosingClassicReference(answers: Answers): boolean {
+  return answers.work_type === "classic_reference";
+}
+
+export function isClassicReferenceComplete(answers: Answers): boolean {
+  return answers.work_type === "painting"
+    && answers.creation_mode === "classic_reference"
+    && typeof answers.classic_artwork_id === "string"
+    && answers.classic_artwork_id.length > 0;
+}
+
 export function questionsForAnswers(config: QuestionConfig, answers: Answers): Question[] {
   const workType = workTypeFromAnswers(answers);
   return workType ? config.questions[workType] ?? [] : [];
 }
 
 export function nextQuestion(config: QuestionConfig, answers: Answers): Question | null {
+  if (isChoosingClassicReference(answers) || isClassicReferenceComplete(answers)) {
+    return null;
+  }
   const workType = workTypeFromAnswers(answers);
   if (!workType) {
     return WORK_TYPE_QUESTION;
@@ -86,6 +104,9 @@ export function nextQuestion(config: QuestionConfig, answers: Answers): Question
 }
 
 export function isQuestionFlowComplete(config: QuestionConfig, answers: Answers): boolean {
+  if (isClassicReferenceComplete(answers)) {
+    return true;
+  }
   return Boolean(workTypeFromAnswers(answers)) && nextQuestion(config, answers) === null;
 }
 

@@ -33,6 +33,7 @@ function loadConfig(projectRoot = path.resolve(__dirname, "../..")) {
   const app = readJson(path.join(configDir, "app.json"));
   const experts = requireArray(readJson(path.join(configDir, "experts.json")), "experts");
   const questions = readJson(path.join(configDir, "questions.json"));
+  const classicArtworks = requireArray(readJson(path.join(configDir, "classic-artworks.json")), "classic artworks");
   const i18n = {
     "zh-Hans": readJson(path.join(configDir, "i18n", "zh-Hans.json")),
     "zh-Hant": readJson(path.join(configDir, "i18n", "zh-Hant.json")),
@@ -50,7 +51,7 @@ function loadConfig(projectRoot = path.resolve(__dirname, "../..")) {
 
   app.productionContact = productionContact(app);
 
-  return { app, experts, questions, i18n, prompts };
+  return { app, experts, questions, classicArtworks, i18n, prompts };
 }
 
 function publicConfig(config) {
@@ -62,6 +63,7 @@ function publicConfig(config) {
     productionAvailable: productionAvailable(config),
     experts: config.experts,
     questions: config.questions,
+    classicArtworks: config.classicArtworks,
     i18n: config.i18n
   };
 }

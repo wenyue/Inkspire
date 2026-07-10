@@ -312,63 +312,11 @@ button:disabled {
     0 14px 32px rgba(48, 74, 65, 0.14);
 }
 
-/* 把各选项的图无缝拼成一张横幅 */
-.preview-montage {
-  position: absolute;
-  inset: 0;
-  z-index: 3;
-  display: grid;
-  grid-template-columns: repeat(var(--montage-cols, 2), 1fr);
-  gap: 2px;
-  padding: 2px;
-  animation: previewReveal 640ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
-}
-
-.preview-montage[data-count="1"] {
-  --montage-cols: 1;
-}
-
-.preview-montage[data-count="2"] {
-  --montage-cols: 2;
-}
-
-.preview-montage[data-count="3"] {
-  --montage-cols: 3;
-}
-
-.preview-montage[data-count="4"] {
-  --montage-cols: 4;
-}
-
-.montage-cell {
-  position: relative;
-  display: block;
-  overflow: hidden;
-}
-
-.montage-tile {
+.preview-hero-image {
   display: block;
   width: 100%;
   height: 100%;
-  /* 原图已裁掉米边，cover 填满格子即可 */
   object-fit: cover;
-}
-
-@keyframes previewReveal {
-  from {
-    opacity: 0;
-    transform: scale(1.02);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .preview-montage {
-    animation: none;
-  }
 }
 
 .scroll-question h2 {
@@ -433,6 +381,121 @@ button:disabled {
   width: 100%;
   height: 100%;
   object-fit: contain;
+}
+
+.classic-picker {
+  display: grid;
+  gap: 16px;
+}
+
+.classic-picker-header {
+  display: grid;
+  gap: 10px;
+}
+
+.classic-back {
+  display: inline-flex;
+  align-items: center;
+  justify-self: start;
+  gap: 6px;
+}
+
+.classic-category-row {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.classic-category-row button {
+  min-height: 38px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: rgba(255, 252, 243, 0.76);
+  color: #223a32;
+  white-space: nowrap;
+  box-shadow: inset 0 0 0 1px rgba(46, 79, 67, 0.16);
+}
+
+.classic-category-row button[aria-pressed="true"] {
+  background: #315b4d;
+  color: #fffaf0;
+}
+
+.classic-masonry {
+  column-count: 2;
+  column-gap: 10px;
+}
+
+.classic-card {
+  display: inline-grid;
+  width: 100%;
+  gap: 8px;
+  min-height: 0;
+  margin: 0 0 12px;
+  padding: 0;
+  break-inside: avoid;
+  background: transparent;
+  color: #223a32;
+  text-align: left;
+}
+
+.classic-card img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 6px;
+  background: rgba(61, 52, 39, 0.08);
+  box-shadow: inset 0 0 0 1px rgba(48, 78, 67, 0.12);
+}
+
+.classic-card-copy {
+  display: grid;
+  gap: 2px;
+  padding: 0 2px 4px;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.classic-card-copy strong {
+  font-size: 14px;
+}
+
+.classic-card-copy span {
+  color: #66786f;
+}
+
+.classic-detail {
+  gap: 14px;
+}
+
+.classic-detail-image {
+  display: block;
+  width: 100%;
+  max-height: min(62vh, 720px);
+  object-fit: contain;
+  border-radius: 6px;
+  background: rgba(61, 52, 39, 0.08);
+  box-shadow: inset 0 0 0 1px rgba(48, 78, 67, 0.12);
+}
+
+.classic-detail-copy {
+  display: grid;
+  gap: 10px;
+}
+
+.classic-detail-copy h2 {
+  margin: 0;
+}
+
+.classic-detail-copy p {
+  margin: 0;
+  line-height: 1.55;
+}
+
+.classic-meta {
+  color: #66786f;
+  font-size: 13px;
 }
 
 .text-question {
@@ -1813,6 +1876,19 @@ button:disabled {
 
   .photo-step-actions {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .classic-masonry {
+    column-count: 3;
+  }
+
+  .classic-detail {
+    grid-template-columns: minmax(0, 1.25fr) minmax(280px, 0.75fr);
+    align-items: start;
+  }
+
+  .classic-detail .classic-back {
+    grid-column: 1 / -1;
   }
 }
 

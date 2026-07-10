@@ -12,6 +12,8 @@ import {
 } from "../api";
 import {
   getInitialQuestion,
+  isChoosingClassicReference,
+  isClassicReferenceComplete,
   isQuestionFlowComplete,
   nextQuestion,
   optionValueForQuestion,
@@ -21,6 +23,7 @@ import {
   type Question,
   type WorkType
 } from "../domain";
+import ClassicArtworkPicker from "./ClassicArtworkPicker";
 
 const STUDIO_DRAFT_KEY = "inkspire.studioDraft.v1";
 
@@ -37,6 +40,7 @@ interface StudioDraft {
 
 type StudioStepQuery =
   | { step: "work_type" }
+  | { step: "classic" }
   | { step: "question"; index: number }
   | { step: "photo" }
   | { step: "complexity" }
@@ -101,13 +105,6 @@ function questionOptions(question: Question, locale: Locale): string[] {
 
 function optionPreviewImage(question: Question, index: number, locale: Locale): string {
   return question.option_preview_images?.[index] ?? localizedPreviewImage(question, locale);
-}
-
-function montagePreviewImages(question: Question, locale: Locale): string[] {
-  const images = (question.option_preview_images ?? [])
-    .filter((src): src is string => typeof src === "string" && src.length > 0)
-    .filter((src) => !src.includes("inkspire-decide"));
-  return images.length > 0 ? images : [localizedPreviewImage(question, locale)];
 }
 
 function continueLabel(locale: Locale): string {
@@ -211,6 +208,9 @@ function studioStepUrlForState(
   if (!answers.work_type) {
     return "/studio?step=work_type";
   }
+  if (isChoosingClassicReference(answers)) {
+    return "/studio?step=classic";
+  }
   const currentQuestion = nextQuestion(config, answers);
   if (currentQuestion) {
     const branchQuestions = questionsForAnswers(config, answers);
@@ -240,6 +240,12 @@ export function previousStudioStepUrlForState({
   hasSourcePhoto,
   notesFocusRequest,
 }: PreviousStudioStepState): string {
+  if (isChoosingClassicReference(answers)) {
+    return "/studio?step=work_type";
+  }
+  if (isClassicReferenceComplete(answers) && !photoStepComplete && !hasSourcePhoto && notesFocusRequest <= 0) {
+    return "/studio?step=classic";
+  }
   if (isQuestionFlowComplete(config, answers) && complexityStepComplete && !hasSourcePhoto && notesFocusRequest <= 0) {
     return studioStepUrlForState(config, answers, true, false, false);
   }
@@ -259,6 +265,9 @@ export function previousStudioStepUrlForState({
 function readStudioStepQuery(search: string): StudioStepQuery | null {
   const params = new URLSearchParams(search);
   const step = params.get("step");
+  if (step === "classic") {
+    return { step };
+  }
   if (step === "work_type" || step === "photo" || step === "complexity" || step === "notes") {
     return { step };
   }
@@ -342,6 +351,9 @@ export default function Studio({
   const pendingPhotoTimer = useRef<number | null>(null);
 
   const question = useMemo(() => {
+    if (isChoosingClassicReference(answers)) {
+      return null;
+    }
     if (!answers.work_type) {
       return getInitialQuestion(config);
     }
@@ -350,7 +362,8 @@ export default function Studio({
   const complete = isQuestionFlowComplete(config, answers);
   const suggestions = list("suggestions");
   const noteSuggestions = suggestions.slice(1);
-  const canGoBack = Boolean(answers.work_type);
+  const showClassicPicker = isChoosingClassicReference(answers);
+  const canGoBack = Boolean(answers.work_type) && !showClassicPicker;
   const showPhotoStep = complete && !photoStepComplete;
   const showComplexityStep = complete
     && photoStepComplete
@@ -471,6 +484,13 @@ export default function Studio({
       setComplexityStepComplete(false);
       return;
     }
+    if (studioStep.step === "classic") {
+      setAnswers({ work_type: "classic_reference" });
+      setPhotoStepComplete(false);
+      setGenerationComplexity(undefined);
+      setComplexityStepComplete(false);
+      return;
+    }
     if (studioStep.step === "photo") {
       setPhotoStepComplete(false);
       setGenerationComplexity(undefined);
@@ -492,9 +512,39 @@ export default function Studio({
       return;
     }
     const value = optionValueForQuestion(question, option, locale);
+    if (question.id === "work_type" && value === "classic_reference") {
+      const nextAnswers = { work_type: "classic_reference" };
+      setAnswers(nextAnswers);
+      setPhotoStepComplete(false);
+      setGenerationComplexity(undefined);
+      setComplexityStepComplete(false);
+      setError("");
+      navigate("/studio?step=classic");
+      return;
+    }
     const nextAnswers = { ...answers, [question.id]: value };
     setAnswers(nextAnswers);
     navigate(studioStepUrlForState(config, nextAnswers, false, false, false));
+  };
+
+  const selectClassicArtwork = (artwork: PublicConfig["classicArtworks"][number]) => {
+    const nextAnswers = {
+      work_type: "painting",
+      creation_mode: "classic_reference",
+      classic_artwork_id: artwork.id,
+      classic_artwork_title: localizedText(artwork.title, locale),
+      classic_artwork_artist: localizedText(artwork.artist, locale),
+      classic_artwork_period: localizedText(artwork.period, locale),
+      classic_artwork_region: localizedText(artwork.region, locale),
+      classic_artwork_category: artwork.category,
+      classic_artwork_reference: artwork.reference_focus
+    };
+    setAnswers(nextAnswers);
+    setPhotoStepComplete(false);
+    setGenerationComplexity(undefined);
+    setComplexityStepComplete(false);
+    setError("");
+    navigate("/studio?step=photo");
   };
 
   const answerTextQuestion = () => {
@@ -511,6 +561,18 @@ export default function Studio({
   };
 
   const goToPreviousStudioStep = () => {
+    if (isChoosingClassicReference(answers)) {
+      setAnswers({});
+      setError("");
+      return;
+    }
+    if (isClassicReferenceComplete(answers) && !photoStepComplete) {
+      setAnswers({ work_type: "classic_reference" });
+      setGenerationComplexity(undefined);
+      setComplexityStepComplete(false);
+      setError("");
+      return;
+    }
     if (showConversationStep && !sourcePhotoPath && complexityStepComplete && notesFocusRequest <= 0) {
       setGenerationComplexity(undefined);
       setComplexityStepComplete(false);
@@ -708,24 +770,25 @@ export default function Studio({
                 </button>
               ) : null}
             </div>
-            {question ? (
+            {showClassicPicker ? (
+              <ClassicArtworkPicker
+                artworks={config.classicArtworks}
+                locale={locale}
+                onBack={() => {
+                  setAnswers({});
+                  setError("");
+                  navigate("/studio?step=work_type");
+                }}
+                onSelect={selectClassicArtwork}
+              />
+            ) : question ? (
               <>
-                <div
-                  className="preview-ink"
-                  role="img"
-                  aria-label={localizedPreviewText(question, locale)}
-                >
-                  <div
-                    className="preview-montage"
-                    data-count={montagePreviewImages(question, locale).length}
-                    aria-hidden="true"
-                  >
-                    {montagePreviewImages(question, locale).map((src, index) => (
-                      <span key={`${src}-${index}`} className="montage-cell" aria-hidden="true">
-                        <img className="montage-tile" src={src} alt="" aria-hidden="true" />
-                      </span>
-                    ))}
-                  </div>
+                <div className="preview-ink">
+                  <img
+                    className="preview-hero-image"
+                    src={localizedPreviewImage(question, locale)}
+                    alt={localizedPreviewText(question, locale)}
+                  />
                 </div>
                 <h2>{localizedText(question.title, locale)}</h2>
                 {question.input_type === "textarea" ? (

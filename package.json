@@ -13,7 +13,8 @@
     "test:server": "npm test --workspace server",
     "test:client": "npm test --workspace client",
     "e2e": "node scripts/run-e2e.cjs",
-    "verify:real": "node scripts/verify-real-generation.js"
+    "verify:real": "node scripts/verify-real-generation.js",
+    "validate:classic-artworks": "node scripts/validate-classic-artworks.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.45.0",

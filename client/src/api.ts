@@ -3,6 +3,7 @@ import experts from "../../config/experts.json";
 import en from "../../config/i18n/en.json";
 import zhHans from "../../config/i18n/zh-Hans.json";
 import zhHant from "../../config/i18n/zh-Hant.json";
+import classicArtworks from "../../config/classic-artworks.json";
 import questions from "../../config/questions.json";
 import type { Answers, Locale, QuestionConfig, WorkType } from "./domain";
 import type { Dictionaries } from "./i18n";
@@ -32,6 +33,20 @@ export interface Expert {
   credentials?: string[];
   sampleImages?: string[];
   services: ExpertService[];
+}
+
+export interface ClassicArtwork {
+  id: string;
+  title: Record<string, string>;
+  artist: Record<string, string>;
+  period: Record<string, string>;
+  region: Record<string, string>;
+  category: string;
+  description: Record<string, string>;
+  image: string;
+  thumbnail: string;
+  reference_focus: string;
+  source_note: string;
 }
 
 export interface ProductionContact {
@@ -68,6 +83,7 @@ export interface PublicConfig extends QuestionConfig {
   };
   productionContact?: ProductionContact;
   productionAvailable?: boolean;
+  classicArtworks: ClassicArtwork[];
   experts: Expert[];
   i18n: Dictionaries;
 }
@@ -145,6 +161,7 @@ export const fallbackConfig: PublicConfig = {
   image: appConfig.image,
   productionContact: appConfig.productionContact,
   productionAvailable: hasContact(appConfig.productionContact) || experts.some((expert) => hasContact(expert)),
+  classicArtworks: classicArtworks as ClassicArtwork[],
   questions: questions as QuestionConfig["questions"],
   experts,
   i18n: {

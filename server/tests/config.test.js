@@ -102,3 +102,31 @@ test("public config exposes only UI-safe fields", () => {
   assert.equal(Object.hasOwn(exposed, "generatedImagesRoot"), false);
   assert.equal(Object.hasOwn(exposed, "generationCanvas"), false);
 });
+
+test("classic artworks config contains exactly 100 complete painting records", () => {
+  const config = loadConfig(root);
+  assert.equal(config.classicArtworks.length, 100);
+  const ids = new Set();
+  for (const artwork of config.classicArtworks) {
+    assert.equal(typeof artwork.id, "string");
+    assert.ok(artwork.id.length > 0);
+    assert.ok(!ids.has(artwork.id));
+    ids.add(artwork.id);
+    assert.notEqual(artwork.category, "书法");
+    for (const field of ["title", "artist", "period", "region", "description"]) {
+      assert.ok(artwork[field]["zh-Hans"]);
+      assert.ok(artwork[field]["zh-Hant"]);
+      assert.ok(artwork[field].en);
+    }
+    assert.match(artwork.image, /^\/classic-artworks\/.+\.webp$/);
+    assert.match(artwork.thumbnail, /^\/classic-artworks\/.+\.webp$/);
+    assert.ok(fs.existsSync(path.join(root, "client/public", artwork.image)));
+    assert.ok(fs.existsSync(path.join(root, "client/public", artwork.thumbnail)));
+    assert.ok(artwork.reference_focus);
+  }
+});
+
+test("public config exposes classic artworks", () => {
+  const exposed = publicConfig(loadConfig(root));
+  assert.equal(exposed.classicArtworks.length, 100);
+});

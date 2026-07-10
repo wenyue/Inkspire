@@ -19,7 +19,7 @@ test("normalizes generation complexity with medium fallback", () => {
 test("resolves orientation from notes before question answers", () => {
   assert.deepEqual(
     resolveOrientation({
-      answers: { work_type: "painting", painting_composition: "横幅" },
+      answers: { work_type: "painting", painting_format: "横幅" },
       conversationNotes: "最后改成竖幅，更适合挂起来"
     }),
     { orientation: "portrait", source: "notes" }
@@ -62,7 +62,7 @@ test("maps stable question orientation answers and keeps subject Landscape out o
     resolveOrientation({
       answers: {
         work_type: "painting",
-        painting_composition: { id: "horizontal", orientation: "landscape" }
+        painting_format: { id: "horizontal", orientation: "landscape" }
       }
     }),
     { orientation: "landscape", source: "question" }
@@ -84,7 +84,7 @@ test("maps stable question orientation answers and keeps subject Landscape out o
 test("does not accept negated orientation phrases as positive intent", () => {
   assert.deepEqual(
     resolveOrientation({
-      answers: { work_type: "painting", painting_composition: "竖幅" },
+      answers: { work_type: "painting", painting_format: "立轴" },
       conversationNotes: "不要横幅"
     }),
     { orientation: "portrait", source: "question" }

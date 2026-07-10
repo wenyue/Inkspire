@@ -17,7 +17,7 @@ function answerLines(answers, labels) {
 }
 
 function fillTemplate(template = "", answers = {}) {
-  return String(template).replace(/\{\{([a-z0-9_]+)\}\}/gi, (match, key) => answers[key] || "由墨起决定");
+  return String(template).replace(/\{\{([a-z0-9_]+)\}\}/gi, (match, key) => answers[key] || "未指定");
 }
 
 function compactLines(lines) {
@@ -50,6 +50,29 @@ function generationComplexityCopy(value) {
   return GENERATION_COMPLEXITY_COPY[value] || GENERATION_COMPLEXITY_COPY.medium;
 }
 
+function isClassicReference(answers = {}) {
+  return answers.creation_mode === "classic_reference" && Boolean(answers.classic_artwork_id);
+}
+
+function classicReferenceLines(answers = {}) {
+  if (!isClassicReference(answers)) {
+    return [];
+  }
+
+  return compactLines([
+    "古代名作参考:",
+    `参考作品: ${answers.classic_artwork_title || "未指定"}`,
+    `作者: ${answers.classic_artwork_artist || "未指定"}`,
+    `年代: ${answers.classic_artwork_period || "未指定"}`,
+    `地域: ${answers.classic_artwork_region || "未指定"}`,
+    `分类: ${answers.classic_artwork_category || "未指定"}`,
+    answers.classic_artwork_reference ? `参考重点: ${answers.classic_artwork_reference}` : "",
+    "请参考该绘画作品的构图、笔墨、设色、气韵与空间关系，生成一幅新的 Inkspire 中国画或东亚绘画作品。",
+    "不直接复制原作，不照搬题跋印章，不把原作图片贴入画面。",
+    "只生成作品本身，不要画框、展墙、相框、博物馆陈列背景。"
+  ]);
+}
+
 function buildArtworkPrompt({
   type,
   answers = {},
@@ -71,6 +94,7 @@ function buildArtworkPrompt({
     ...renderSections(promptConfig.sections, answers),
     "用户选择:",
     ...answerLines(answers, labels),
+    ...classicReferenceLines(answers),
     "画面复杂度:",
     generationComplexityCopy(generationComplexity)
   ]);
@@ -147,8 +171,8 @@ function buildFusionPrompt({ record, config, referenceImages = {} }) {
     brief: "创作一幅效果图：把艺术作品={{painting}}真实摆放到环境图片中，书法或文字信息={{calligraphy}}，整体关系={{relationship}}。"
   };
   const variables = {
-    painting: record.painting_description || record.artwork_path || "由墨起决定",
-    calligraphy: record.calligraphy_description || record.artwork_path || "由墨起决定",
+    painting: record.painting_description || record.artwork_path || "作品未指定",
+    calligraphy: record.calligraphy_description || record.artwork_path || "作品未指定",
     relationship: record.relationship || "雅化原图气韵，融合中国画、书法与美光"
   };
   const recommendedArtworkSize = record.recommended_artwork_size;

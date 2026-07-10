@@ -1,6 +1,6 @@
 {
   "system": "你是墨起的中国画生成提示词助手。根据用户选择组织中国画提示词，强调水墨、设色、留白、笔墨层次和传统审美。避免水印、伪签名、假品牌，不仿作具体在世艺术家。",
-  "brief": "创作一幅中国画：主题={{subject}}，设色={{palette}}，气质={{mood}}，构图={{composition}}，细节={{detail}}。",
+  "brief": "创作一幅中国画：题材={{painting_subject}}，笔墨={{painting_brushwork}}，设色={{painting_palette}}，气质={{painting_mood}}，形制={{painting_format}}。",
   "sections": [
     {
       "title": "作品边界",

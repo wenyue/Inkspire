@@ -10,6 +10,7 @@ const { loadConfig, publicConfig, productionAvailable } = require("./config");
 const { runCodexImageGeneration, runCodexJsonEstimation } = require("./codexRunner");
 const { archiveSourcePhoto } = require("./imagePipeline");
 const { createJobManager } = require("./jobs");
+const { normalizeGenerationComplexity } = require("./sizeEstimation");
 const { createStorage, resolveRecordAssetPath, validateRecordAssetPath, validateRecordId } = require("./storage");
 const { userIdentityMiddleware } = require("./userIdentity");
 
@@ -35,6 +36,11 @@ const PRODUCTION_SIZE_MULTIPLIERS = {
   small: 0.75,
   medium: 1,
   large: 1.5
+};
+const PRODUCTION_COMPLEXITY_MULTIPLIERS = {
+  small: 0.85,
+  medium: 1,
+  large: 1.25
 };
 const ORDER_ID_ALPHABET = "abcdefghijklmnopqrstuvwxyz0123456789";
 const ORDER_ID_PATTERN = /^ord-[a-z0-9]{8}$/;
@@ -491,10 +497,11 @@ function createApp(options = {}) {
   }));
 
   app.post("/api/records/:id/production-estimate", asyncHandler(async (req, res) => {
-    await storage.getRecordForUser(req.params.id, req.userId);
+    const record = await storage.getRecordForUser(req.params.id, req.userId);
     const expert = config.experts.find((entry) => entry.id === req.body.expertId) || config.experts[0];
     const size = productionSize(req.body.size);
-    const multiplier = PRODUCTION_SIZE_MULTIPLIERS[size];
+    const generationComplexity = normalizeGenerationComplexity(record.generation_complexity);
+    const multiplier = PRODUCTION_SIZE_MULTIPLIERS[size] * PRODUCTION_COMPLEXITY_MULTIPLIERS[generationComplexity];
     const estimates = {};
     for (const service of expert.services || []) {
       estimates[service.id] = {

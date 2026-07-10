@@ -742,6 +742,25 @@ test("POST /api/records/:id/production-estimate scales estimates by selected siz
   });
 });
 
+test("POST /api/records/:id/production-estimate scales estimates by generation complexity", async () => {
+  await withTempApp(async ({ app }) => {
+    const agent = request.agent(app);
+    const created = await agent
+      .post("/api/generations")
+      .send({ type: "painting", answers: {}, generation_complexity: "large" })
+      .expect(201);
+    await waitForJob(agent, created.body.job.id);
+
+    const response = await agent
+      .post(`/api/records/${created.body.record.id}/production-estimate`)
+      .send({ expertId: "wu_jiayin", size: "medium" })
+      .expect(200);
+
+    assert.equal(response.body.estimates.expert_custom.amount, 2250);
+    assert.equal(response.body.estimates.expert_guided.amount, 750);
+  });
+});
+
 test("POST /api/records/:id/production-orders rejects orders while production contact is unavailable", async () => {
   await withTempApp(async ({ app, temp }) => {
     const agent = request.agent(app);

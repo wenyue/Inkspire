@@ -11,6 +11,7 @@ test("painting prompt contains 中国画, selected answers, and user notes", () 
     type: "painting",
     answers: {
       painting_subject: "山水",
+      painting_brushwork: "写意",
       painting_palette: "青绿"
     },
     conversationNotes: "请保留远山云气",
@@ -18,7 +19,8 @@ test("painting prompt contains 中国画, selected answers, and user notes", () 
   });
 
   assert.match(prompt, /中国画/);
-  assert.match(prompt, /想画什么主题？: 山水/);
+  assert.match(prompt, /想画什么内容？: 山水/);
+  assert.match(prompt, /偏好哪种笔墨？: 写意/);
   assert.match(prompt, /偏好哪种设色？: 青绿/);
   assert.match(prompt, /请保留远山云气/);
 });
@@ -29,7 +31,7 @@ test("calligraphy prompt contains 书法, selected answers, and user notes", () 
     answers: {
       text: "明月松间照",
       calligraphy_script: "行书",
-      calligraphy_energy: "苍劲"
+      calligraphy_spirit: "雄强"
     },
     conversationNotes: "落款保持含蓄",
     config: loadConfig(root)
@@ -38,7 +40,7 @@ test("calligraphy prompt contains 书法, selected answers, and user notes", () 
   assert.match(prompt, /书法/);
   assert.match(prompt, /文字: 明月松间照/);
   assert.match(prompt, /偏好哪种书体？: 行书/);
-  assert.match(prompt, /笔势希望如何？: 苍劲/);
+  assert.match(prompt, /希望书法是什么气息？: 雄强/);
   assert.match(prompt, /落款保持含蓄/);
 });
 
@@ -47,7 +49,7 @@ test("artwork prompt includes generation complexity before user notes and final 
     type: "painting",
     answers: {
       painting_subject: "山水",
-      painting_composition: "横幅"
+      painting_format: "横幅"
     },
     conversationNotes: "请保留远山云气",
     generationComplexity: "large",
@@ -116,6 +118,32 @@ test("artwork prompt asks to generate only the artwork without external decorati
   assert.match(paintingPrompt, /墙面/);
   assert.match(calligraphyPrompt, /只生成作品本身/);
   assert.match(calligraphyPrompt, /不要添加作品外的装饰/);
+});
+
+test("classic reference prompt asks for a new painting without frames or direct copying", () => {
+  const prompt = buildArtworkPrompt({
+    type: "painting",
+    answers: {
+      work_type: "painting",
+      creation_mode: "classic_reference",
+      classic_artwork_id: "classic-1",
+      classic_artwork_title: "溪山行旅图",
+      classic_artwork_artist: "范宽",
+      classic_artwork_period: "北宋",
+      classic_artwork_region: "中国",
+      classic_artwork_category: "山水",
+      classic_artwork_reference: "参考其高远构图、山体结构、皴法层次和沉雄气象。"
+    },
+    generationComplexity: "medium",
+    config: loadConfig(root)
+  });
+
+  assert.match(prompt, /古代名作参考/);
+  assert.match(prompt, /溪山行旅图/);
+  assert.match(prompt, /范宽/);
+  assert.match(prompt, /生成一幅新的/);
+  assert.match(prompt, /不直接复制原作/);
+  assert.match(prompt, /不要画框、展墙、相框、博物馆陈列背景/);
 });
 
 test("artwork prompt renders configured sections instead of hardcoded rule blocks", () => {

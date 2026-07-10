@@ -12,7 +12,7 @@ const samplePng = {
 
 async function completePaintingFlow(page) {
   await page.getByRole("button", { name: "国画" }).click();
-  for (const option of ["山水", "水墨", "清雅", "竖幅", "适中"]) {
+  for (const option of ["山水", "写意", "水墨", "清雅", "立轴"]) {
     await page.getByRole("button", { name: option }).click();
   }
   await expect(page.getByRole("heading", { name: "可选：添加环境照片" })).toBeVisible();
@@ -164,7 +164,7 @@ test("studio keeps the current question step after switching to library and back
 
   await page.getByRole("button", { name: "国画" }).click();
   await page.getByRole("button", { name: "山水" }).click();
-  await expect(page.getByRole("heading", { name: "偏好哪种设色？" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "偏好哪种笔墨？" })).toBeVisible();
   await expect(page.getByText("第 3 / 7 步")).toBeVisible();
   await expect(page).toHaveURL(/\/studio\?step=question&index=1$/);
 
@@ -172,7 +172,7 @@ test("studio keeps the current question step after switching to library and back
   await expect(page).toHaveURL(/\/library$/);
 
   await page.getByRole("button", { name: "画案", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "偏好哪种设色？" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "偏好哪种笔墨？" })).toBeVisible();
   await expect(page.getByText("第 3 / 7 步")).toBeVisible();
   await expect(page.getByText("先定作品类型")).toBeHidden();
   await expect(page).toHaveURL(/\/studio\?step=question&index=1$/);

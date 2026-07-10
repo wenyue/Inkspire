@@ -60,15 +60,16 @@ function orientationFromAnswerValue(value) {
 }
 
 function legacyPaintingCompositionOrientation(value) {
-  if (["横幅", "橫幅", "Horizontal"].includes(value)) return "landscape";
-  if (["竖幅", "豎幅", "Vertical"].includes(value)) return "portrait";
+  if (["横幅", "橫幅", "Horizontal", "手卷", "Handscroll", "扇面", "Fan"].includes(value)) return "landscape";
+  if (["竖幅", "豎幅", "Vertical", "立轴", "立軸", "Hanging Scroll"].includes(value)) return "portrait";
   if (["斗方", "Square"].includes(value)) return "square";
   return "unknown";
 }
 
 function legacyCalligraphyLayoutOrientation(value) {
-  if (["竖排", "豎排", "Vertical"].includes(value)) return "portrait";
-  if (["横排", "橫排", "Horizontal", "匾额", "匾額", "Plaque"].includes(value)) return "landscape";
+  if (["竖排", "豎排", "Vertical", "立轴", "立軸", "Hanging Scroll"].includes(value)) return "portrait";
+  if (["横排", "橫排", "Horizontal", "匾额", "匾額", "Plaque", "手卷", "Handscroll", "册页", "冊頁", "Album"].includes(value)) return "landscape";
+  if (["斗方", "Square"].includes(value)) return "square";
   return "unknown";
 }
 
@@ -77,10 +78,10 @@ function answerOrientation(answers = {}) {
     const stableOrientation = orientationFromAnswerValue(answers.painting_composition_orientation);
     if (stableOrientation !== "unknown") return stableOrientation;
 
-    const objectOrientation = orientationFromAnswerValue(answers.painting_composition);
+    const objectOrientation = orientationFromAnswerValue(answers.painting_format || answers.painting_composition);
     if (objectOrientation !== "unknown") return objectOrientation;
 
-    const legacyOrientation = legacyPaintingCompositionOrientation(answers.painting_composition);
+    const legacyOrientation = legacyPaintingCompositionOrientation(answers.painting_format || answers.painting_composition);
     if (legacyOrientation !== "unknown") return legacyOrientation;
     return "unknown";
   }

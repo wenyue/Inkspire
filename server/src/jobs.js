@@ -60,6 +60,18 @@ const PAINTING_TITLE_POOLS = {
     "幽兰吐秀", "芳林晓霁", "露重花醒", "香径听莺",
     "碧叶藏声", "春水照禽", "秋英含露", "寒梅报春"
   ],
+  "走兽游鱼": [
+    "林泉生趣", "游鳞动影", "松风瑞兽", "溪石闲禽",
+    "晴波鱼跃", "山径兽踪", "水草清游", "岩畔灵姿",
+    "浅渚听风", "古木栖踪", "云林瑞影", "清溪逐浪",
+    "寒塘游影", "石上凝神", "野趣入画", "一跃清波"
+  ],
+  "文房雅物": [
+    "清供入画", "瓶花静赏", "案上清风", "古器生香",
+    "砚边春色", "素几含香", "雅物清陈", "闲斋静供",
+    "炉烟入卷", "花石相宜", "书卷生辉", "一案清赏",
+    "瓶中春信", "古意盈案", "茶烟墨色", "清玩成章"
+  ],
   "人物": [
     "高士临风", "古意风骨", "清谈入画", "松下逸思",
     "琴心远韵", "对月吟怀", "竹下清坐", "溪边问道",
@@ -122,10 +134,10 @@ function paintingTitleCandidatesFromAnswers(answers = {}) {
   const subject = meaningfulAnswer(answers.painting_subject);
   const mood = meaningfulAnswer(answers.painting_mood);
   const palette = meaningfulAnswer(answers.painting_palette);
-  const composition = meaningfulAnswer(answers.painting_composition);
-  const detail = meaningfulAnswer(answers.painting_detail);
+  const brushwork = meaningfulAnswer(answers.painting_brushwork);
+  const format = meaningfulAnswer(answers.painting_format || answers.painting_composition);
   const pool = PAINTING_TITLE_POOLS[subject] || PAINTING_TITLE_POOLS.default;
-  const start = stableIndex([subject, mood, palette, composition, detail], pool.length);
+  const start = stableIndex([subject, mood, palette, brushwork, format], pool.length);
   return pool.slice(start).concat(pool.slice(0, start));
 }
 

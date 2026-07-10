@@ -8,20 +8,42 @@
         "/previews/options/painting-subject-0-landscape.webp",
         "/previews/options/painting-subject-1-birds-flowers.webp",
         "/previews/options/painting-subject-2-figures.webp",
-        "/previews/options/painting-subject-3-inkspire-decide.webp"
+        "/previews/options/painting-subject-3-animals-fish.webp",
+        "/previews/options/painting-subject-4-studio-objects.webp"
       ],
-      "preview_prompt": "中国画主题选择，留白构图",
+      "preview_prompt": "中国画题材选择，山水花鸟人物雅物",
       "title": {
-        "zh-Hans": "想画什么主题？",
-        "zh-Hant": "想畫什麼主題？",
-        "en": "What subject should the painting show?"
+        "zh-Hans": "想画什么内容？",
+        "zh-Hant": "想畫什麼內容？",
+        "en": "What should the painting show?"
       },
       "options": {
-        "zh-Hans": ["山水", "花鸟", "人物", "由墨起决定"],
-        "zh-Hant": ["山水", "花鳥", "人物", "由墨起決定"],
-        "en": ["Landscape", "Birds and Flowers", "Figures", "Let Inkspire decide"]
+        "zh-Hans": ["山水", "花鸟", "人物", "走兽游鱼", "文房雅物"],
+        "zh-Hant": ["山水", "花鳥", "人物", "走獸游魚", "文房雅物"],
+        "en": ["Landscape", "Birds and Flowers", "Figures", "Animals and Fish", "Studio Objects"]
+      }
+    },
+    {
+      "id": "painting_brushwork",
+      "applies_to": ["painting", "fusion"],
+      "preview_image": "/previews/questions/painting-brushwork.webp",
+      "option_preview_images": [
+        "/previews/options/painting-brushwork-0-gongbi.webp",
+        "/previews/options/painting-brushwork-1-xieyi.webp",
+        "/previews/options/painting-brushwork-2-baimiao.webp",
+        "/previews/options/painting-brushwork-3-mogu.webp"
+      ],
+      "preview_prompt": "中国画笔墨语言，工写白描没骨",
+      "title": {
+        "zh-Hans": "偏好哪种笔墨？",
+        "zh-Hant": "偏好哪種筆墨？",
+        "en": "Which brushwork do you prefer?"
       },
-      "default_option": "由墨起决定"
+      "options": {
+        "zh-Hans": ["工笔", "写意", "白描", "没骨"],
+        "zh-Hant": ["工筆", "寫意", "白描", "沒骨"],
+        "en": ["Gongbi", "Freehand", "Plain Outline", "Boneless"]
+      }
     },
     {
       "id": "painting_palette",
@@ -31,20 +53,19 @@
         "/previews/options/painting-palette-0-ink-wash.webp",
         "/previews/options/painting-palette-1-blue-green.webp",
         "/previews/options/painting-palette-2-light-umber.webp",
-        "/previews/options/painting-palette-3-inkspire-decide.webp"
+        "/previews/options/painting-palette-3-heavy-color.webp"
       ],
-      "preview_prompt": "中国画设色，水墨与青绿",
+      "preview_prompt": "中国画设色，水墨青绿浅绛重彩",
       "title": {
         "zh-Hans": "偏好哪种设色？",
         "zh-Hant": "偏好哪種設色？",
         "en": "Which color treatment do you prefer?"
       },
       "options": {
-        "zh-Hans": ["水墨", "青绿", "浅绛", "由墨起决定"],
-        "zh-Hant": ["水墨", "青綠", "淺絳", "由墨起決定"],
-        "en": ["Ink wash", "Blue-green", "Light umber", "Let Inkspire decide"]
-      },
-      "default_option": "由墨起决定"
+        "zh-Hans": ["水墨", "青绿", "浅绛", "重彩"],
+        "zh-Hant": ["水墨", "青綠", "淺絳", "重彩"],
+        "en": ["Ink Wash", "Blue-Green", "Light Umber", "Rich Color"]
+      }
     },
     {
       "id": "painting_mood",
@@ -52,68 +73,45 @@
       "preview_image": "/previews/questions/painting-mood.webp",
       "option_preview_images": [
         "/previews/options/painting-mood-0-refined.webp",
-        "/previews/options/painting-mood-1-grand.webp",
-        "/previews/options/painting-mood-2-gentle.webp",
-        "/previews/options/painting-mood-3-inkspire-decide.webp"
+        "/previews/options/painting-mood-1-ethereal.webp",
+        "/previews/options/painting-mood-2-grand.webp",
+        "/previews/options/painting-mood-3-archaic.webp",
+        "/previews/options/painting-mood-4-luminous.webp"
       ],
-      "preview_prompt": "中国画意境，清雅静远",
+      "preview_prompt": "中国画意境，清雅空灵雄浑古拙明丽",
       "title": {
         "zh-Hans": "希望作品是什么气质？",
         "zh-Hant": "希望作品是什麼氣質？",
         "en": "What mood should the work carry?"
       },
       "options": {
-        "zh-Hans": ["清雅", "雄浑", "温润", "由墨起决定"],
-        "zh-Hant": ["清雅", "雄渾", "溫潤", "由墨起決定"],
-        "en": ["Refined", "Grand", "Gentle", "Let Inkspire decide"]
-      },
-      "default_option": "由墨起决定"
+        "zh-Hans": ["清雅", "空灵", "雄浑", "古拙", "明丽"],
+        "zh-Hant": ["清雅", "空靈", "雄渾", "古拙", "明麗"],
+        "en": ["Refined", "Ethereal", "Grand", "Archaic", "Luminous"]
+      }
     },
     {
-      "id": "painting_composition",
+      "id": "painting_format",
       "applies_to": ["painting", "fusion"],
-      "preview_image": "/previews/questions/painting-composition.webp",
+      "preview_image": "/previews/questions/painting-format.webp",
       "option_preview_images": [
-        "/previews/options/painting-composition-0-horizontal.webp",
-        "/previews/options/painting-composition-1-vertical.webp",
-        "/previews/options/painting-composition-2-square.webp",
-        "/previews/options/painting-composition-3-inkspire-decide.webp"
+        "/previews/options/painting-format-0-horizontal.webp",
+        "/previews/options/painting-format-1-hanging-scroll.webp",
+        "/previews/options/painting-format-2-square.webp",
+        "/previews/options/painting-format-3-handscroll.webp",
+        "/previews/options/painting-format-4-fan.webp"
       ],
-      "preview_prompt": "中国画构图，留白与远近",
+      "preview_prompt": "中国画形制，横幅立轴斗方手卷扇面",
       "title": {
-        "zh-Hans": "喜欢哪种构图？",
-        "zh-Hant": "喜歡哪種構圖？",
-        "en": "Which composition do you like?"
+        "zh-Hans": "希望做成什么形制？",
+        "zh-Hant": "希望做成什麼形制？",
+        "en": "Which format should it take?"
       },
       "options": {
-        "zh-Hans": ["横幅", "竖幅", "斗方", "由墨起决定"],
-        "zh-Hant": ["橫幅", "豎幅", "斗方", "由墨起決定"],
-        "en": ["Horizontal", "Vertical", "Square", "Let Inkspire decide"]
-      },
-      "default_option": "由墨起决定"
-    },
-    {
-      "id": "painting_detail",
-      "applies_to": ["painting", "fusion"],
-      "preview_image": "/previews/questions/painting-detail.webp",
-      "option_preview_images": [
-        "/previews/options/painting-detail-0-sparse.webp",
-        "/previews/options/painting-detail-1-balanced.webp",
-        "/previews/options/painting-detail-2-dense.webp",
-        "/previews/options/painting-detail-3-inkspire-decide.webp"
-      ],
-      "preview_prompt": "中国画细节密度，疏密有致",
-      "title": {
-        "zh-Hans": "细节希望多还是少？",
-        "zh-Hant": "細節希望多還是少？",
-        "en": "How much detail should it have?"
-      },
-      "options": {
-        "zh-Hans": ["简淡", "适中", "繁密", "由墨起决定"],
-        "zh-Hant": ["簡淡", "適中", "繁密", "由墨起決定"],
-        "en": ["Sparse", "Balanced", "Dense", "Let Inkspire decide"]
-      },
-      "default_option": "由墨起决定"
+        "zh-Hans": ["横幅", "立轴", "斗方", "手卷", "扇面"],
+        "zh-Hant": ["橫幅", "立軸", "斗方", "手卷", "扇面"],
+        "en": ["Horizontal", "Hanging Scroll", "Square", "Handscroll", "Fan"]
+      }
     }
   ],
   "calligraphy": [
@@ -121,7 +119,7 @@
       "id": "text",
       "applies_to": ["calligraphy", "fusion"],
       "input_type": "textarea",
-      "preview_image": "/previews/questions/calligraphy-script.webp",
+      "preview_image": "/previews/questions/calligraphy-text.webp",
       "preview_prompt": "书法正文，祝福语或诗句",
       "title": {
         "zh-Hans": "想写什么正文？",
@@ -134,9 +132,9 @@
         "en": "For example: Peace and joy, or a short blessing"
       },
       "helper_text": {
-        "zh-Hans": "这会作为书法正文进入生成；后面再选择书体、章法和墨色。",
-        "zh-Hant": "這會作為書法正文進入生成；後面再選擇書體、章法和墨色。",
-        "en": "This becomes the calligraphy wording; script, layout, and ink come next."
+        "zh-Hans": "这会作为书法正文进入生成；后面再选择书体、气息、章法和纸墨。",
+        "zh-Hant": "這會作為書法正文進入生成；後面再選擇書體、氣息、章法和紙墨。",
+        "en": "This becomes the calligraphy wording; script, spirit, layout, and material come next."
       },
       "submit_label": {
         "zh-Hans": "继续定书体",
@@ -152,112 +150,88 @@
         "/previews/options/calligraphy-script-0-regular.webp",
         "/previews/options/calligraphy-script-1-running.webp",
         "/previews/options/calligraphy-script-2-cursive.webp",
-        "/previews/options/calligraphy-script-3-inkspire-decide.webp"
+        "/previews/options/calligraphy-script-3-clerical.webp",
+        "/previews/options/calligraphy-script-4-seal.webp"
       ],
-      "preview_prompt": "书法字体选择，行草楷隶",
+      "preview_prompt": "书法书体选择，楷行草隶篆",
       "title": {
         "zh-Hans": "偏好哪种书体？",
         "zh-Hant": "偏好哪種書體？",
         "en": "Which script do you prefer?"
       },
       "options": {
-        "zh-Hans": ["楷书", "行书", "草书", "由墨起决定"],
-        "zh-Hant": ["楷書", "行書", "草書", "由墨起決定"],
-        "en": ["Regular", "Running", "Cursive", "Let Inkspire decide"]
-      },
-      "default_option": "由墨起决定"
+        "zh-Hans": ["楷书", "行书", "草书", "隶书", "篆书"],
+        "zh-Hant": ["楷書", "行書", "草書", "隸書", "篆書"],
+        "en": ["Regular", "Running", "Cursive", "Clerical", "Seal"]
+      }
     },
     {
-      "id": "calligraphy_energy",
+      "id": "calligraphy_spirit",
       "applies_to": ["calligraphy", "fusion"],
-      "preview_image": "/previews/questions/calligraphy-energy.webp",
+      "preview_image": "/previews/questions/calligraphy-spirit.webp",
       "option_preview_images": [
-        "/previews/options/calligraphy-energy-0-steady.webp",
-        "/previews/options/calligraphy-energy-1-lively.webp",
-        "/previews/options/calligraphy-energy-2-forceful.webp",
-        "/previews/options/calligraphy-energy-3-inkspire-decide.webp"
+        "/previews/options/calligraphy-spirit-0-dignified.webp",
+        "/previews/options/calligraphy-spirit-1-graceful.webp",
+        "/previews/options/calligraphy-spirit-2-forceful.webp",
+        "/previews/options/calligraphy-spirit-3-archaic.webp",
+        "/previews/options/calligraphy-spirit-4-warm.webp"
       ],
-      "preview_prompt": "书法笔势，飞白与墨韵",
+      "preview_prompt": "书法气息，端庄俊逸雄强古拙温润",
       "title": {
-        "zh-Hans": "笔势希望如何？",
-        "zh-Hant": "筆勢希望如何？",
-        "en": "What brush energy should it have?"
+        "zh-Hans": "希望书法是什么气息？",
+        "zh-Hant": "希望書法是什麼氣息？",
+        "en": "What spirit should the calligraphy have?"
       },
       "options": {
-        "zh-Hans": ["沉稳", "灵动", "苍劲", "由墨起决定"],
-        "zh-Hant": ["沉穩", "靈動", "蒼勁", "由墨起決定"],
-        "en": ["Steady", "Lively", "Forceful", "Let Inkspire decide"]
-      },
-      "default_option": "由墨起决定"
+        "zh-Hans": ["端庄", "俊逸", "雄强", "古拙", "温润"],
+        "zh-Hant": ["端莊", "俊逸", "雄強", "古拙", "溫潤"],
+        "en": ["Dignified", "Graceful", "Forceful", "Archaic", "Warm"]
+      }
     },
     {
       "id": "calligraphy_layout",
       "applies_to": ["calligraphy", "fusion"],
       "preview_image": "/previews/questions/calligraphy-layout.webp",
       "option_preview_images": [
-        "/previews/options/calligraphy-layout-0-vertical.webp",
+        "/previews/options/calligraphy-layout-0-hanging-scroll.webp",
         "/previews/options/calligraphy-layout-1-horizontal.webp",
-        "/previews/options/calligraphy-layout-2-plaque.webp",
-        "/previews/options/calligraphy-layout-3-inkspire-decide.webp"
+        "/previews/options/calligraphy-layout-2-square.webp",
+        "/previews/options/calligraphy-layout-3-handscroll.webp",
+        "/previews/options/calligraphy-layout-4-album.webp"
       ],
-      "preview_prompt": "书法章法，竖排横排与落款",
+      "preview_prompt": "书法章法，立轴横幅斗方手卷册页",
       "title": {
         "zh-Hans": "想要哪种章法？",
         "zh-Hant": "想要哪種章法？",
         "en": "Which layout do you want?"
       },
       "options": {
-        "zh-Hans": ["竖排", "横排", "匾额", "由墨起决定"],
-        "zh-Hant": ["豎排", "橫排", "匾額", "由墨起決定"],
-        "en": ["Vertical", "Horizontal", "Plaque", "Let Inkspire decide"]
-      },
-      "default_option": "由墨起决定"
+        "zh-Hans": ["立轴", "横幅", "斗方", "手卷", "册页"],
+        "zh-Hant": ["立軸", "橫幅", "斗方", "手卷", "冊頁"],
+        "en": ["Hanging Scroll", "Horizontal", "Square", "Handscroll", "Album"]
+      }
     },
     {
-      "id": "calligraphy_paper",
+      "id": "calligraphy_material",
       "applies_to": ["calligraphy", "fusion"],
-      "preview_image": "/previews/questions/calligraphy-paper.webp",
+      "preview_image": "/previews/questions/calligraphy-material.webp",
       "option_preview_images": [
-        "/previews/options/calligraphy-paper-0-plain-xuan.webp",
-        "/previews/options/calligraphy-paper-1-gold-flecked.webp",
-        "/previews/options/calligraphy-paper-2-antique.webp",
-        "/previews/options/calligraphy-paper-3-inkspire-decide.webp"
+        "/previews/options/calligraphy-material-0-plain-xuan.webp",
+        "/previews/options/calligraphy-material-1-antique.webp",
+        "/previews/options/calligraphy-material-2-gold-flecked.webp",
+        "/previews/options/calligraphy-material-3-rubbing.webp"
       ],
-      "preview_prompt": "书法纸色，宣纸质感",
+      "preview_prompt": "书法纸墨质感，素宣仿古洒金碑拓",
       "title": {
-        "zh-Hans": "纸张氛围偏好？",
-        "zh-Hant": "紙張氛圍偏好？",
-        "en": "What paper mood do you prefer?"
+        "zh-Hans": "偏好哪种纸墨质感？",
+        "zh-Hant": "偏好哪種紙墨質感？",
+        "en": "Which paper and ink surface do you prefer?"
       },
       "options": {
-        "zh-Hans": ["素宣", "洒金", "仿古", "由墨起决定"],
-        "zh-Hant": ["素宣", "灑金", "仿古", "由墨起決定"],
-        "en": ["Plain xuan", "Gold-flecked", "Antique", "Let Inkspire decide"]
-      },
-      "default_option": "由墨起决定"
-    },
-    {
-      "id": "calligraphy_ink",
-      "applies_to": ["calligraphy", "fusion"],
-      "preview_image": "/previews/questions/calligraphy-ink.webp",
-      "option_preview_images": [
-        "/previews/options/calligraphy-ink-0-deep-ink.webp",
-        "/previews/options/calligraphy-ink-1-light-ink.webp",
-        "/previews/options/calligraphy-ink-2-dry-wet.webp",
-        "/previews/options/calligraphy-ink-3-inkspire-decide.webp"
-      ],
-      "preview_prompt": "书法墨色，浓淡干湿",
-      "title": {
-        "zh-Hans": "墨色希望怎样？",
-        "zh-Hant": "墨色希望怎樣？",
-        "en": "How should the ink feel?"
-      },
-      "options": {
-        "zh-Hans": ["浓墨", "淡墨", "干湿变化", "由墨起决定"],
-        "zh-Hant": ["濃墨", "淡墨", "乾濕變化", "由墨起決定"],
-        "en": ["Deep ink", "Light ink", "Dry-wet variation", "Let Inkspire decide"]
-      },
-      "default_option": "由墨起决定"
+        "zh-Hans": ["素宣", "仿古", "洒金", "碑拓"],
+        "zh-Hant": ["素宣", "仿古", "灑金", "碑拓"],
+        "en": ["Plain Xuan", "Antique Paper", "Gold-flecked", "Rubbing"]
+      }
     }
   ]
 }

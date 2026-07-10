@@ -3,15 +3,18 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 const css = readFileSync(resolve(__dirname, "../src/styles.css"), "utf8");
+const cssWithoutComments = css.replace(/\/\*[\s\S]*?\*\//g, "");
 
 function blockFor(selector: string): string {
   const start = css.indexOf(selector);
-  if (start === -1) {
-    return "";
-  }
+  expect(start, `Missing CSS selector ${selector}`).not.toBe(-1);
   const open = css.indexOf("{", start);
   const close = css.indexOf("}", open);
   return css.slice(open + 1, close);
+}
+
+function expectNoRuleForClass(className: string): void {
+  expect(cssWithoutComments).not.toMatch(new RegExp(`\\.${className}(?![-_a-zA-Z0-9])[^{}]*\\{`));
 }
 
 describe("mobile touch targets", () => {
@@ -75,10 +78,16 @@ describe("mobile touch targets", () => {
 
   it("keeps image loading surfaces empty instead of patterned placeholders", () => {
     expect(blockFor(".preview-ink")).not.toMatch(/background:/);
-    expect(blockFor(".preview-montage")).not.toMatch(/background:/);
+    expect(blockFor(".preview-hero-image")).not.toMatch(/background:/);
     expect(blockFor(".option-preview-frame")).not.toMatch(/background:/);
     expect(blockFor(".expert-sample-frame")).not.toMatch(/background:/);
     expect(blockFor(".result-grid img,\n.image-placeholder")).not.toMatch(/background:/);
+  });
+
+  it("does not keep stitched montage styles for question previews", () => {
+    expectNoRuleForClass("preview-montage");
+    expectNoRuleForClass("montage-cell");
+    expectNoRuleForClass("montage-tile");
   });
 
   it("keeps library titles to one line with ellipsis", () => {
