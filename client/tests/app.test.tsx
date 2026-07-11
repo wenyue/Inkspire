@@ -619,7 +619,7 @@ describe("App", () => {
 
     expect(styles).toMatch(/--bottom-nav-clearance:\s*env\(safe-area-inset-bottom\)/);
     expect(styles).toMatch(/padding-bottom:\s*var\(--bottom-nav-clearance\)/);
-    expect(styles).toMatch(/padding:\s*8px 8px calc\(8px \+ env\(safe-area-inset-bottom\)\)/);
+    expect(styles).toMatch(/padding:\s*4px 6px calc\(4px \+ env\(safe-area-inset-bottom\)\)/);
     expect(styles).toMatch(/@media \(max-width:\s*520px\)[\s\S]*\.language-select-label[\s\S]*clip:\s*rect\(0 0 0 0\)/);
   });
 
@@ -2172,7 +2172,7 @@ describe("App", () => {
     expect(screen.getByText("camera.png")).toBeInTheDocument();
   });
 
-  it("puts the fusion image below the artwork before result actions on narrow screens", async () => {
+  it("puts result actions directly after the artwork and before the fusion image on narrow screens", async () => {
     Object.defineProperty(window, "innerWidth", { configurable: true, value: 390 });
     const user = userEvent.setup();
     const { container } = renderApp();
@@ -2188,8 +2188,8 @@ describe("App", () => {
     expect(actions).toBeTruthy();
     expect(artworkFigure).toBeTruthy();
     expect(fusionFigure).toBeTruthy();
-    expect(artworkFigure!.compareDocumentPosition(fusionFigure!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(fusionFigure!.compareDocumentPosition(actions!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(artworkFigure!.compareDocumentPosition(actions!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(actions!.compareDocumentPosition(fusionFigure!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it("uses compact square result media on narrow screens only", async () => {

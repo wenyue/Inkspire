@@ -175,6 +175,9 @@ const CLIENT_OVERRIDES: Dictionaries = {
       sampleHint: "左右滑动查看更多作品",
       profileNotice: "吴嘉茵为平台已入驻专家，具体档期与交付安排将在咨询后确认。",
       serviceBoundary: "服务范围、修改轮次与交付时间均以承接确认单为准。",
+      consultLabel: "发起咨询",
+      consultHint: "复制平台微信，说明想咨询的方向与作品用途。",
+      consultCopied: "平台微信已复制",
       productionUnavailable: "暂未开放制作咨询"
     },
     production: {
@@ -370,6 +373,9 @@ const CLIENT_OVERRIDES: Dictionaries = {
       sampleHint: "左右滑動查看更多作品",
       profileNotice: "吳嘉茵為平台已入駐專家，具體檔期與交付安排將在諮詢後確認。",
       serviceBoundary: "服務範圍、修改輪次與交付時間均以承接確認單為準。",
+      consultLabel: "發起諮詢",
+      consultHint: "複製平台微信，說明想諮詢的方向與作品用途。",
+      consultCopied: "平台微信已複製",
       productionUnavailable: "暫未開放製作諮詢"
     },
     production: {
@@ -564,6 +570,9 @@ const CLIENT_OVERRIDES: Dictionaries = {
       sampleHint: "Swipe sideways to see more works",
       profileNotice: "Wu Jiayin is an onboarded expert. Availability and delivery arrangements are confirmed after consultation.",
       serviceBoundary: "Scope, revisions, and delivery are set in the final engagement confirmation.",
+      consultLabel: "Start a consultation",
+      consultHint: "Copy the platform WeChat and share the direction and intended use.",
+      consultCopied: "Platform WeChat copied",
       productionUnavailable: "Production consultation is not open yet"
     },
     production: {

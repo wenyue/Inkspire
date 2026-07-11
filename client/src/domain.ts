@@ -115,6 +115,20 @@ export function resultLayoutForWidth(width: number): ResultLayout {
   return width >= 700 ? "split" : "stacked";
 }
 
+export function artworkFormatClass(answers: Answers = {}): string {
+  const format = (answers.painting_format || answers.calligraphy_layout || "").trim().toLowerCase();
+  if (["立轴", "立軸", "竖幅", "豎幅", "hanging scroll", "vertical"].includes(format)) {
+    return "artwork-format-vertical";
+  }
+  if (["横幅", "橫幅", "手卷", "horizontal", "handscroll"].includes(format)) {
+    return "artwork-format-wide";
+  }
+  if (["斗方", "册页", "冊頁", "square", "album"].includes(format)) {
+    return "artwork-format-square";
+  }
+  return "artwork-format-default";
+}
+
 export function imageUrl(path?: string | null): string {
   return path ? `/api/records/${path}` : "";
 }

@@ -7,6 +7,7 @@ import {
   isQuestionFlowComplete,
   nextQuestion,
   optionValueForQuestion,
+  artworkFormatClass,
   type QuestionConfig,
   resultLayoutForWidth
 } from "../src/domain";
@@ -105,5 +106,12 @@ describe("domain question flow", () => {
     expect(resultLayoutForWidth(390)).toBe("stacked");
     expect(resultLayoutForWidth(699)).toBe("stacked");
     expect(resultLayoutForWidth(700)).toBe("split");
+  });
+
+  it("maps saved artwork formats to presentation aspect classes", () => {
+    expect(artworkFormatClass({ painting_format: "立轴" })).toBe("artwork-format-vertical");
+    expect(artworkFormatClass({ painting_format: "Handscroll" })).toBe("artwork-format-wide");
+    expect(artworkFormatClass({ calligraphy_layout: "斗方" })).toBe("artwork-format-square");
+    expect(artworkFormatClass({})).toBe("artwork-format-default");
   });
 });

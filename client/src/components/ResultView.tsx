@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, Brush, ImagePlus, Wand2 } from "lucide-react";
 import type { GenerationRecord } from "../api";
-import { resultLayoutForWidth } from "../domain";
+import { artworkFormatClass, resultLayoutForWidth } from "../domain";
 import { generationFailureKind } from "../generationFailure";
 import ImageViewer from "./ImageViewer";
 
@@ -149,25 +149,26 @@ export default function ResultView({
   const fusionFailed = Boolean(fusion && failedImages.fusion);
   const hasEnvironmentImage = Boolean(record.source_photo_path);
   const mediaClassName = layout === "stacked" ? "compact-result-media" : undefined;
+  const artworkMediaClassName = [mediaClassName, artworkFormatClass(record.answers)].filter(Boolean).join(" ");
   const uploadPhotoLabel = fusion ? reuploadEnvironmentPhotoLabel : attachPhotoLabel;
   const artworkFigure = (
     <figure>
       {artwork && !artworkFailed ? (
         <button
-          className={`image-open-button ${mediaClassName ?? ""}`.trim()}
+          className={`image-open-button ${artworkMediaClassName}`.trim()}
           type="button"
           aria-label={`查看${artworkLabel}`}
           onClick={() => setViewerImage({ src: artwork, alt: artworkLabel })}
         >
           <img
-            className={mediaClassName}
+            className={artworkMediaClassName}
             src={artwork}
             alt={artworkLabel}
             onError={() => setFailedImages((current) => ({ ...current, artwork: true }))}
           />
         </button>
       ) : (
-        <div className={`image-placeholder image-error ${mediaClassName ?? ""}`.trim()} role="status">
+        <div className={`image-placeholder image-error ${artworkMediaClassName}`.trim()} role="status">
           <strong>{imageUnavailableTitle}</strong>
           <span>{imageUnavailableHint}</span>
         </div>
@@ -286,12 +287,12 @@ export default function ResultView({
             {artworkFigure}
             {layout === "split" ? fusionFigure : null}
           </div>
+          {layout === "stacked" ? resultActions : null}
           {layout === "stacked" && fusionFigure ? (
             <div className="result-grid stacked result-fusion-followup">
               {fusionFigure}
             </div>
           ) : null}
-          {layout === "stacked" ? resultActions : null}
         </>
       )}
       {failed || layout === "split" ? resultActions : null}

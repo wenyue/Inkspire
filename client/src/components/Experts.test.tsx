@@ -1,4 +1,5 @@
 import { cleanup, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, test } from "vitest";
 import Experts from "./Experts";
 
@@ -27,6 +28,8 @@ describe("Experts", () => {
       extraServiceDescription="说明" credentialsLabel="专业资历" sampleHeading="代表作品"
       sampleHint="左右滑动查看更多作品"
       profileNotice="吴嘉茵为平台已入驻专家。" serviceBoundary="服务范围、修改轮次与交付时间以双方确认为准。"
+      consultLabel="咨询吴嘉茵" consultHint="复制平台微信后发起咨询" copiedLabel="平台微信已复制"
+      consultWechat="InkspireArt"
     />);
     expect(screen.getByRole("heading", { name: "吴嘉茵" })).toBeInTheDocument();
     expect(screen.getByText("广东省")).toBeInTheDocument();
@@ -39,6 +42,28 @@ describe("Experts", () => {
     expect(screen.getByText("服务范围、修改轮次与交付时间以双方确认为准。")).toBeInTheDocument();
     expect(screen.queryByText(/价格|金额|费用|报价|估算/)).not.toBeInTheDocument();
     expect(screen.queryByText(/非专家作品|承接人待确认|媒体来源|授权/)).not.toBeInTheDocument();
+  });
+
+  test("turns the artisan service card into a working consultation entry", async () => {
+    const user = userEvent.setup();
+    render(<Experts
+      experts={[{
+        id: "wu_jiayin",
+        name: { "zh-Hans": "吴嘉茵" },
+        region: { "zh-Hans": "广东省" },
+        bio: { "zh-Hans": "书法家" },
+        services: []
+      }]}
+      title="雅匠" locale="zh-Hans" serviceHeading="可咨询方向" extraServiceName="装裱咨询"
+      extraServiceDescription="说明" credentialsLabel="专业资历" sampleHeading="代表作品"
+      sampleHint="左右滑动查看更多作品" profileNotice="已入驻" serviceBoundary="确认后承接"
+      consultLabel="咨询吴嘉茵" consultHint="复制平台微信后发起咨询" copiedLabel="平台微信已复制"
+      consultWechat="InkspireArt"
+    />);
+
+    await user.click(screen.getByRole("button", { name: "咨询吴嘉茵" }));
+    expect(await navigator.clipboard.readText()).toBe("InkspireArt");
+    expect(screen.getByRole("status")).toHaveTextContent("平台微信已复制");
   });
 
   test("localizes Wu Jiayin's onboarded profile", () => {

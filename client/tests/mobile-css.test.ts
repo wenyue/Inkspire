@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 const css = readFileSync(resolve(__dirname, "../src/styles.css"), "utf8");
+const adjustViewSource = readFileSync(resolve(__dirname, "../src/components/AdjustView.tsx"), "utf8");
 const cssWithoutComments = css.replace(/\/\*[\s\S]*?\*\//g, "");
 
 function blockFor(selector: string, startAt = 0): string {
@@ -177,6 +178,25 @@ describe("mobile touch targets", () => {
 
     expect(compactResultRules).toMatch(/\.result-actions\s*{[^}]*grid-template-columns:\s*1fr/s);
     expect(blockFor(".result-action-button,\n.result-upload-action")).toContain("min-height: 44px");
+  });
+
+  it("uses artwork format classes for result, adjustment, and library media", () => {
+    expect(blockFor(".artwork-format-vertical")).toContain("aspect-ratio: 3 / 4");
+    expect(blockFor(".artwork-format-wide")).toContain("aspect-ratio: 2 / 1");
+    expect(blockFor(".artwork-format-square")).toContain("aspect-ratio: 1 / 1");
+    expect(css).toMatch(/\.library-thumb\.artwork-format-vertical/);
+  });
+
+  it("keeps adjust clear and submit actions thumb friendly", () => {
+    expect(blockFor(".adjust-note-clear")).toContain("width: 44px");
+    expect(blockFor(".adjust-note-clear")).toContain("height: 44px");
+    expect(adjustViewSource).toMatch(/className="primary-action mobile-action-surface"/);
+  });
+
+  it("keeps the bottom tab chrome compact without shrinking tap targets", () => {
+    expect(blockFor(".bottom-tabs {")).toContain("margin: 6px auto 0");
+    expect(blockFor(".bottom-tabs {")).toMatch(/padding:\s*4px 6px calc\(4px \+ env\(safe-area-inset-bottom\)\)/);
+    expect(blockFor(".bottom-tabs button")).toContain("min-height: 44px");
   });
 
   it("keeps image loading surfaces empty instead of patterned placeholders", () => {

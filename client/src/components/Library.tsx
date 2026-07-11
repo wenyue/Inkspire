@@ -2,6 +2,7 @@ import { BookOpen, BookmarkX } from "lucide-react";
 import { useState } from "react";
 import type { LibraryRecord } from "../api";
 import type { Locale } from "../domain";
+import { artworkFormatClass } from "../domain";
 
 interface LibraryProps {
   records: LibraryRecord[];
@@ -149,7 +150,7 @@ function LibraryItem({
         aria-label={`${openLabel} ${record.title || record.id}`}
         onClick={() => onOpen?.(record)}
       >
-        <span className={imageFailed ? "library-thumb library-thumb-unavailable" : "library-thumb"}>
+        <span className={`${imageFailed ? "library-thumb library-thumb-unavailable" : "library-thumb"} ${artworkFormatClass(record.answers)}`}>
           {src && !imageFailed ? (
             <img src={src} alt={record.title || record.id} onError={() => setImageFailed(true)} />
           ) : imageFailed ? (

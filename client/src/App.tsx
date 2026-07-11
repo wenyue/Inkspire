@@ -1479,6 +1479,10 @@ export default function App() {
                 sampleHint={t("experts.sampleHint")}
                 profileNotice={t("experts.profileNotice")}
                 serviceBoundary={t("experts.serviceBoundary")}
+                consultLabel={t("experts.consultLabel")}
+                consultHint={t("experts.consultHint")}
+                copiedLabel={t("experts.consultCopied")}
+                consultWechat={config.productionContact?.wechat}
               />
             ) : null}
           </>

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, X } from "lucide-react";
 import type { GenerationRecord } from "../api";
+import { artworkFormatClass } from "../domain";
 import ImageViewer from "./ImageViewer";
 
 interface AdjustViewProps {
@@ -68,7 +69,7 @@ export default function AdjustView({
         </button>
       </div>
       <h2>{title}</h2>
-      <div className="adjust-base">
+      <div className={`adjust-base ${artworkFormatClass(record.answers)}`}>
         {image && !imageFailed ? (
           <button
             className="adjust-base-open surface-clear-button"
@@ -122,7 +123,7 @@ export default function AdjustView({
         ))}
       </div>
       <button
-        className="primary-action"
+        className="primary-action mobile-action-surface"
         type="button"
         disabled={!canSubmit}
         onClick={() => onSubmit(trimmed)}

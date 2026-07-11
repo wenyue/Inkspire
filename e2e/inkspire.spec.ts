@@ -415,6 +415,8 @@ test("mobile user can complete Inkspire creation flow with mocked generation", a
   await expect(page.getByRole("button", { name: "制作作品" })).toBeVisible();
   await page.getByRole("button", { name: "雅匠" }).click();
   await expect(page.getByText("可咨询方向")).toBeVisible();
+  await page.getByRole("button", { name: "发起咨询" }).click();
+  await expect(page.getByRole("status")).toHaveText("平台微信已复制");
   await page.getByRole("button", { name: "藏卷", exact: true }).click();
   await expect(page.getByRole("img", { name: "作品图" })).toBeVisible();
   await expect(page.getByRole("button", { name: "藏卷", exact: true })).toHaveAttribute("aria-pressed", "true");

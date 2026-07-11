@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { Expert } from "../api";
 import type { Locale } from "../domain";
 
@@ -13,6 +14,10 @@ interface ExpertsProps {
   sampleHint: string;
   profileNotice: string;
   serviceBoundary: string;
+  consultLabel?: string;
+  consultHint?: string;
+  copiedLabel?: string;
+  consultWechat?: string;
 }
 
 function localizedText(value: string | Record<string, string>, locale: Locale): string {
@@ -31,8 +36,20 @@ export default function Experts({
   sampleHeading,
   sampleHint,
   profileNotice,
-  serviceBoundary
+  serviceBoundary,
+  consultLabel,
+  consultHint,
+  copiedLabel,
+  consultWechat
 }: ExpertsProps) {
+  const [copiedExpertId, setCopiedExpertId] = useState("");
+
+  const copyConsultContact = async (expertId: string) => {
+    if (!consultWechat || !navigator.clipboard) return;
+    await navigator.clipboard.writeText(consultWechat);
+    setCopiedExpertId(expertId);
+  };
+
   return (
     <section className="experts-panel" aria-labelledby="experts-heading">
       <h2 id="experts-heading">{title}</h2>
@@ -91,6 +108,15 @@ export default function Experts({
             </ul>
           </div>
           <p className="expert-service-boundary">{serviceBoundary}</p>
+          {consultLabel && consultWechat ? (
+            <div className="expert-consult">
+              {consultHint ? <p>{consultHint}</p> : null}
+              <button className="primary-action" type="button" onClick={() => copyConsultContact(expert.id)}>
+                {consultLabel}
+              </button>
+              {copiedExpertId === expert.id && copiedLabel ? <span role="status">{copiedLabel}</span> : null}
+            </div>
+          ) : null}
         </article>
       ))}
     </section>
