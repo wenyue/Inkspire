@@ -1,6 +1,6 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import Experts from "./Experts";
 
 afterEach(cleanup);
@@ -63,6 +63,29 @@ describe("Experts", () => {
 
     await user.click(screen.getByRole("button", { name: "咨询吴嘉茵" }));
     expect(await navigator.clipboard.readText()).toBe("InkspireArt");
+    expect(screen.getByRole("status")).toHaveTextContent("平台微信已复制");
+  });
+
+  test("falls back to selection-based copying in restricted webviews", async () => {
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: undefined });
+    const execCommand = vi.fn(() => true);
+    Object.defineProperty(document, "execCommand", { configurable: true, value: execCommand });
+    render(<Experts
+      experts={[{
+        id: "wu_jiayin",
+        name: { "zh-Hans": "吴嘉茵" },
+        region: { "zh-Hans": "广东省" },
+        bio: { "zh-Hans": "书法家" },
+        services: []
+      }]}
+      title="雅匠" locale="zh-Hans" serviceHeading="可咨询方向" extraServiceName="装裱咨询"
+      extraServiceDescription="说明" credentialsLabel="专业资历" sampleHeading="代表作品"
+      sampleHint="左右滑动查看更多作品" profileNotice="已入驻" serviceBoundary="确认后承接"
+      consultLabel="咨询吴嘉茵" copiedLabel="平台微信已复制" consultWechat="InkspireArt"
+    />);
+
+    fireEvent.click(screen.getByRole("button", { name: "咨询吴嘉茵" }));
+    await waitFor(() => expect(execCommand).toHaveBeenCalledWith("copy"));
     expect(screen.getByRole("status")).toHaveTextContent("平台微信已复制");
   });
 

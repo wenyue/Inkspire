@@ -45,9 +45,24 @@ export default function Experts({
   const [copiedExpertId, setCopiedExpertId] = useState("");
 
   const copyConsultContact = async (expertId: string) => {
-    if (!consultWechat || !navigator.clipboard) return;
-    await navigator.clipboard.writeText(consultWechat);
-    setCopiedExpertId(expertId);
+    if (!consultWechat) return;
+    try {
+      await navigator.clipboard?.writeText(consultWechat);
+      if (navigator.clipboard) {
+        setCopiedExpertId(expertId);
+        return;
+      }
+    } catch {}
+    const copyField = document.createElement("textarea");
+    copyField.value = consultWechat;
+    copyField.setAttribute("readonly", "");
+    copyField.style.position = "fixed";
+    copyField.style.opacity = "0";
+    document.body.appendChild(copyField);
+    copyField.select();
+    const copied = typeof document.execCommand === "function" && document.execCommand("copy");
+    copyField.remove();
+    if (copied) setCopiedExpertId(expertId);
   };
 
   return (
