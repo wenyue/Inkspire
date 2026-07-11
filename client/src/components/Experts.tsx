@@ -8,8 +8,9 @@ interface ExpertsProps {
   serviceHeading: string;
   extraServiceName: string;
   extraServiceDescription: string;
-  expectationLabel: string;
+  credentialsLabel: string;
   sampleHeading: string;
+  sampleHint: string;
   profileNotice: string;
   serviceBoundary: string;
 }
@@ -26,14 +27,15 @@ export default function Experts({
   serviceHeading,
   extraServiceName,
   extraServiceDescription,
-  expectationLabel,
+  credentialsLabel,
   sampleHeading,
+  sampleHint,
   profileNotice,
   serviceBoundary
 }: ExpertsProps) {
   return (
-    <section className="experts-panel">
-      <h2>{title}</h2>
+    <section className="experts-panel" aria-labelledby="experts-heading">
+      <h2 id="experts-heading">{title}</h2>
       {experts.map((expert) => (
         <article className="expert-card" key={expert.id}>
           <div className="expert-profile">
@@ -41,12 +43,11 @@ export default function Experts({
             <div>
               <h3>{localizedText(expert.name, locale)}</h3>
               <p>{localizedText(expert.region, locale)}</p>
-              <span className="expert-pricing-note">{expectationLabel}</span>
             </div>
           </div>
           <p className="expert-bio">{localizedText(expert.bio, locale)}</p>
           {expert.credentials?.length ? (
-            <div className="expert-credentials" aria-label={expectationLabel}>
+            <div className="expert-credentials" aria-label={credentialsLabel}>
               {expert.credentials.map((credential) => {
                 const label = localizedText(credential, locale);
                 return <span key={label}>{label}</span>;
@@ -56,10 +57,18 @@ export default function Experts({
           <p className="expert-profile-notice">{profileNotice}</p>
           {expert.sampleImages?.length ? (
             <div className="expert-samples">
-              <strong>{sampleHeading}</strong>
-              <div>
-                {expert.sampleImages.slice(0, 3).map((image, index) => (
-                  <span className="expert-sample-frame" key={image}>
+              <div className="expert-sample-heading">
+                <strong>{sampleHeading}</strong>
+                {expert.sampleImages.length > 2 ? <span className="expert-sample-hint">{sampleHint}</span> : null}
+              </div>
+              <div className="expert-sample-strip" role="list" aria-label={sampleHeading}>
+                {expert.sampleImages.map((image, index) => (
+                  <span
+                    className="expert-sample-frame"
+                    role="listitem"
+                    aria-label={`${sampleHeading} ${index + 1}`}
+                    key={image}
+                  >
                     <img src={image} alt={`${sampleHeading} ${index + 1}`} />
                   </span>
                 ))}

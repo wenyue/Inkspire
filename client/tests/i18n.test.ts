@@ -29,6 +29,12 @@ describe("i18n", () => {
     }
   });
 
+  it("describes the metadata retained by an empty library in every locale", () => {
+    expect(createTranslator("zh-Hans", dictionaries)("empty.libraryDetail")).toBe("藏卷会保留题名、形制与疏密线索。");
+    expect(createTranslator("zh-Hant", dictionaries)("empty.libraryDetail")).toBe("藏卷會保留題名、形制與疏密線索。");
+    expect(createTranslator("en", dictionaries)("empty.libraryDetail")).toBe("The library retains each title, format, and density note.");
+  });
+
   it("falls back to zh-Hans when a key is missing from the active locale", () => {
     const t = createTranslator("en", {
       "zh-Hans": { custom: { label: "默认文案" } },
@@ -42,9 +48,51 @@ describe("i18n", () => {
     const t = createTranslator("en", dictionaries);
 
     expect(t("studio.title")).toBe("Inkspire");
-    expect(t("studio.subtitle")).toBe("Chinese painting and calligraphy in a garden scroll");
+    expect(t("studio.subtitle")).toBe("Chinese painting and calligraphy creation assistant");
     expect(t("result.continue")).toBe("Adjust from this artwork");
     expect(t("production.confirm")).toBe("Confirm production");
+  });
+
+  it("uses precise brand and mobile discovery copy in every locale", () => {
+    const zhHansTranslator = createTranslator("zh-Hans", dictionaries);
+    const zhHantTranslator = createTranslator("zh-Hant", dictionaries);
+    const enTranslator = createTranslator("en", dictionaries);
+
+    expect(zhHansTranslator("studio.subtitle")).toBe("国画与书法创作辅助");
+    expect(zhHantTranslator("studio.subtitle")).toBe("國畫與書法創作輔助");
+    expect(enTranslator("studio.subtitle")).toBe("Chinese painting and calligraphy creation assistant");
+    expect(zhHansTranslator("studio.optionsScrollHint")).toBe("下方还有选项，可继续滑动");
+    expect(zhHantTranslator("studio.optionsScrollHint")).toBe("下方還有選項，可繼續滑動");
+    expect(enTranslator("studio.optionsScrollHint")).toBe("More choices below — scroll to continue");
+    expect(zhHansTranslator("experts.sampleHint")).toBe("左右滑动查看更多作品");
+    expect(zhHantTranslator("experts.sampleHint")).toBe("左右滑動查看更多作品");
+    expect(enTranslator("experts.sampleHint")).toBe("Swipe sideways to see more works");
+  });
+
+  it("localizes every image viewer control in all supported locales", () => {
+    const zhHansTranslator = createTranslator("zh-Hans", dictionaries);
+    const zhHantTranslator = createTranslator("zh-Hant", dictionaries);
+    const enTranslator = createTranslator("en", dictionaries);
+
+    expect([
+      zhHansTranslator("imageViewer.back"),
+      zhHansTranslator("imageViewer.error"),
+      zhHansTranslator("imageViewer.gestureHint"),
+      zhHansTranslator("imageViewer.resetZoom"),
+      zhHansTranslator("imageViewer.controls"),
+      zhHansTranslator("imageViewer.zoomOut"),
+      zhHansTranslator("imageViewer.reset"),
+      zhHansTranslator("imageViewer.zoomIn")
+    ]).toEqual(["返回", "图片暂时无法查看", "双指缩放 · 双击放大", "重置缩放", "图片缩放控制", "缩小", "重置", "放大"]);
+    expect(zhHantTranslator("imageViewer.back")).toBe("返回");
+    expect(zhHantTranslator("imageViewer.error")).toBe("圖片暫時無法查看");
+    expect(zhHantTranslator("imageViewer.gestureHint")).toBe("雙指縮放 · 雙擊放大");
+    expect(enTranslator("imageViewer.back")).toBe("Back");
+    expect(enTranslator("imageViewer.error")).toBe("Image is temporarily unavailable");
+    expect(enTranslator("imageViewer.gestureHint")).toBe("Pinch to zoom · Double-tap to enlarge");
+    expect(enTranslator("imageViewer.zoomOut")).toBe("Zoom out");
+    expect(enTranslator("imageViewer.reset")).toBe("Reset");
+    expect(enTranslator("imageViewer.zoomIn")).toBe("Zoom in");
   });
 
   it("describes generation choices as density and openness in every locale", () => {

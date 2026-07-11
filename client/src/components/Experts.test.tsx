@@ -21,18 +21,23 @@ describe("Experts", () => {
           "zh-Hant": "中國書法家協會會員",
           en: "China Calligraphers Association member"
         }],
-        sampleImages: ["/one.webp", "/two.webp", "/three.webp"], services: []
+        sampleImages: ["/one.webp", "/two.webp", "/three.webp", "/four.webp"], services: []
       }]}
       title="雅匠" locale="zh-Hans" serviceHeading="可咨询方向" extraServiceName="装裱咨询"
-      extraServiceDescription="说明" expectationLabel="专业资历" sampleHeading="代表作品"
-      profileNotice="吴嘉茵为平台已入驻专家。" serviceBoundary="服务范围、费用与交付以双方确认为准。"
+      extraServiceDescription="说明" credentialsLabel="专业资历" sampleHeading="代表作品"
+      sampleHint="左右滑动查看更多作品"
+      profileNotice="吴嘉茵为平台已入驻专家。" serviceBoundary="服务范围、修改轮次与交付时间以双方确认为准。"
     />);
     expect(screen.getByRole("heading", { name: "吴嘉茵" })).toBeInTheDocument();
     expect(screen.getByText("广东省")).toBeInTheDocument();
     expect(screen.getByText(/中山大学哲学博士/)).toBeInTheDocument();
     expect(screen.getByText("中国书法家协会会员")).toBeInTheDocument();
-    expect(screen.getAllByRole("img", { name: /代表作品/ })).toHaveLength(3);
-    expect(screen.getByText("服务范围、费用与交付以双方确认为准。")).toBeInTheDocument();
+    expect(screen.getByRole("list", { name: "代表作品" })).toBeInTheDocument();
+    expect(screen.getByText("左右滑动查看更多作品")).toBeInTheDocument();
+    expect(screen.getAllByRole("listitem", { name: /代表作品/ })).toHaveLength(4);
+    expect(screen.getAllByRole("img", { name: /代表作品/ })).toHaveLength(4);
+    expect(screen.getByText("服务范围、修改轮次与交付时间以双方确认为准。")).toBeInTheDocument();
+    expect(screen.queryByText(/价格|金额|费用|报价|估算/)).not.toBeInTheDocument();
     expect(screen.queryByText(/非专家作品|承接人待确认|媒体来源|授权/)).not.toBeInTheDocument();
   });
 
@@ -46,7 +51,8 @@ describe("Experts", () => {
         services: []
       }]}
       title="Artisans" locale="en" serviceHeading="Consultation" extraServiceName="Mounting"
-      extraServiceDescription="Details" expectationLabel="Estimated" sampleHeading="References"
+      extraServiceDescription="Details" credentialsLabel="Credentials" sampleHeading="References"
+      sampleHint="Swipe sideways to see more works"
       profileNotice="Identity confirmed later." serviceBoundary="Final scope is confirmed separately."
     />);
 

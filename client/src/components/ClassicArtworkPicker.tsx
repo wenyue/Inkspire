@@ -6,7 +6,6 @@ import type { Locale, LocalizedText } from "../domain";
 interface ClassicArtworkPickerProps {
   artworks: ClassicArtwork[];
   locale: Locale;
-  onBack: () => void;
   onSelect: (artwork: ClassicArtwork) => void;
 }
 
@@ -112,7 +111,7 @@ function sourceLabel(sourceNote: string, locale: Locale): string {
   return locale === "en" ? "See the original record for collection source" : locale === "zh-Hant" ? "館藏來源見原始記錄" : "馆藏来源见原始记录";
 }
 
-export default function ClassicArtworkPicker({ artworks, locale, onBack, onSelect }: ClassicArtworkPickerProps) {
+export default function ClassicArtworkPicker({ artworks, locale, onSelect }: ClassicArtworkPickerProps) {
   const [query, setQuery] = useState("");
   const [featuredOnly, setFeaturedOnly] = useState(true);
   const [limit, setLimit] = useState(PAGE_SIZE);
@@ -157,7 +156,6 @@ export default function ClassicArtworkPicker({ artworks, locale, onBack, onSelec
   }
 
   return <div className="classic-picker">
-    <div className="classic-picker-header"><button className="back-action classic-back" type="button" onClick={onBack}><ChevronLeft aria-hidden="true" size={16} />{text.back}</button><h2>{text.heading}</h2></div>
     <label className="classic-search"><Search aria-hidden="true" size={17} /><input type="search" value={query} placeholder={text.search} aria-label={text.search} onChange={(event) => { setQuery(event.target.value); setFeaturedOnly(false); setLimit(PAGE_SIZE); }} /></label>
     <div className="classic-category-row" aria-label={text.heading}>
       <button type="button" aria-pressed={featuredOnly} onClick={() => { setFeaturedOnly(true); setQuery(""); setLimit(PAGE_SIZE); }}>{text.featured}</button>

@@ -18,6 +18,16 @@ function expectNoRuleForClass(className: string): void {
 }
 
 describe("mobile touch targets", () => {
+  it("hides the main scrollbar without disabling scrolling", () => {
+    expect(blockFor(".main-surface {")).toContain("scrollbar-width: none");
+    expect(blockFor(".main-surface {")).toContain("overflow-y: auto");
+    expect(css).toMatch(/\.main-surface::\-webkit-scrollbar\s*{[^}]*display:\s*none/s);
+
+    const artworkStrip = blockFor(".expert-sample-strip");
+    expect(artworkStrip).toContain("scrollbar-width: thin");
+    expect(css).toMatch(/\.expert-sample-strip::\-webkit-scrollbar\s*{[^}]*height:\s*5px/s);
+  });
+
   it("keeps global language controls at least 44px tall", () => {
     expect(blockFor(".language-select")).toContain("min-height: 44px");
     expect(blockFor(".language-select select")).toContain("min-height: 44px");
@@ -75,6 +85,42 @@ describe("mobile touch targets", () => {
     expect(body).toContain("min-height: 0");
     expect(body).toContain("overflow-y: auto");
     expect(footer).toMatch(/padding-bottom:\s*calc\([^;]*safe-area-inset-bottom/);
+  });
+
+  it("lets production dialogs cover the mobile viewport and hides the bottom tabs", () => {
+    const layer = blockFor(".production-dialog-layer");
+    const hiddenTabs = blockFor(".production-dialog-open .bottom-tabs");
+
+    expect(layer).not.toMatch(/82px/);
+    expect(layer).toMatch(/safe-area-inset-bottom/);
+    expect(hiddenTabs).toContain("display: none");
+  });
+
+  it("lays out reference levels as a centered three plus two grid on phones", () => {
+    const mobileMediaStart = css.indexOf("@media (max-width: 520px)");
+    const mobileReferenceList = blockFor(".reference-list", mobileMediaStart);
+    const mobileReferenceCard = blockFor(".reference-card", mobileMediaStart);
+
+    expect(mobileReferenceList).toContain("grid-template-columns: repeat(6, minmax(0, 1fr))");
+    expect(mobileReferenceCard).toContain("grid-column: span 2");
+    expect(mobileReferenceCard).toContain("min-height: 68px");
+    expect(css.slice(mobileMediaStart)).toMatch(/\.reference-card:nth-child\(4\)[^{]*{[^}]*grid-column:\s*2 \/ span 2/s);
+    expect(css.slice(mobileMediaStart)).toMatch(/\.reference-card:nth-child\(5\)[^{]*{[^}]*grid-column:\s*4 \/ span 2/s);
+  });
+
+  it("keeps production contact copy actions and mobile viewer controls touch friendly", () => {
+    expect(blockFor(".contact-copy-action")).toContain("min-height: 44px");
+    expect(blockFor(".image-viewer-back")).toContain("min-height: 44px");
+    expect(blockFor(".image-viewer-mobile-reset")).toContain("width: 44px");
+    expect(blockFor(".image-viewer-mobile-reset")).toContain("height: 44px");
+  });
+
+  it("centers the library empty state within the available scroll surface", () => {
+    const emptyState = blockFor(".empty-state");
+
+    expect(emptyState).toContain("min-height: 100%");
+    expect(emptyState).toContain("align-content: center");
+    expect(blockFor(".empty-state-detail")).toMatch(/font-size:\s*12px/);
   });
 
   it("keeps selected photo removal controls at least 44px", () => {

@@ -38,19 +38,19 @@ export const WORK_TYPE_QUESTION: Question = {
     "/previews/questions/painting-subject.webp"
   ],
   preview_prompt: {
-    "zh-Hans": "选择国画、书法或东亚历代绘画参考",
-    "zh-Hant": "選擇國畫、書法或東亞歷代繪畫參考",
+    "zh-Hans": "选择国画、书法，或从历代名作取意",
+    "zh-Hant": "選擇國畫、書法，或從歷代名作取意",
     en: "Preview the artwork direction"
   },
   title: {
-    "zh-Hans": "先定作品类型",
-    "zh-Hant": "先定作品類型",
-    en: "Choose the work type"
+    "zh-Hans": "先定创作方向",
+    "zh-Hant": "先定創作方向",
+    en: "Choose a creative direction"
   },
   options: {
-    "zh-Hans": ["国画", "书法", "东亚历代绘画"],
-    "zh-Hant": ["國畫", "書法", "東亞歷代繪畫"],
-    en: ["Painting", "Calligraphy", "East Asian Painting"]
+    "zh-Hans": ["国画", "书法", "从历代名作取意"],
+    "zh-Hant": ["國畫", "書法", "從歷代名作取意"],
+    en: ["Painting", "Calligraphy", "Draw from Masterworks"]
   }
 };
 

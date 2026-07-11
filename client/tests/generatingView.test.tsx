@@ -6,6 +6,7 @@ import GeneratingView from "../src/components/GeneratingView";
 const copy: Record<string, string> = {
   "generationLoading.estimate.single": "Usually about 30 seconds. Please wait.",
   "generationLoading.estimate.double": "Usually about 50 seconds. Please wait.",
+  "generationLoading.backgroundContinuation": "You can switch pages. Generation will continue in the background.",
   "generationLoading.retry": "Try again",
   "generationLoading.failedTitle": "Generation did not finish",
   "generationLoading.failedHint": "Try again, or switch to another page first.",
@@ -48,6 +49,7 @@ describe("GeneratingView", () => {
 
     expect(screen.getByRole("heading", { name: "The artist is painting" })).toBeInTheDocument();
     expect(screen.getByText("Usually about 30 seconds. Please wait.")).toBeInTheDocument();
+    expect(screen.getByText("You can switch pages. Generation will continue in the background.")).toBeInTheDocument();
     expect(container.querySelector(".generating-visual img")).toHaveAttribute(
       "src",
       expect.stringMatching(/^\/loading\/create-painting-[1-4]\.webp$/)
@@ -95,6 +97,7 @@ describe("GeneratingView", () => {
 
     expect(screen.getByRole("heading", { name: "Generation did not finish" })).toBeInTheDocument();
     expect(screen.getByText("Timed out")).toBeInTheDocument();
+    expect(screen.queryByText("You can switch pages. Generation will continue in the background.")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Try again" }));
 

@@ -27,9 +27,9 @@ describe("ClassicArtworkPicker", () => {
       artwork("中国-han-gan-night-shining-white-39901", "Night-Shining White"),
       ...Array.from({ length: 15 }, (_, index) => artwork(`other-${index}`, `Work ${index}`))
     ];
-    render(<ClassicArtworkPicker artworks={artworks} locale="zh-Hans" onBack={vi.fn()} onSelect={vi.fn()} />);
+    render(<ClassicArtworkPicker artworks={artworks} locale="zh-Hans" onSelect={vi.fn()} />);
 
-    expect(screen.getByRole("heading", { name: "东亚历代绘画" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "东亚历代绘画" })).not.toBeInTheDocument();
     expect(screen.getByText("照夜白图")).toBeInTheDocument();
     expect(screen.getByText(/韩幹/)).toBeInTheDocument();
     expect(screen.queryByText("Work 14")).not.toBeInTheDocument();
@@ -39,7 +39,7 @@ describe("ClassicArtworkPicker", () => {
   });
 
   test("searches raw source metadata and shows collection provenance in detail", () => {
-    render(<ClassicArtworkPicker artworks={[artwork("night", "Night-Shining White")]} locale="zh-Hans" onBack={vi.fn()} onSelect={vi.fn()} />);
+    render(<ClassicArtworkPicker artworks={[artwork("night", "Night-Shining White")]} locale="zh-Hans" onSelect={vi.fn()} />);
     fireEvent.change(screen.getByRole("searchbox"), { target: { value: "Night" } });
     fireEvent.click(screen.getByRole("button", { name: /Night-Shining White/ }));
     expect(screen.getByText(/大都会艺术博物馆 · 开放获取 · 藏品 39901/)).toBeInTheDocument();

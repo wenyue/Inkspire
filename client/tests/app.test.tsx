@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ClassicArtwork, PublicConfig } from "../src/api";
 import { getProgressLabel } from "../src/components/Studio";
 import type { Question } from "../src/domain";
+import { TAB_SCROLL_POSITIONS_KEY } from "../src/tabScrollPosition";
 import { renderApp } from "./renderApp";
 
 function generationRequestBodies(): Array<Record<string, unknown>> {
@@ -136,9 +137,9 @@ const publicConfig: PublicConfig = {
             en: "Expert Custom"
           },
           description: {
-            "zh-Hans": "专家直接创作或深度主导，价格更高。",
-            "zh-Hant": "專家直接創作或深度主導，價格更高。",
-            en: "The artisan creates directly or leads the work closely, with higher pricing."
+            "zh-Hans": "专家直接创作或深度主导，并共同确认创作方向。",
+            "zh-Hant": "專家直接創作或深度主導，並共同確認創作方向。",
+            en: "The artisan creates directly or leads the work closely, with the creative direction confirmed together."
           },
           priceEstimate: {
             base: 1800,
@@ -154,9 +155,9 @@ const publicConfig: PublicConfig = {
             en: "Expert Guided"
           },
           description: {
-            "zh-Hans": "专家给方向、修改意见或把关，价格更低。",
-            "zh-Hant": "專家給方向、修改意見或把關，價格更低。",
-            en: "The artisan gives direction, revision notes, or review at a lower price."
+            "zh-Hans": "专家提供创作方向、修改意见或作品把关。",
+            "zh-Hant": "專家提供創作方向、修改意見或作品把關。",
+            en: "The artisan provides creative direction, revision notes, or review."
           },
           priceEstimate: {
             base: 600,
@@ -529,7 +530,7 @@ describe("App", () => {
     renderApp({ initialRoute: "/library" });
 
     expect(await screen.findByRole("heading", { name: "墨起" })).toBeInTheDocument();
-    expect(screen.getAllByText("园林卷轴里的书画生成")).toHaveLength(1);
+    expect(screen.getAllByText("国画与书法创作辅助")).toHaveLength(1);
     expect(screen.getByRole("button", { name: "画案" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "藏卷" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "雅匠" })).toBeInTheDocument();
@@ -600,6 +601,8 @@ describe("App", () => {
 
     await screen.findByRole("button", { name: "国画" });
 
+    expect(screen.getByText("下方还有选项，可继续滑动")).toBeInTheDocument();
+
     expect(screen.queryByLabelText("相册")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("拍照")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "不需要效果图，直接生成" })).not.toBeInTheDocument();
@@ -614,17 +617,17 @@ describe("App", () => {
   it("keeps scrollable content clear of the mobile navigation without wasting a full nav height", async () => {
     const styles = await readFile(resolve(process.cwd(), "src/styles.css"), "utf8");
 
-    expect(styles).toMatch(/--bottom-nav-clearance:\s*calc\(env\(safe-area-inset-bottom\) \+ 16px\)/);
+    expect(styles).toMatch(/--bottom-nav-clearance:\s*env\(safe-area-inset-bottom\)/);
     expect(styles).toMatch(/padding-bottom:\s*var\(--bottom-nav-clearance\)/);
     expect(styles).toMatch(/padding:\s*8px 8px calc\(8px \+ env\(safe-area-inset-bottom\)\)/);
     expect(styles).toMatch(/@media \(max-width:\s*520px\)[\s\S]*\.language-select-label[\s\S]*clip:\s*rect\(0 0 0 0\)/);
   });
 
-  it("hides bottom navigation while the image viewer is open and keeps the viewer back action compact", async () => {
+  it("hides bottom navigation while the image viewer is open and keeps the viewer back action touch friendly", async () => {
     const styles = await readFile(resolve(process.cwd(), "src/styles.css"), "utf8");
 
     expect(styles).toMatch(/\.image-viewer-open\s+\.bottom-tabs\s*{[^}]*display:\s*none/s);
-    expect(styles).toMatch(/\.image-viewer-back\s*{[^}]*min-height:\s*38px/s);
+    expect(styles).toMatch(/\.image-viewer-back\s*{[^}]*min-height:\s*44px/s);
     expect(styles).toMatch(/\.image-viewer-back\s*{[^}]*font-size:\s*13px/s);
   });
 
@@ -668,7 +671,7 @@ describe("App", () => {
 
     expect(await screen.findByRole("heading", { name: "可选：添加环境照片" })).toBeInTheDocument();
     expect(screen.getByText("第 3 / 3 步")).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "先定作品类型" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "先定创作方向" })).not.toBeInTheDocument();
     expect(window.location.search).toBe("?step=photo");
   });
 
@@ -712,7 +715,7 @@ describe("App", () => {
 
     expect(await screen.findByRole("heading", { name: "偏好哪种设色？" })).toBeInTheDocument();
     expect(screen.getByText("第 3 / 4 步")).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "先定作品类型" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "先定创作方向" })).not.toBeInTheDocument();
     expect(window.location.search).toBe("?step=question&index=1");
   });
 
@@ -794,6 +797,10 @@ describe("App", () => {
     expect(screen.getByRole("button", { name: "国画" }).textContent).not.toBe("国国画");
     expect(container.querySelectorAll(".option-preview-fallback")).toHaveLength(0);
     expect(container.querySelectorAll(".option-preview-image")).toHaveLength(3);
+    for (const image of container.querySelectorAll(".option-preview-image")) {
+      expect(image).toHaveAttribute("loading", "eager");
+      expect(image).toHaveAttribute("decoding", "sync");
+    }
 
     await user.click(screen.getByRole("button", { name: "国画" }));
 
@@ -806,7 +813,7 @@ describe("App", () => {
     const user = userEvent.setup();
     const { container } = renderApp();
 
-    const workTypeHero = await screen.findByRole("img", { name: "选择国画、书法或东亚历代绘画参考" });
+    const workTypeHero = await screen.findByRole("img", { name: "选择国画、书法，或从历代名作取意" });
     expect(workTypeHero).toHaveClass("preview-hero-image");
     expect(workTypeHero).toHaveAttribute("src", "/previews/questions/work-type.webp");
     expect(container.querySelectorAll(".preview-montage")).toHaveLength(0);
@@ -870,7 +877,7 @@ describe("App", () => {
 
     await screen.findByRole("heading", { name: "墨起" });
 
-    expect(screen.getByText("第 1 / 3 步")).toBeInTheDocument();
+    expect(await screen.findByText("第 1 / 3 步")).toBeInTheDocument();
     expect(screen.queryByText("第 1 / 1 步")).not.toBeInTheDocument();
   });
 
@@ -940,8 +947,8 @@ describe("App", () => {
     await screen.findByLabelText("语言");
     await user.selectOptions(screen.getByLabelText("语言"), "en");
 
-    expect(screen.getByText("Choose the work type")).toBeInTheDocument();
-    expect(screen.queryByText("选择国画、书法或东亚历代绘画参考")).not.toBeInTheDocument();
+    expect(screen.getByText("Choose a creative direction")).toBeInTheDocument();
+    expect(screen.queryByText("选择国画、书法，或从历代名作取意")).not.toBeInTheDocument();
     expect(screen.getByRole("img", { name: "Preview the artwork direction" })).toBeInTheDocument();
     const workTypePreviews = [...container.querySelectorAll(".option-preview-image")].map((image) => image.getAttribute("src"));
     expect(workTypePreviews).toHaveLength(3);
@@ -1011,9 +1018,11 @@ describe("App", () => {
     const user = userEvent.setup();
     renderApp();
 
-    await user.click(await screen.findByRole("button", { name: "东亚历代绘画" }));
+    await user.click(await screen.findByRole("button", { name: "从历代名作取意" }));
 
-    expect(await screen.findByRole("heading", { name: "东亚历代绘画" })).toBeInTheDocument();
+    const classicProgress = await screen.findByText("第 2 / 2 步");
+    expect(within(classicProgress.parentElement as HTMLElement).getByRole("button", { name: "上一步" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "东亚历代绘画" })).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "全部馆藏 · 保留原题" }));
     expect(screen.getAllByRole("button", { name: /古画|溪山行旅图/ })).toHaveLength(12);
     expect(screen.getByRole("button", { name: /再看一批/ })).toBeInTheDocument();
@@ -1040,7 +1049,7 @@ describe("App", () => {
     const user = userEvent.setup();
     renderApp();
 
-    await user.click(await screen.findByRole("button", { name: "东亚历代绘画" }));
+    await user.click(await screen.findByRole("button", { name: "从历代名作取意" }));
     await user.click(screen.getByRole("button", { name: "全部馆藏 · 保留原题" }));
     await user.click(await screen.findByRole("button", { name: /溪山行旅图/ }));
     await user.click(await screen.findByRole("button", { name: "选择此作品" }));
@@ -1070,7 +1079,7 @@ describe("App", () => {
     const user = userEvent.setup();
     renderApp();
 
-    await user.click(await screen.findByRole("button", { name: "东亚历代绘画" }));
+    await user.click(await screen.findByRole("button", { name: "从历代名作取意" }));
     await user.click(screen.getByRole("button", { name: "全部馆藏 · 保留原题" }));
     await user.click(await screen.findByRole("button", { name: /溪山行旅图/ }));
     await user.click(await screen.findByRole("button", { name: "选择此作品" }));
@@ -1078,7 +1087,7 @@ describe("App", () => {
     expect(await screen.findByLabelText("相册")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "上一步" }));
 
-    expect(await screen.findByRole("heading", { name: "东亚历代绘画" })).toBeInTheDocument();
+    expect(await screen.findByRole("searchbox", { name: "搜索作品、作者、年代或地域" })).toBeInTheDocument();
   });
 
   it("persists answered questions across remounts", async () => {
@@ -1092,7 +1101,7 @@ describe("App", () => {
     renderApp();
 
     expect(await screen.findByText("想画什么内容？")).toBeInTheDocument();
-    expect(screen.queryByText("先定作品类型")).not.toBeInTheDocument();
+    expect(screen.queryByText("先定创作方向")).not.toBeInTheDocument();
   });
 
   it("keeps the library tab selected when opened from the library URL", async () => {
@@ -1718,7 +1727,7 @@ describe("App", () => {
 
     expect(window.location.pathname).toBe("/studio");
     expect(window.location.search).toBe("?step=classic");
-    expect(await screen.findByRole("heading", { name: "东亚历代绘画" })).toBeInTheDocument();
+    expect(await screen.findByRole("searchbox", { name: "搜索作品、作者、年代或地域" })).toBeInTheDocument();
     expect(generationRequestBodies()).toHaveLength(0);
     expect(JSON.parse(window.localStorage.getItem("inkspire.generationSessions.v1") ?? "{}")).not.toHaveProperty("studio");
   });
@@ -2625,11 +2634,13 @@ describe("App", () => {
     await user.click(makeButton);
 
     expect(await screen.findByRole("dialog", { name: "制作作品" })).toBeInTheDocument();
+    expect(document.body).toHaveClass("production-dialog-open");
     expect(screen.getByRole("button", { name: "关闭" })).toHaveFocus();
 
     await user.keyboard("{Escape}");
 
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(document.body).not.toHaveClass("production-dialog-open");
     expect(window.location.pathname).toBe("/records/record-1");
     expect(window.location.search).toBe("?from=studio");
     expect(screen.getByRole("button", { name: "制作作品" })).toBeInTheDocument();
@@ -3017,7 +3028,7 @@ describe("App", () => {
 
     await user.click(screen.getByRole("button", { name: "画案" }));
 
-    expect(screen.getByText("先定作品类型")).toBeInTheDocument();
+    expect(screen.getByText("先定创作方向")).toBeInTheDocument();
     expect(screen.queryByRole("img", { name: "作品图" })).not.toBeInTheDocument();
   });
 
@@ -3109,12 +3120,13 @@ describe("App", () => {
     await user.click(await screen.findByRole("button", { name: "藏卷" }));
 
     expect(screen.getByRole("heading", { name: "藏卷还空着" })).toBeInTheDocument();
-    expect(screen.getByText("先去画案定题材与形制；收藏后会保留作品、形制与疏密线索。")).toBeInTheDocument();
+    expect(screen.getByText("先去画案定下题材与形制，把喜欢的作品收入这里。")).toBeInTheDocument();
+    expect(screen.getByText("藏卷会保留题名、形制与疏密线索。")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "移出藏卷" })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "去画案看看" }));
 
-    expect(screen.getByText("先定作品类型")).toBeInTheDocument();
+    expect(screen.getByText("先定创作方向")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "画案" })).toHaveAttribute("aria-pressed", "true");
   });
 
@@ -3133,7 +3145,8 @@ describe("App", () => {
     expect(screen.getByText(/岭南书画领域青年艺术家/)).toBeInTheDocument();
     expect(screen.getByText("代表作品")).toBeInTheDocument();
     expect(screen.getByText("吴嘉茵为平台已入驻专家，具体档期与交付安排将在咨询后确认。")).toBeInTheDocument();
-    expect(screen.getByText("页面金额仅作平台估算，不构成报价；服务范围、费用、修改轮次与交付时间均以承接确认单为准。")).toBeInTheDocument();
+    expect(screen.getByText("服务范围、修改轮次与交付时间均以承接确认单为准。")).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "雅匠" })).not.toHaveTextContent(/价格|金额|费用|报价|估算/);
     expect(screen.getAllByRole("img", { name: /代表作品/ })).toHaveLength(3);
     expect(screen.queryByText(/媒体来源|授权/)).not.toBeInTheDocument();
     expect(container.querySelectorAll(".expert-sample-fallback")).toHaveLength(0);
@@ -3181,7 +3194,7 @@ describe("App", () => {
 
     await user.click(screen.getByRole("button", { name: "画案" }));
 
-    expect(await screen.findByText("先定作品类型")).toBeInTheDocument();
+    expect(await screen.findByText("先定创作方向")).toBeInTheDocument();
     expect(screen.queryByRole("img", { name: "作品图" })).not.toBeInTheDocument();
     expect(window.location.pathname).toBe("/studio");
 
@@ -3395,7 +3408,7 @@ describe("App", () => {
     await waitFor(() => {
       expect(window.location.pathname).toBe("/studio");
     });
-    expect(screen.getByText("先定作品类型")).toBeInTheDocument();
+    expect(screen.getByText("先定创作方向")).toBeInTheDocument();
     expect(screen.queryByRole("img", { name: "作品图" })).not.toBeInTheDocument();
   });
 
@@ -3421,7 +3434,7 @@ describe("App", () => {
     await waitFor(() => {
       expect(window.location.pathname).toBe("/studio");
     });
-    expect(screen.getByText("先定作品类型")).toBeInTheDocument();
+    expect(screen.getByText("先定创作方向")).toBeInTheDocument();
     expect(screen.queryByRole("img", { name: "作品图" })).not.toBeInTheDocument();
   });
 
@@ -3446,7 +3459,7 @@ describe("App", () => {
   it("canonicalizes unknown URLs back to the studio route", async () => {
     renderApp({ initialRoute: "/unknown/path" });
 
-    expect(await screen.findByText("先定作品类型")).toBeInTheDocument();
+    expect(await screen.findByText("先定创作方向")).toBeInTheDocument();
     expect(window.location.pathname).toBe("/studio");
   });
 
@@ -3485,6 +3498,97 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: "藏卷" }));
     expect(await screen.findByRole("img", { name: "作品图" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "藏卷" })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("keeps an independent scroll position for each bottom tab", async () => {
+    const user = userEvent.setup();
+    const { container } = renderApp({ initialRoute: "/studio" });
+    const surface = container.querySelector<HTMLElement>(".main-surface");
+    expect(surface).not.toBeNull();
+
+    fireEvent.wheel(surface!);
+    surface!.scrollTop = 120;
+    fireEvent.scroll(surface!);
+    await user.click(screen.getByRole("button", { name: "藏卷" }));
+    expect(surface!.scrollTop).toBe(0);
+
+    fireEvent.wheel(surface!);
+    surface!.scrollTop = 240;
+    fireEvent.scroll(surface!);
+    await user.click(screen.getByRole("button", { name: "雅匠" }));
+    expect(surface!.scrollTop).toBe(0);
+
+    fireEvent.wheel(surface!);
+    surface!.scrollTop = 360;
+    fireEvent.scroll(surface!);
+    await user.click(screen.getByRole("button", { name: "画案" }));
+    expect(surface!.scrollTop).toBe(120);
+
+    await user.click(screen.getByRole("button", { name: "藏卷" }));
+    expect(surface!.scrollTop).toBe(240);
+
+    await user.click(screen.getByRole("button", { name: "雅匠" }));
+    expect(surface!.scrollTop).toBe(360);
+  });
+
+  it("takes ownership of browser scroll restoration", () => {
+    Object.defineProperty(window.history, "scrollRestoration", {
+      configurable: true,
+      value: "auto",
+      writable: true
+    });
+
+    renderApp({ initialRoute: "/studio" });
+
+    expect(window.history.scrollRestoration).toBe("manual");
+  });
+
+  it("restores the current tab scroll position after remounting", () => {
+    window.sessionStorage.setItem(TAB_SCROLL_POSITIONS_KEY, JSON.stringify({
+      studio: 120,
+      library: 240,
+      experts: 360
+    }));
+
+    const { container } = renderApp({ initialRoute: "/experts" });
+    const surface = container.querySelector<HTMLElement>(".main-surface");
+
+    expect(surface).not.toBeNull();
+    expect(surface!.scrollTop).toBe(360);
+  });
+
+  it("ignores browser restoration scrolls until the user interacts", () => {
+    window.sessionStorage.setItem(TAB_SCROLL_POSITIONS_KEY, JSON.stringify({
+      studio: 0,
+      library: 0,
+      experts: 360
+    }));
+    const { container } = renderApp({ initialRoute: "/experts" });
+    const surface = container.querySelector<HTMLElement>(".main-surface")!;
+
+    surface.scrollTop = 332;
+    fireEvent.scroll(surface);
+    expect(JSON.parse(window.sessionStorage.getItem(TAB_SCROLL_POSITIONS_KEY) ?? "{}").experts).toBe(360);
+
+    fireEvent.wheel(surface);
+    surface.scrollTop = 300;
+    fireEvent.scroll(surface);
+    expect(JSON.parse(window.sessionStorage.getItem(TAB_SCROLL_POSITIONS_KEY) ?? "{}").experts).toBe(300);
+  });
+
+  it("keeps the saved scroll position while the page is being hidden", () => {
+    const { container } = renderApp({ initialRoute: "/experts" });
+    const surface = container.querySelector<HTMLElement>(".main-surface");
+    expect(surface).not.toBeNull();
+
+    fireEvent.wheel(surface!);
+    surface!.scrollTop = 360;
+    fireEvent.scroll(surface!);
+    fireEvent(window, new Event("pagehide"));
+    surface!.scrollTop = 120;
+    fireEvent.scroll(surface!);
+
+    expect(JSON.parse(window.sessionStorage.getItem(TAB_SCROLL_POSITIONS_KEY) ?? "{}").experts).toBe(360);
   });
 
   it("does not show queued or running records in the library", async () => {
@@ -3535,7 +3639,7 @@ describe("App", () => {
   it("keeps browser back at the current tab root instead of crossing tabs", async () => {
     renderApp({ historyEntries: ["/library", "/studio"] });
 
-    expect(await screen.findByText("先定作品类型")).toBeInTheDocument();
+    expect(await screen.findByText("先定创作方向")).toBeInTheDocument();
 
     await act(async () => {
       window.history.back();
@@ -3560,7 +3664,7 @@ describe("App", () => {
 
     renderApp({ initialRoute: "/studio" });
 
-    await screen.findByText("先定作品类型");
+    await screen.findByText("先定创作方向");
     expect(popstateListeners).toHaveLength(1);
   });
 
@@ -3568,7 +3672,7 @@ describe("App", () => {
     const user = userEvent.setup();
     renderApp({ initialRoute: "/studio" });
 
-    await screen.findByText("先定作品类型");
+    await screen.findByText("先定创作方向");
     await user.click(screen.getByRole("button", { name: "藏卷" }));
     expect(await screen.findByRole("heading", { name: "藏卷还空着" })).toBeInTheDocument();
 
@@ -3580,7 +3684,7 @@ describe("App", () => {
       expect(window.location.pathname).toBe("/library");
     });
     expect(screen.getByRole("button", { name: "藏卷" })).toHaveAttribute("aria-pressed", "true");
-    expect(screen.queryByText("先定作品类型")).not.toBeInTheDocument();
+    expect(screen.queryByText("先定创作方向")).not.toBeInTheDocument();
 
     await act(async () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
@@ -3686,7 +3790,9 @@ describe("App", () => {
     expect(viewer).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "返回" }));
-    expect(screen.queryByRole("dialog", { name: "当前作品 作品图" })).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: "当前作品 作品图" })).not.toBeInTheDocument();
+    });
     expect(screen.getByLabelText("调整这张作品")).toBeInTheDocument();
   });
 

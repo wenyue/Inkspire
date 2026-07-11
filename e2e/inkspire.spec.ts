@@ -43,30 +43,109 @@ async function expectFullyAboveBottomTabs(page, action) {
   expect(actionBox!.y + actionBox!.height).toBeLessThanOrEqual(navBox!.y);
 }
 
-test("compact phone keeps creation actions above the bottom navigation", async ({ page }) => {
-  await page.setViewportSize({ width: 320, height: 568 });
+for (const productionViewport of [
+  { width: 320, height: 568 },
+  { width: 390, height: 844 }
+]) {
+  test(`${productionViewport.width}px phone keeps creation actions reachable and production modal above hidden navigation`, async ({ page }) => {
+    await page.setViewportSize(productionViewport);
+    await page.goto("/");
+
+    await completePaintingFlow(page);
+    await addPhotoAndContinue(page);
+    const generateButton = page.getByRole("button", { name: "生成", exact: true });
+    await expectFullyAboveBottomTabs(page, generateButton);
+    await generateButton.click();
+
+    const makeButton = page.getByRole("button", { name: "制作作品" });
+    await expect(makeButton).toBeVisible({ timeout: 30_000 });
+    await expectFullyAboveBottomTabs(page, makeButton);
+    await makeButton.click();
+
+    const confirmButton = page.getByRole("button", { name: "确认制作意向" });
+    await expect(confirmButton).toBeVisible();
+    await expect(page.locator(".bottom-tabs")).toBeHidden();
+    const confirmBox = await confirmButton.boundingBox();
+    expect(confirmBox).not.toBeNull();
+    expect(confirmBox!.y + confirmBox!.height).toBeLessThanOrEqual(productionViewport.height);
+
+    const referenceCards = page.locator(".reference-card");
+    await expect(referenceCards).toHaveCount(5);
+    const referenceBoxes = await referenceCards.evaluateAll((cards) => cards.map((card) => {
+      const box = card.getBoundingClientRect();
+      return { x: box.x, y: box.y, height: box.height };
+    }));
+    expect(referenceBoxes.every(({ height }) => height >= 68)).toBe(true);
+    expect(new Set(referenceBoxes.slice(0, 3).map(({ y }) => Math.round(y))).size).toBe(1);
+    expect(new Set(referenceBoxes.slice(3).map(({ y }) => Math.round(y))).size).toBe(1);
+    expect(referenceBoxes[3].y).toBeGreaterThan(referenceBoxes[0].y);
+    expect(referenceBoxes[3].x).toBeGreaterThan(referenceBoxes[0].x);
+  });
+}
+
+test("bottom tabs keep independent scroll positions across refresh", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.addInitScript(() => {
+    document.addEventListener("DOMContentLoaded", () => {
+      const style = document.createElement("style");
+      style.textContent = ".studio,.empty-state,.library-grid,.experts-panel{min-height:1800px!important}";
+      document.head.append(style);
+    });
+  });
   await page.goto("/");
 
-  await completePaintingFlow(page);
-  await addPhotoAndContinue(page);
-  const generateButton = page.getByRole("button", { name: "生成", exact: true });
-  await expectFullyAboveBottomTabs(page, generateButton);
-  await generateButton.click();
+  const surface = page.locator(".main-surface");
+  const setScrollTop = (top: number) => surface.evaluate((element, value) => {
+    element.dispatchEvent(new WheelEvent("wheel", { bubbles: true }));
+    element.scrollTop = value;
+    element.dispatchEvent(new Event("scroll", { bubbles: true }));
+    return element.scrollTop;
+  }, top);
+  const scrollTop = () => surface.evaluate((element) => element.scrollTop);
 
-  const makeButton = page.getByRole("button", { name: "制作作品" });
-  await expect(makeButton).toBeVisible({ timeout: 30_000 });
-  await expectFullyAboveBottomTabs(page, makeButton);
-  await makeButton.click();
+  expect(await setScrollTop(180)).toBe(180);
+  const libraryTab = page.getByRole("button", { name: "藏卷", exact: true });
+  await libraryTab.click();
+  await expect(libraryTab).toHaveAttribute("aria-pressed", "true");
+  expect(await scrollTop()).toBe(0);
 
-  const confirmButton = page.getByRole("button", { name: "确认制作意向" });
-  await expectFullyAboveBottomTabs(page, confirmButton);
+  expect(await setScrollTop(320)).toBe(320);
+  const expertsTab = page.getByRole("button", { name: "雅匠", exact: true });
+  await expertsTab.click();
+  await expect(expertsTab).toHaveAttribute("aria-pressed", "true");
+  expect(await scrollTop()).toBe(0);
+
+  expect(await setScrollTop(460)).toBe(460);
+  const studioTab = page.getByRole("button", { name: "画案", exact: true });
+  await studioTab.click();
+  await expect(studioTab).toHaveAttribute("aria-pressed", "true");
+  expect(Math.abs(await scrollTop() - 180)).toBeLessThanOrEqual(2);
+
+  await libraryTab.click();
+  await expect(libraryTab).toHaveAttribute("aria-pressed", "true");
+  expect(Math.abs(await scrollTop() - 320)).toBeLessThanOrEqual(2);
+
+  await expertsTab.click();
+  await expect(expertsTab).toHaveAttribute("aria-pressed", "true");
+  expect(Math.abs(await scrollTop() - 460)).toBeLessThanOrEqual(2);
+  expect(await page.evaluate(() => JSON.parse(
+    window.sessionStorage.getItem("inkspire.tabScrollPositions.v1") ?? "{}"
+  ).experts)).toBe(460);
+
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "吴嘉茵" })).toBeVisible();
+  expect(await page.evaluate(() => JSON.parse(
+    window.sessionStorage.getItem("inkspire.tabScrollPositions.v1") ?? "{}"
+  ).experts)).toBe(460);
+  expect(Math.abs(await scrollTop() - 460)).toBeLessThanOrEqual(2);
+  expect(await page.evaluate(() => window.localStorage.getItem("inkspire.tabScrollPositions.v1"))).toBeNull();
 });
 
 for (const viewport of [
   { width: 320, height: 568 },
   { width: 390, height: 844 }
 ]) {
-  test(`${viewport.width}px phone shows Wu Jiayin's authorized works without overflow`, async ({ page }) => {
+  test(`${viewport.width}px phone shows two authorized works and scrolls the rest`, async ({ page }) => {
     await page.setViewportSize(viewport);
     await page.goto("/");
     await page.getByRole("button", { name: "雅匠" }).click();
@@ -80,6 +159,22 @@ for (const viewport of [
     const artworkFrame = await works.first().locator("..").boundingBox();
     expect(artworkFrame).not.toBeNull();
     expect(artworkFrame!.height).toBeGreaterThan(artworkFrame!.width);
+    const stripGeometry = await page.locator(".expert-sample-strip").evaluate((strip) => {
+      const style = window.getComputedStyle(strip);
+      const cards = Array.from(strip.children, (card) => card.getBoundingClientRect());
+      return {
+        clientWidth: strip.clientWidth,
+        scrollWidth: strip.scrollWidth,
+        overflowX: style.overflowX,
+        gap: Number.parseFloat(style.columnGap),
+        cardWidths: cards.map((card) => card.width),
+        cardTops: cards.map((card) => card.top)
+      };
+    });
+    expect(stripGeometry.overflowX).toBe("auto");
+    expect(stripGeometry.scrollWidth).toBeGreaterThan(stripGeometry.clientWidth);
+    expect(stripGeometry.cardTops.every((top) => Math.abs(top - stripGeometry.cardTops[0]) < 1)).toBe(true);
+    expect(Math.abs(stripGeometry.cardWidths[0] * 2 + stripGeometry.gap - stripGeometry.clientWidth)).toBeLessThan(1);
     expect(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)).toBe(false);
   });
 
@@ -87,8 +182,8 @@ for (const viewport of [
     await page.setViewportSize(viewport);
     await page.goto("/");
 
-    await page.getByRole("button", { name: "东亚历代绘画" }).click();
-    await expect(page.getByRole("heading", { name: "东亚历代绘画" })).toBeVisible();
+    await page.getByRole("button", { name: "从历代名作取意" }).click();
+    await expect(page.getByRole("searchbox", { name: "搜索作品、作者、年代或地域" })).toBeVisible();
     await expect(page.locator(".classic-card")).toHaveCount(4);
     await expect(page.getByRole("button", { name: "全部馆藏 · 保留原题" })).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)).toBe(false);
@@ -143,6 +238,29 @@ for (const viewport of [
     expect(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)).toBe(false);
   });
 }
+
+test("wide artisan gallery shows all current works in one row", async ({ page }) => {
+  await page.setViewportSize({ width: 900, height: 900 });
+  await page.goto("/");
+  await page.getByRole("button", { name: "雅匠" }).click();
+
+  const works = page.getByRole("img", { name: /代表作品/ });
+  await expect(works).toHaveCount(3);
+  const stripGeometry = await page.locator(".expert-sample-strip").evaluate((strip) => {
+    const stripRect = strip.getBoundingClientRect();
+    const cards = Array.from(strip.children, (card) => card.getBoundingClientRect());
+    return {
+      stripLeft: stripRect.left,
+      stripRight: stripRect.right,
+      cardLefts: cards.map((card) => card.left),
+      cardRights: cards.map((card) => card.right),
+      cardTops: cards.map((card) => card.top)
+    };
+  });
+  expect(stripGeometry.cardTops.every((top) => Math.abs(top - stripGeometry.cardTops[0]) < 1)).toBe(true);
+  expect(Math.min(...stripGeometry.cardLefts)).toBeGreaterThanOrEqual(stripGeometry.stripLeft);
+  expect(Math.max(...stripGeometry.cardRights)).toBeLessThanOrEqual(stripGeometry.stripRight + 1);
+});
 
 test("compact phone keeps classic failure recovery visible and opens the picker without retrying", async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 568 });
@@ -206,7 +324,7 @@ test("compact phone keeps classic failure recovery visible and opens the picker 
   await recovery.click();
 
   await expect(page).toHaveURL(/\/studio\?step=classic$/);
-  await expect(page.getByRole("heading", { name: "东亚历代绘画" })).toBeVisible();
+  await expect(page.getByRole("searchbox", { name: "搜索作品、作者、年代或地域" })).toBeVisible();
   await expect(page.locator(".classic-card").first()).toBeVisible();
   expect(generationRequests).toBe(0);
 });

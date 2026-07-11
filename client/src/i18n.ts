@@ -9,7 +9,8 @@ const CLIENT_OVERRIDES: Dictionaries = {
     tabs: { experts: "雅匠" },
     studio: {
       title: "墨起",
-      subtitle: "园林卷轴里的书画生成",
+      subtitle: "国画与书法创作辅助",
+      optionsScrollHint: "下方还有选项，可继续滑动",
       photo: "可选：添加环境照片",
       photoHint: "用于生成摆放效果图；不添加也能直接生成作品图。",
       camera: "拍照",
@@ -42,6 +43,7 @@ const CLIENT_OVERRIDES: Dictionaries = {
       generationSummaryWithPreview: "将生成作品图和摆放效果图。"
     },
     generationLoading: {
+      backgroundContinuation: "可以切换页面，生成会在后台继续。",
       estimate: {
         single: "通常约 30 秒，请稍候。",
         double: "通常约 50 秒，请稍候。"
@@ -81,6 +83,16 @@ const CLIENT_OVERRIDES: Dictionaries = {
         status: "逐字核验：需要重新生成",
         action: "重新生成书法"
       }
+    },
+    imageViewer: {
+      back: "返回",
+      error: "图片暂时无法查看",
+      gestureHint: "双指缩放 · 双击放大",
+      resetZoom: "重置缩放",
+      controls: "图片缩放控制",
+      zoomOut: "缩小",
+      reset: "重置",
+      zoomIn: "放大"
     },
     suggestions: {
       painting: ["可以开始生成", "主次更明确", "留白再多些", "干湿层次更清楚", "气口更通透", "设色更克制", "节奏更从容", "按墙面陈设调整幅式比例", "减少装饰性效果"],
@@ -148,7 +160,8 @@ const CLIENT_OVERRIDES: Dictionaries = {
     },
     empty: {
       library: "藏卷还空着",
-      libraryHint: "先去画案定题材与形制；收藏后会保留作品、形制与疏密线索。",
+      libraryHint: "先去画案定下题材与形制，把喜欢的作品收入这里。",
+      libraryDetail: "藏卷会保留题名、形制与疏密线索。",
       libraryAction: "去画案看看"
     },
     experts: {
@@ -157,10 +170,11 @@ const CLIENT_OVERRIDES: Dictionaries = {
       serviceHeading: "可咨询方向",
       extraServiceName: "装裱与落地咨询",
       extraServiceDescription: "确认尺寸、材质和制作路径，适合送礼或空间陈设。",
-      expectation: "价格按需求评估",
+      credentialsLabel: "专业资历",
       sampleHeading: "代表作品",
+      sampleHint: "左右滑动查看更多作品",
       profileNotice: "吴嘉茵为平台已入驻专家，具体档期与交付安排将在咨询后确认。",
-      serviceBoundary: "页面金额仅作平台估算，不构成报价；服务范围、费用、修改轮次与交付时间均以承接确认单为准。",
+      serviceBoundary: "服务范围、修改轮次与交付时间均以承接确认单为准。",
       productionUnavailable: "暂未开放制作咨询"
     },
     production: {
@@ -190,7 +204,8 @@ const CLIENT_OVERRIDES: Dictionaries = {
     tabs: { experts: "雅匠" },
     studio: {
       title: "墨起",
-      subtitle: "園林卷軸裡的書畫生成",
+      subtitle: "國畫與書法創作輔助",
+      optionsScrollHint: "下方還有選項，可繼續滑動",
       photo: "可選：加入擺放環境照片",
       photoHint: "用於生成擺放效果圖；不加入也能直接生成作品圖。",
       camera: "拍照",
@@ -223,6 +238,7 @@ const CLIENT_OVERRIDES: Dictionaries = {
       generationSummaryWithPreview: "將生成作品圖和擺放效果圖。"
     },
     generationLoading: {
+      backgroundContinuation: "可以切換頁面，生成會在背景繼續。",
       estimate: {
         single: "通常約 30 秒，請稍候。",
         double: "通常約 50 秒，請稍候。"
@@ -262,6 +278,16 @@ const CLIENT_OVERRIDES: Dictionaries = {
         status: "逐字核驗：需要重新生成",
         action: "重新生成書法"
       }
+    },
+    imageViewer: {
+      back: "返回",
+      error: "圖片暫時無法查看",
+      gestureHint: "雙指縮放 · 雙擊放大",
+      resetZoom: "重置縮放",
+      controls: "圖片縮放控制",
+      zoomOut: "縮小",
+      reset: "重置",
+      zoomIn: "放大"
     },
     suggestions: {
       painting: ["可以開始生成", "主次更明確", "留白再多些", "乾濕層次更清楚", "氣口更通透", "設色更克制", "節奏更從容", "按牆面陳設調整幅式比例", "減少裝飾性效果"],
@@ -329,7 +355,8 @@ const CLIENT_OVERRIDES: Dictionaries = {
     },
     empty: {
       library: "藏卷還空著",
-      libraryHint: "先到畫案定題材與形制；收藏後會保留作品、形制與疏密線索。",
+      libraryHint: "先到畫案定下題材與形制，把喜歡的作品收入這裡。",
+      libraryDetail: "藏卷會保留題名、形制與疏密線索。",
       libraryAction: "去畫案看看"
     },
     experts: {
@@ -338,10 +365,11 @@ const CLIENT_OVERRIDES: Dictionaries = {
       serviceHeading: "可諮詢方向",
       extraServiceName: "裝裱與落地諮詢",
       extraServiceDescription: "確認尺寸、材質和製作路徑，適合送禮或空間陳設。",
-      expectation: "價格按需求評估",
+      credentialsLabel: "專業資歷",
       sampleHeading: "代表作品",
+      sampleHint: "左右滑動查看更多作品",
       profileNotice: "吳嘉茵為平台已入駐專家，具體檔期與交付安排將在諮詢後確認。",
-      serviceBoundary: "頁面金額僅作平台估算，不構成報價；服務範圍、費用、修改輪次與交付時間均以承接確認單為準。",
+      serviceBoundary: "服務範圍、修改輪次與交付時間均以承接確認單為準。",
       productionUnavailable: "暫未開放製作諮詢"
     },
     production: {
@@ -370,7 +398,8 @@ const CLIENT_OVERRIDES: Dictionaries = {
     language: { label: "Language" },
     studio: {
       title: "Inkspire",
-      subtitle: "Chinese painting and calligraphy in a garden scroll",
+      subtitle: "Chinese painting and calligraphy creation assistant",
+      optionsScrollHint: "More choices below — scroll to continue",
       photo: "Optional: add a placement photo",
       photoHint: "Use it to generate a room preview. You can skip it and create artwork now.",
       camera: "Camera",
@@ -403,6 +432,7 @@ const CLIENT_OVERRIDES: Dictionaries = {
       generationSummaryWithPreview: "Artwork and placement preview will be generated."
     },
     generationLoading: {
+      backgroundContinuation: "You can switch pages. Generation will continue in the background.",
       estimate: {
         single: "Usually about 30 seconds. Please wait.",
         double: "Usually about 50 seconds. Please wait."
@@ -442,6 +472,16 @@ const CLIENT_OVERRIDES: Dictionaries = {
         status: "Character verification needs review",
         action: "Generate calligraphy again"
       }
+    },
+    imageViewer: {
+      back: "Back",
+      error: "Image is temporarily unavailable",
+      gestureHint: "Pinch to zoom · Double-tap to enlarge",
+      resetZoom: "Reset zoom",
+      controls: "Image zoom controls",
+      zoomOut: "Zoom out",
+      reset: "Reset",
+      zoomIn: "Zoom in"
     },
     suggestions: {
       painting: ["Start generating", "Clarify the focal hierarchy", "Leave more open space", "Clarify wet-dry ink layers", "Open up the breathing space", "Restrain the color palette", "Use a more measured rhythm", "Adjust the format to the wall", "Reduce decorative effects"],
@@ -509,7 +549,8 @@ const CLIENT_OVERRIDES: Dictionaries = {
     },
     empty: {
       library: "Library is empty",
-      libraryHint: "Begin in Studio to set a subject and format. Saved works retain available format and density details.",
+      libraryHint: "Begin in Studio, set the subject and format, then save the works you want to keep.",
+      libraryDetail: "The library retains each title, format, and density note.",
       libraryAction: "Go to Studio"
     },
     experts: {
@@ -518,10 +559,11 @@ const CLIENT_OVERRIDES: Dictionaries = {
       serviceHeading: "Consultation directions",
       extraServiceName: "Framing and production advice",
       extraServiceDescription: "Clarify size, material, and production path for gifting or interiors.",
-      expectation: "Pricing is assessed by request",
+      credentialsLabel: "Professional credentials",
       sampleHeading: "Selected works",
+      sampleHint: "Swipe sideways to see more works",
       profileNotice: "Wu Jiayin is an onboarded expert. Availability and delivery arrangements are confirmed after consultation.",
-      serviceBoundary: "Displayed amounts are platform estimates, not quotations. Scope, fees, revisions, and delivery are set in the final engagement confirmation.",
+      serviceBoundary: "Scope, revisions, and delivery are set in the final engagement confirmation.",
       productionUnavailable: "Production consultation is not open yet"
     },
     production: {

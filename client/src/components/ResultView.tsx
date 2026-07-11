@@ -297,7 +297,7 @@ export default function ResultView({
       {failed || layout === "split" ? resultActions : null}
       {actionError ? <p className="error-line" role="status">{actionError}</p> : null}
       {viewerImage ? (
-        <ImageViewer src={viewerImage.src} alt={viewerImage.alt} onClose={() => setViewerImage(null)} />
+        <ImageViewer src={viewerImage.src} alt={viewerImage.alt} t={t} onClose={() => setViewerImage(null)} />
       ) : null}
     </section>
   );

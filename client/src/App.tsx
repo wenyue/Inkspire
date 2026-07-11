@@ -1,5 +1,5 @@
 import { BookOpen, Brush, Languages, Users } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useNavigationType } from "react-router-dom";
 import {
   fallbackConfig,
@@ -55,6 +55,11 @@ import {
   writeTabHistoryState,
   type Tab
 } from "./navigation";
+import {
+  readTabScrollPositions,
+  writeTabScrollPositions,
+  type TabScrollPositions
+} from "./tabScrollPosition";
 
 type RecordRouteMode = "result" | "adjust" | "production";
 type GenerationPayload = Parameters<typeof createGeneration>[0];
@@ -301,6 +306,7 @@ export default function App() {
   const [tabHistory, setTabHistory] = useState(() => readTabHistoryState(
     typeof window === "undefined" ? "/studio" : `${window.location.pathname}${window.location.search}`
   ));
+  const [initialTabScrollPositions] = useState(readTabScrollPositions);
   const activeJobsRef = useRef<GenerationJob[]>([]);
   const generationSessionsRef = useRef<GenerationSessionMap>(generationSessions);
   const autoFusionRecordIds = useRef<Set<string>>(new Set());
@@ -313,6 +319,116 @@ export default function App() {
   const studioResultGuardRef = useRef(false);
   const studioResultPathRef = useRef("/studio");
   const imageViewerHandledPopRef = useRef(false);
+  const mainSurfaceRef = useRef<HTMLElement | null>(null);
+  const tabScrollPositionsRef = useRef<TabScrollPositions>(initialTabScrollPositions);
+  const pendingScrollRestoreRef = useRef<{ tab: Tab; top: number } | null>(null);
+  const programmaticScrollRef = useRef<{ tab: Tab; top: number } | null>(null);
+  const pageHiddenRef = useRef(false);
+  const userScrollActiveRef = useRef(false);
+
+  useLayoutEffect(() => {
+    if ("scrollRestoration" in window.history) {
+      window.history.scrollRestoration = "manual";
+    }
+  }, []);
+
+  const saveTabScrollPosition = useCallback((tab: Tab, top: number) => {
+    const next = { ...tabScrollPositionsRef.current, [tab]: Math.max(0, top) };
+    tabScrollPositionsRef.current = next;
+    writeTabScrollPositions(next);
+  }, []);
+
+  const restoreTabScrollPosition = useCallback((tab: Tab) => {
+    const surface = mainSurfaceRef.current;
+    if (!surface) {
+      return;
+    }
+    const top = tabScrollPositionsRef.current[tab];
+    userScrollActiveRef.current = false;
+    pendingScrollRestoreRef.current = { tab, top };
+    surface.scrollTop = top;
+    programmaticScrollRef.current = { tab, top: surface.scrollTop };
+    if (Math.abs(surface.scrollTop - top) < 1) {
+      pendingScrollRestoreRef.current = null;
+    }
+  }, []);
+
+  const onMainSurfaceScroll = useCallback((event: React.UIEvent<HTMLElement>) => {
+    if (pageHiddenRef.current) {
+      return;
+    }
+    if (pendingScrollRestoreRef.current?.tab === activeTab) {
+      return;
+    }
+    if (!userScrollActiveRef.current) {
+      return;
+    }
+    const top = event.currentTarget.scrollTop;
+    const programmatic = programmaticScrollRef.current;
+    if (programmatic?.tab === activeTab && Math.abs(programmatic.top - top) < 1) {
+      programmaticScrollRef.current = null;
+      return;
+    }
+    programmaticScrollRef.current = null;
+    pendingScrollRestoreRef.current = null;
+    saveTabScrollPosition(activeTab, top);
+    userScrollActiveRef.current = false;
+  }, [activeTab, saveTabScrollPosition]);
+
+  const beginUserScroll = useCallback(() => {
+    userScrollActiveRef.current = true;
+    if (pendingScrollRestoreRef.current?.tab === activeTab) {
+      pendingScrollRestoreRef.current = null;
+      programmaticScrollRef.current = null;
+    }
+  }, [activeTab]);
+
+  useLayoutEffect(() => {
+    restoreTabScrollPosition(activeTab);
+  }, [activeTab, restoreTabScrollPosition]);
+
+  useEffect(() => {
+    const onPageHide = () => {
+      pageHiddenRef.current = true;
+      userScrollActiveRef.current = false;
+    };
+    const onPageShow = () => {
+      pageHiddenRef.current = false;
+      userScrollActiveRef.current = false;
+    };
+    window.addEventListener("beforeunload", onPageHide);
+    window.addEventListener("pagehide", onPageHide);
+    window.addEventListener("pageshow", onPageShow);
+    return () => {
+      window.removeEventListener("beforeunload", onPageHide);
+      window.removeEventListener("pagehide", onPageHide);
+      window.removeEventListener("pageshow", onPageShow);
+    };
+  }, []);
+
+  const activeTabContentVersion = activeTab === "library"
+    ? library.length
+    : activeTab === "experts" ? config.experts.length : 0;
+
+  useLayoutEffect(() => {
+    if (pendingScrollRestoreRef.current?.tab === activeTab) {
+      restoreTabScrollPosition(activeTab);
+    }
+  }, [activeTab, activeTabContentVersion, restoreTabScrollPosition]);
+
+  useEffect(() => {
+    const content = mainSurfaceRef.current?.firstElementChild;
+    if (!content || typeof ResizeObserver === "undefined") {
+      return;
+    }
+    const observer = new ResizeObserver(() => {
+      if (pendingScrollRestoreRef.current?.tab === activeTab) {
+        restoreTabScrollPosition(activeTab);
+      }
+    });
+    observer.observe(content);
+    return () => observer.disconnect();
+  }, [activeTab, activeTabContentVersion, restoreTabScrollPosition]);
 
   const updateGenerationSessions = useCallback((updater: (sessions: GenerationSessionMap) => GenerationSessionMap) => {
     setGenerationSessions((current) => {
@@ -968,6 +1084,10 @@ export default function App() {
     if (tab === activeTab && !productionDialogOpen && !adjustOpen) {
       return;
     }
+    const surface = mainSurfaceRef.current;
+    if (surface) {
+      saveTabScrollPosition(activeTab, surface.scrollTop);
+    }
     setShowProduction(false);
     setAdjustOpen(false);
     const currentTabHistory = pushTabRoute(tabHistoryRef.current, pathWithSearch);
@@ -1224,6 +1344,7 @@ export default function App() {
       clearLabel={t("adjust.clearNote")}
       baseLabel={t("adjust.baseLabel")}
       artworkLabel={t("result.artwork")}
+      t={t}
       suggestions={list(currentRecord.type === "calligraphy"
         ? "suggestions.calligraphy"
         : "suggestions.painting").slice(1)}
@@ -1261,7 +1382,17 @@ export default function App() {
         </label>
       </header>
 
-      <main className="main-surface">
+      <main
+        ref={mainSurfaceRef}
+        className="main-surface"
+        onKeyDown={beginUserScroll}
+        onPointerDown={beginUserScroll}
+        onPointerMove={beginUserScroll}
+        onScroll={onMainSurfaceScroll}
+        onTouchMove={beginUserScroll}
+        onTouchStart={beginUserScroll}
+        onWheel={beginUserScroll}
+      >
         {activeTabSession ? (
           <GeneratingView
             originTab={activeTabSession.originTab}
@@ -1299,6 +1430,7 @@ export default function App() {
                 locale={locale}
                 emptyLabel={t("empty.library")}
                 emptyHint={t("empty.libraryHint")}
+                emptyDetail={t("empty.libraryDetail")}
                 emptyActionLabel={t("empty.libraryAction")}
                 actionError={libraryActionError}
                 labels={{
@@ -1342,8 +1474,9 @@ export default function App() {
                 serviceHeading={t("experts.serviceHeading")}
                 extraServiceName={t("experts.extraServiceName")}
                 extraServiceDescription={t("experts.extraServiceDescription")}
-                expectationLabel={t("experts.expectation")}
+                credentialsLabel={t("experts.credentialsLabel")}
                 sampleHeading={t("experts.sampleHeading")}
+                sampleHint={t("experts.sampleHint")}
                 profileNotice={t("experts.profileNotice")}
                 serviceBoundary={t("experts.serviceBoundary")}
               />

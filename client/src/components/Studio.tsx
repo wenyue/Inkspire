@@ -370,7 +370,7 @@ export default function Studio({
     : "suggestions.painting");
   const noteSuggestions = suggestions.slice(1);
   const showClassicPicker = isChoosingClassicReference(answers);
-  const canGoBack = Boolean(answers.work_type) && !showClassicPicker;
+  const canGoBack = Boolean(answers.work_type);
   const showPhotoStep = complete && !photoStepComplete;
   const showComplexityStep = complete
     && photoStepComplete
@@ -781,11 +781,6 @@ export default function Studio({
               <ClassicArtworkPicker
                 artworks={config.classicArtworks}
                 locale={locale}
-                onBack={() => {
-                  setAnswers({});
-                  setError("");
-                  navigate("/studio?step=work_type");
-                }}
                 onSelect={selectClassicArtwork}
               />
             ) : question ? (
@@ -804,6 +799,9 @@ export default function Studio({
                   </p>
                 )}
                 <h2>{localizedText(question.title, locale)}</h2>
+                {question.input_type !== "textarea" && questionOptions(question, locale).length >= 3 ? (
+                  <p className="option-scroll-hint">{t("studio.optionsScrollHint")}</p>
+                ) : null}
                 {question.input_type === "textarea" ? (
                   <div className="text-question">
                     <textarea
@@ -845,7 +843,14 @@ export default function Studio({
                       >
                         {question.id !== "calligraphy_script" ? (
                           <span className="option-preview-frame" aria-hidden="true">
-                            <img className="option-preview-image" src={optionPreviewImage(question, index, locale)} alt="" aria-hidden="true" />
+                            <img
+                              className="option-preview-image"
+                              src={optionPreviewImage(question, index, locale)}
+                              alt=""
+                              aria-hidden="true"
+                              loading="eager"
+                              decoding="sync"
+                            />
                           </span>
                         ) : null}
                         <span>

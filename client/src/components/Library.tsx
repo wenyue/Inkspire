@@ -8,6 +8,7 @@ interface LibraryProps {
   locale: Locale;
   emptyLabel: string;
   emptyHint?: string;
+  emptyDetail?: string;
   emptyActionLabel?: string;
   actionError?: string;
   labels: {
@@ -210,6 +211,7 @@ export default function Library({
   locale,
   emptyLabel,
   emptyHint,
+  emptyDetail,
   emptyActionLabel,
   actionError = "",
   labels,
@@ -225,6 +227,7 @@ export default function Library({
         </div>
         <h2>{emptyLabel}</h2>
         {emptyHint ? <p>{emptyHint}</p> : null}
+        {emptyDetail ? <p className="empty-state-detail">{emptyDetail}</p> : null}
         {emptyActionLabel && onEmptyAction ? (
           <button type="button" onClick={onEmptyAction}>
             {emptyActionLabel}

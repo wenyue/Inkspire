@@ -18,15 +18,17 @@ describe("domain question flow", () => {
     const question = getInitialQuestion(config);
 
     expect(question.id).toBe("work_type");
-    expect(question.options?.["zh-Hans"]).toEqual(["国画", "书法", "东亚历代绘画"]);
-    expect(question.options?.en).toEqual(["Painting", "Calligraphy", "East Asian Painting"]);
+    expect(question.title["zh-Hans"]).toBe("先定创作方向");
+    expect(question.title.en).toBe("Choose a creative direction");
+    expect(question.options?.["zh-Hans"]).toEqual(["国画", "书法", "从历代名作取意"]);
+    expect(question.options?.en).toEqual(["Painting", "Calligraphy", "Draw from Masterworks"]);
   });
 
   it("maps the third work type option to the classic reference picker", () => {
     const question = getInitialQuestion(config);
 
-    expect(optionValueForQuestion(question, "东亚历代绘画", "zh-Hans")).toBe("classic_reference");
-    expect(optionValueForQuestion(question, "East Asian Painting", "en")).toBe("classic_reference");
+    expect(optionValueForQuestion(question, "从历代名作取意", "zh-Hans")).toBe("classic_reference");
+    expect(optionValueForQuestion(question, "Draw from Masterworks", "en")).toBe("classic_reference");
   });
 
   it("shows only painting follow-up questions after choosing painting", () => {

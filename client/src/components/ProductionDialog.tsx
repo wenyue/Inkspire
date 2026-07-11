@@ -390,6 +390,11 @@ export default function ProductionDialog({
   const [referenceLevel, setReferenceLevel] = useState(3);
   const [estimate, setEstimate] = useState<ProductionEstimate | null>(null);
   const [order, setOrder] = useState<ProductionOrder | null>(null);
+
+  useEffect(() => {
+    document.body.classList.add("production-dialog-open");
+    return () => document.body.classList.remove("production-dialog-open");
+  }, []);
   const [page, setPage] = useState<"main" | "size">("main");
   const [error, setError] = useState("");
   const [copyToast, setCopyToast] = useState("");

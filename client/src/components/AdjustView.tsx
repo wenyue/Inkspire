@@ -14,6 +14,7 @@ interface AdjustViewProps {
   clearLabel: string;
   baseLabel: string;
   artworkLabel: string;
+  t: (key: string) => string;
   suggestions: string[];
   isSubmitting?: boolean;
   error?: string;
@@ -37,6 +38,7 @@ export default function AdjustView({
   clearLabel,
   baseLabel,
   artworkLabel,
+  t,
   suggestions,
   isSubmitting = false,
   error = "",
@@ -129,7 +131,7 @@ export default function AdjustView({
       </button>
       {error ? <p className="error-line" role="status">{error}</p> : null}
       {viewerImage ? (
-        <ImageViewer src={viewerImage.src} alt={viewerImage.alt} onClose={() => setViewerImage(null)} />
+        <ImageViewer src={viewerImage.src} alt={viewerImage.alt} t={t} onClose={() => setViewerImage(null)} />
       ) : null}
     </section>
   );

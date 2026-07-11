@@ -44,9 +44,9 @@
           "en": "Expert Custom"
         },
         "description": {
-          "zh-Hans": "由吴嘉茵直接创作或深度主导；当前金额仅作平台估算。",
-          "zh-Hant": "由吳嘉茵直接創作或深度主導；目前金額僅作平台估算。",
-          "en": "Wu Jiayin creates or closely leads the work. Current amounts are platform estimates only."
+          "zh-Hans": "由吴嘉茵直接创作或深度主导，并共同确认创作方向与交付安排。",
+          "zh-Hant": "由吳嘉茵直接創作或深度主導，並共同確認創作方向與交付安排。",
+          "en": "Wu Jiayin creates or closely leads the work, with the creative direction and delivery arrangements confirmed together."
         },
         "priceEstimate": {
           "base": 1800,
@@ -62,9 +62,9 @@
           "en": "Expert Guided"
         },
         "description": {
-          "zh-Hans": "由吴嘉茵提供创作方向、修改意见或把关；当前金额仅作平台估算。",
-          "zh-Hant": "由吳嘉茵提供創作方向、修改意見或把關；目前金額僅作平台估算。",
-          "en": "Wu Jiayin provides creative direction, revision notes, or review. Current amounts are platform estimates only."
+          "zh-Hans": "由吴嘉茵提供创作方向、修改意见或作品把关，并共同确认指导轮次。",
+          "zh-Hant": "由吳嘉茵提供創作方向、修改意見或作品把關，並共同確認指導輪次。",
+          "en": "Wu Jiayin provides creative direction, revision notes, or review, with the guidance rounds confirmed together."
         },
         "priceEstimate": {
           "base": 600,

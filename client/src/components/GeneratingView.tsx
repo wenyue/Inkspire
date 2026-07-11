@@ -76,6 +76,7 @@ export default function GeneratingView({
       <div className="generating-copy">
         <h2>{failed ? failureTitle : t(copyKey)}</h2>
         <p>{failed ? failureHint : t(estimateKey)}</p>
+        {!failed ? <p>{t("generationLoading.backgroundContinuation")}</p> : null}
         {calligraphyNeedsReview ? <p className="generation-review-status">{t("generationFailure.calligraphyReview.status")}</p> : null}
       </div>
       {recoveryError ? <p className="error-line" role="status">{recoveryError}</p> : null}

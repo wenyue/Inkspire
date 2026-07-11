@@ -11,6 +11,7 @@ const VIEWER_POP_EVENT = "inkspire:image-viewer-pop";
 interface ImageViewerProps {
   src: string;
   alt: string;
+  t: (key: string) => string;
   onClose: () => void;
 }
 
@@ -28,10 +29,14 @@ function isImageViewerHistoryState(current: unknown): boolean {
   );
 }
 
-export default function ImageViewer({ src, alt, onClose }: ImageViewerProps) {
+export default function ImageViewer({ src, alt, t, onClose }: ImageViewerProps) {
   const [imageFailed, setImageFailed] = useState(false);
+  const viewerRef = useRef<HTMLDivElement | null>(null);
   const closeRef = useRef<HTMLButtonElement | null>(null);
   const openRef = useRef(false);
+  const previousFocusRef = useRef<HTMLElement | null>(
+    document.activeElement instanceof HTMLElement ? document.activeElement : null
+  );
 
   const closeWithHistory = useCallback((): void => {
     if (isImageViewerHistoryState(window.history.state)) {
@@ -45,9 +50,11 @@ export default function ImageViewer({ src, alt, onClose }: ImageViewerProps) {
     openRef.current = true;
     document.body.classList.add("image-viewer-open");
     window.history.pushState(imageViewerHistoryState(window.history.state), "", window.location.href);
+    closeRef.current?.focus();
     return () => {
       openRef.current = false;
       document.body.classList.remove("image-viewer-open");
+      previousFocusRef.current?.focus();
     };
   }, []);
 
@@ -66,13 +73,33 @@ export default function ImageViewer({ src, alt, onClose }: ImageViewerProps) {
 
   useEffect(() => {
     setImageFailed(false);
-    closeRef.current?.focus();
   }, [src]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         closeWithHistory();
+        return;
+      }
+      if (event.key !== "Tab") {
+        return;
+      }
+      const candidates = Array.from(viewerRef.current?.querySelectorAll<HTMLButtonElement>(
+        "button:not([disabled])"
+      ) ?? []);
+      const visibleCandidates = candidates.filter((element) => element.getClientRects().length > 0);
+      const focusable = visibleCandidates.length > 0 ? visibleCandidates : candidates;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (!first || !last) {
+        return;
+      }
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
       }
     };
     window.addEventListener("keydown", onKeyDown);
@@ -80,10 +107,10 @@ export default function ImageViewer({ src, alt, onClose }: ImageViewerProps) {
   }, [closeWithHistory]);
 
   return (
-    <div className="image-viewer" role="dialog" aria-modal="true" aria-label={alt}>
+    <div ref={viewerRef} className="image-viewer" role="dialog" aria-modal="true" aria-label={alt}>
       <button ref={closeRef} className="image-viewer-back" type="button" onClick={closeWithHistory}>
         <ArrowLeft aria-hidden="true" size={16} />
-        返回
+        {t("imageViewer.back")}
       </button>
       <TransformWrapper
         key={src}
@@ -102,7 +129,7 @@ export default function ImageViewer({ src, alt, onClose }: ImageViewerProps) {
           <>
             <div className="image-viewer-stage">
               {imageFailed ? (
-                <div className="image-viewer-error" role="status">图片暂时无法查看</div>
+                <div className="image-viewer-error" role="status">{t("imageViewer.error")}</div>
               ) : (
                 <TransformComponent
                   wrapperClass="image-viewer-transform-wrapper"
@@ -117,29 +144,29 @@ export default function ImageViewer({ src, alt, onClose }: ImageViewerProps) {
                 </TransformComponent>
               )}
             </div>
-            <div className="image-viewer-mobile-hint" aria-hidden="true">双指缩放 · 双击放大</div>
+            <div className="image-viewer-mobile-hint" aria-hidden="true">{t("imageViewer.gestureHint")}</div>
             <button
               type="button"
               className="image-viewer-mobile-reset"
-              aria-label="重置缩放"
+              aria-label={t("imageViewer.resetZoom")}
               onClick={() => resetTransform(160)}
             >
               <RotateCcw aria-hidden="true" size={18} />
             </button>
-            <div className="image-viewer-controls" aria-label="图片缩放控制">
+            <div className="image-viewer-controls" aria-label={t("imageViewer.controls")}>
               <button
                 type="button"
-                aria-label="缩小"
+                aria-label={t("imageViewer.zoomOut")}
                 onClick={() => zoomOut(SCALE_STEP, 120)}
               >
                 <Minus aria-hidden="true" size={18} />
               </button>
-              <button type="button" aria-label="重置" onClick={() => resetTransform(160)}>
+              <button type="button" aria-label={t("imageViewer.reset")} onClick={() => resetTransform(160)}>
                 <RotateCcw aria-hidden="true" size={18} />
               </button>
               <button
                 type="button"
-                aria-label="放大"
+                aria-label={t("imageViewer.zoomIn")}
                 onClick={() => zoomIn(SCALE_STEP, 120)}
               >
                 <Plus aria-hidden="true" size={18} />
