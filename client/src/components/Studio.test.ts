@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { fallbackConfig, type PublicConfig } from "../api";
 import { previousStudioStepUrlForState } from "./Studio";
+import { optionSourceNote } from "./Studio";
 
 const config: PublicConfig = {
   ...fallbackConfig,
@@ -73,5 +74,16 @@ describe("previousStudioStepUrlForState", () => {
       hasSourcePhoto: false,
       notesFocusRequest: 0,
     })).toBe("/studio?step=work_type");
+  });
+});
+
+describe("optionSourceNote", () => {
+  test("returns the localized verified source note for a script option", () => {
+    expect(optionSourceNote({
+      id: "calligraphy_script",
+      title: { "zh-Hans": "书体", "zh-Hant": "書體", en: "Script" },
+      options: { "zh-Hans": ["楷书"], "zh-Hant": ["楷書"], en: ["Regular"] },
+      option_source_notes: [{ "zh-Hans": "取法唐·颜真卿《多宝塔碑》", "zh-Hant": "取法唐·顏真卿《多寶塔碑》", en: "Reference: Yan Zhenqing" }]
+    }, 0, "zh-Hans")).toBe("取法唐·颜真卿《多宝塔碑》");
   });
 });

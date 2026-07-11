@@ -45,6 +45,7 @@ const PRODUCTION_COMPLEXITY_MULTIPLIERS = {
 const ORDER_ID_ALPHABET = "abcdefghijklmnopqrstuvwxyz0123456789";
 const ORDER_ID_PATTERN = /^ord-[a-z0-9]{8}$/;
 const ORDER_ID_MAX_ATTEMPTS = 8;
+const LEGACY_EXPERT_IDS = new Set(["wu_jiayin"]);
 const SOURCE_PHOTO_FILES = new Set(["source-photo.webp"]);
 const ARTWORK_FILES = new Set(["artwork.webp"]);
 const FUSION_FILES = new Set(["fusion.webp"]);
@@ -74,6 +75,13 @@ async function allocateProductionOrderId(storage, orderIdGenerator = newProducti
 
 function productionSize(value) {
   return Object.hasOwn(PRODUCTION_SIZE_MULTIPLIERS, value) ? value : "medium";
+}
+
+function publicProductionOrder(order, config) {
+  if (!LEGACY_EXPERT_IDS.has(order.expert_id)) {
+    return order;
+  }
+  return { ...order, expert_id: config.experts[0]?.id || "platform_artisan_match" };
 }
 
 function badRequest(message) {
@@ -612,7 +620,7 @@ function createApp(options = {}) {
       res.status(404).json({ error: "order not found" });
       return;
     }
-    res.json({ order });
+    res.json({ order: publicProductionOrder(order, config) });
   }));
 
   if (fs.existsSync(path.join(clientDist, "index.html"))) {

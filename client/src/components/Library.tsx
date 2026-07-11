@@ -21,6 +21,13 @@ interface LibraryProps {
     removeConfirmHint?: string;
     removeConfirmCancel?: string;
     removeConfirmAction?: string;
+    workTypePainting?: string;
+    workTypeCalligraphy?: string;
+    format?: string;
+    density?: string;
+    densitySmall?: string;
+    densityMedium?: string;
+    densityLarge?: string;
   };
   onOpen?: (record: LibraryRecord) => void;
   onEmptyAction?: () => void;
@@ -75,8 +82,38 @@ function formattedCreatedAt(record: LibraryRecord, locale: Locale): string {
   }).format(time);
 }
 
+const formatTranslations = [
+  ["横幅", "橫幅", "Horizontal"],
+  ["立轴", "立軸", "Hanging Scroll"],
+  ["斗方", "斗方", "Square"],
+  ["手卷", "手卷", "Handscroll"],
+  ["扇面", "扇面", "Fan"],
+  ["册页", "冊頁", "Album"]
+] as const;
+
+function localizedFormat(value: string, locale: Locale): string {
+  const match = formatTranslations.find((translations) => translations.some((translation) => translation === value));
+  if (!match) return value;
+  return match[locale === "zh-Hans" ? 0 : locale === "zh-Hant" ? 1 : 2];
+}
+
 function metadata(record: LibraryRecord, labels: LibraryProps["labels"], locale: Locale): string {
-  return [statusLabel(record, labels), formattedCreatedAt(record, locale)].filter(Boolean).join(" · ");
+  const savedFormat = record.answers?.painting_format || record.answers?.calligraphy_layout;
+  const format = savedFormat ? localizedFormat(savedFormat, locale) : "";
+  const density = record.generation_complexity === "small"
+    ? labels.densitySmall
+    : record.generation_complexity === "medium"
+      ? labels.densityMedium
+      : record.generation_complexity === "large"
+        ? labels.densityLarge
+        : "";
+  return [
+    statusLabel(record, labels),
+    record.type === "painting" ? labels.workTypePainting : labels.workTypeCalligraphy,
+    format && labels.format ? `${labels.format}：${format}` : "",
+    density && labels.density ? `${labels.density}：${density}` : "",
+    formattedCreatedAt(record, locale)
+  ].filter(Boolean).join(" · ");
 }
 
 function LibraryItem({

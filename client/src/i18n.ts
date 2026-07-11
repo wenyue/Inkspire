@@ -137,11 +137,18 @@ const CLIENT_OVERRIDES: Dictionaries = {
       removeConfirmTitle: "从藏卷移出？",
       removeConfirmHint: "作品记录不会删除。",
       removeConfirmCancel: "取消",
-      removeConfirmAction: "移出"
+      removeConfirmAction: "移出",
+      workTypePainting: "国画",
+      workTypeCalligraphy: "书法",
+      format: "形制",
+      density: "疏密",
+      densitySmall: "疏朗",
+      densityMedium: "均衡",
+      densityLarge: "繁密"
     },
     empty: {
       library: "藏卷还空着",
-      libraryHint: "喜欢的画案或生成作品会收在这里。",
+      libraryHint: "先去画案定题材与形制；收藏后会保留作品、形制与疏密线索。",
       libraryAction: "去画案看看"
     },
     experts: {
@@ -151,7 +158,9 @@ const CLIENT_OVERRIDES: Dictionaries = {
       extraServiceName: "装裱与落地咨询",
       extraServiceDescription: "确认尺寸、材质和制作路径，适合送礼或空间陈设。",
       expectation: "价格按需求评估",
-      sampleHeading: "风格样张",
+      sampleHeading: "参考方向（非专家作品）",
+      profileNotice: "此页展示平台可协助对接的方向；具体承接人的身份、履历与档期需在咨询后确认。",
+      serviceBoundary: "页面金额仅作平台估算，不构成报价；服务范围、费用、修改轮次与交付时间均以承接确认单为准。",
       productionUnavailable: "暂未开放制作咨询"
     },
     production: {
@@ -309,11 +318,18 @@ const CLIENT_OVERRIDES: Dictionaries = {
       removeConfirmTitle: "從藏卷移出？",
       removeConfirmHint: "作品記錄不會刪除。",
       removeConfirmCancel: "取消",
-      removeConfirmAction: "移出"
+      removeConfirmAction: "移出",
+      workTypePainting: "國畫",
+      workTypeCalligraphy: "書法",
+      format: "形制",
+      density: "疏密",
+      densitySmall: "疏朗",
+      densityMedium: "均衡",
+      densityLarge: "繁密"
     },
     empty: {
       library: "藏卷還空著",
-      libraryHint: "喜歡的畫案或生成作品會收在這裡。",
+      libraryHint: "先到畫案定題材與形制；收藏後會保留作品、形制與疏密線索。",
       libraryAction: "去畫案看看"
     },
     experts: {
@@ -323,7 +339,9 @@ const CLIENT_OVERRIDES: Dictionaries = {
       extraServiceName: "裝裱與落地諮詢",
       extraServiceDescription: "確認尺寸、材質和製作路徑，適合送禮或空間陳設。",
       expectation: "價格按需求評估",
-      sampleHeading: "風格樣張",
+      sampleHeading: "參考方向（非專家作品）",
+      profileNotice: "此頁展示平台可協助對接的方向；具體承接人的身份、履歷與檔期需在諮詢後確認。",
+      serviceBoundary: "頁面金額僅作平台估算，不構成報價；服務範圍、費用、修改輪次與交付時間均以承接確認單為準。",
       productionUnavailable: "暫未開放製作諮詢"
     },
     production: {
@@ -480,11 +498,18 @@ const CLIENT_OVERRIDES: Dictionaries = {
       removeConfirmTitle: "Remove from Library?",
       removeConfirmHint: "The artwork record will not be deleted.",
       removeConfirmCancel: "Cancel",
-      removeConfirmAction: "Remove"
+      removeConfirmAction: "Remove",
+      workTypePainting: "Painting",
+      workTypeCalligraphy: "Calligraphy",
+      format: "Format",
+      density: "Density",
+      densitySmall: "Open",
+      densityMedium: "Balanced",
+      densityLarge: "Dense"
     },
     empty: {
       library: "Library is empty",
-      libraryHint: "Saved drafts and generated artworks will appear here.",
+      libraryHint: "Begin in Studio to set a subject and format. Saved works retain available format and density details.",
       libraryAction: "Go to Studio"
     },
     experts: {
@@ -494,7 +519,9 @@ const CLIENT_OVERRIDES: Dictionaries = {
       extraServiceName: "Framing and production advice",
       extraServiceDescription: "Clarify size, material, and production path for gifting or interiors.",
       expectation: "Pricing is assessed by request",
-      sampleHeading: "Style samples",
+      sampleHeading: "Reference directions (not the artisan's work)",
+      profileNotice: "This page shows directions the platform can help match. The assigned artisan's identity, credentials, and availability are confirmed after consultation.",
+      serviceBoundary: "Displayed amounts are platform estimates, not quotations. Scope, fees, revisions, and delivery are set in the final engagement confirmation.",
       productionUnavailable: "Production consultation is not open yet"
     },
     production: {

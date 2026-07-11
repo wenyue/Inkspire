@@ -1,28 +1,40 @@
 [
   {
-    "id": "wu_jiayin",
-    "name": "吴嘉茵",
-    "region": "广东省",
-    "bio": "广东岭南书画领域青年艺术家，中国书法家协会会员，中山大学中国美学博士，长期关注书法理论与创作。",
+    "id": "platform_artisan_match",
+    "name": {
+      "zh-Hans": "平台合作雅匠",
+      "zh-Hant": "平台合作雅匠",
+      "en": "Platform artisan matching"
+    },
+    "region": {
+      "zh-Hans": "承接人待确认",
+      "zh-Hant": "承接人待確認",
+      "en": "Artisan to be confirmed"
+    },
+    "bio": {
+      "zh-Hans": "提供书画创作与落地咨询方向；具体承接人的身份、履历、档期及服务能力需在咨询前另行确认。",
+      "zh-Hant": "提供書畫創作與落地諮詢方向；具體承接人的身份、履歷、檔期及服務能力需在諮詢前另行確認。",
+      "en": "Provides matching directions for artwork creation and production. The assigned artisan's identity, credentials, availability, and service scope are confirmed before engagement."
+    },
     "phone": "",
     "wechat": "",
-    "credentials": ["中国书法家协会会员", "中山大学中国美学博士"],
+    "credentials": [],
     "sampleImages": [
-      "/previews/options/calligraphy-script-1-running.webp",
-      "/previews/options/painting-subject-0-landscape.webp"
+      "/classic-artworks/中国-han-gan-night-shining-white-39901-thumb.webp",
+      "/classic-artworks/中国-ni-zan-woods-and-valleys-of-mount-yu-45636-thumb.webp"
     ],
     "services": [
       {
         "id": "expert_custom",
         "name": {
-          "zh-Hans": "专家定制",
-          "zh-Hant": "專家定製",
-          "en": "Expert Custom"
+          "zh-Hans": "定制创作咨询",
+          "zh-Hant": "定製創作諮詢",
+          "en": "Custom artwork consultation"
         },
         "description": {
-          "zh-Hans": "专家直接创作或深度主导，价格更高。",
-          "zh-Hant": "專家直接創作或深度主導，價格更高。",
-          "en": "The artisan creates directly or leads the work closely, with higher pricing."
+          "zh-Hans": "确认承接雅匠后，由其直接创作或深度主导；当前金额仅作平台估算。",
+          "zh-Hant": "確認承接雅匠後，由其直接創作或深度主導；目前金額僅作平台估算。",
+          "en": "After an artisan is confirmed, they create or lead the work closely. Current amounts are platform estimates only."
         },
         "priceEstimate": {
           "base": 1800,
@@ -33,14 +45,14 @@
       {
         "id": "expert_guided",
         "name": {
-          "zh-Hans": "专家指导",
-          "zh-Hant": "專家指導",
-          "en": "Expert Guided"
+          "zh-Hans": "创作指导咨询",
+          "zh-Hant": "創作指導諮詢",
+          "en": "Creative guidance consultation"
         },
         "description": {
-          "zh-Hans": "专家给方向、修改意见或把关，价格更低。",
-          "zh-Hant": "專家給方向、修改意見或把關，價格更低。",
-          "en": "The artisan gives direction, revision notes, or review at a lower price."
+          "zh-Hans": "确认承接雅匠后，由其提供方向、修改意见或把关；当前金额仅作平台估算。",
+          "zh-Hant": "確認承接雅匠後，由其提供方向、修改意見或把關；目前金額僅作平台估算。",
+          "en": "After an artisan is confirmed, they provide direction or review. Current amounts are platform estimates only."
         },
         "priceEstimate": {
           "base": 600,

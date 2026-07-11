@@ -10,6 +10,7 @@ export interface Question {
   input_type?: "choice" | "textarea";
   preview_image?: string | LocalizedText;
   option_preview_images?: string[];
+  option_source_notes?: LocalizedText[];
   preview_prompt?: string | LocalizedText;
   title: LocalizedText;
   placeholder?: LocalizedText;
@@ -37,8 +38,8 @@ export const WORK_TYPE_QUESTION: Question = {
     "/previews/questions/painting-subject.webp"
   ],
   preview_prompt: {
-    "zh-Hans": "选择国画、书法或古代名作参考",
-    "zh-Hant": "選擇國畫、書法或古代名作參考",
+    "zh-Hans": "选择国画、书法或东亚历代绘画参考",
+    "zh-Hant": "選擇國畫、書法或東亞歷代繪畫參考",
     en: "Preview the artwork direction"
   },
   title: {
@@ -47,9 +48,9 @@ export const WORK_TYPE_QUESTION: Question = {
     en: "Choose the work type"
   },
   options: {
-    "zh-Hans": ["国画", "书法", "古代名作"],
-    "zh-Hant": ["國畫", "書法", "古代名作"],
-    en: ["Painting", "Calligraphy", "Classic Artworks"]
+    "zh-Hans": ["国画", "书法", "东亚历代绘画"],
+    "zh-Hant": ["國畫", "書法", "東亞歷代繪畫"],
+    en: ["Painting", "Calligraphy", "East Asian Painting"]
   }
 };
 

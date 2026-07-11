@@ -86,6 +86,16 @@ function summarizeRecord(record) {
   if (record.recommended_artwork_size) {
     summary.recommended_artwork_size = record.recommended_artwork_size;
   }
+  const displayAnswers = {};
+  for (const key of ["painting_format", "calligraphy_layout"]) {
+    const value = record.answers?.[key];
+    if (typeof value === "string" && value.trim()) {
+      displayAnswers[key] = value;
+    }
+  }
+  if (Object.keys(displayAnswers).length > 0) {
+    summary.answers = displayAnswers;
+  }
   return summary;
 }
 

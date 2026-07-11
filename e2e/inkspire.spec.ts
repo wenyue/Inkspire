@@ -66,6 +66,31 @@ for (const viewport of [
   { width: 320, height: 568 },
   { width: 390, height: 844 }
 ]) {
+  test(`${viewport.width}px phone keeps verified classic references and script sources trustworthy`, async ({ page }) => {
+    await page.setViewportSize(viewport);
+    await page.goto("/");
+
+    await page.getByRole("button", { name: "东亚历代绘画" }).click();
+    await expect(page.getByRole("heading", { name: "东亚历代绘画" })).toBeVisible();
+    await expect(page.locator(".classic-card")).toHaveCount(4);
+    await expect(page.getByRole("button", { name: "全部馆藏 · 保留原题" })).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)).toBe(false);
+
+    await page.getByRole("button", { name: "上一步" }).click();
+    await page.getByRole("button", { name: "书法" }).click();
+    const calligraphyText = page.getByLabel("想写什么正文？");
+    await expect(calligraphyText).toBeVisible();
+    await calligraphyText.pressSequentially("清风入怀");
+    const continueToScript = page.getByRole("button", { name: "继续定书体" });
+    await expect(continueToScript).toBeEnabled();
+    await continueToScript.click();
+    await expect(page.getByRole("heading", { name: "偏好哪种书体？" })).toBeVisible();
+    await expect(page.locator(".script-source-option")).toHaveCount(5);
+    await expect(page.locator(".script-source-option img")).toHaveCount(0);
+    await expect(page.locator(".option-source-note")).toHaveCount(5);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)).toBe(false);
+  });
+
   test(`${viewport.width}px phone keeps every notes suggestion above the generate action`, async ({ page }) => {
     await page.setViewportSize(viewport);
     await page.goto("/");
@@ -164,7 +189,7 @@ test("compact phone keeps classic failure recovery visible and opens the picker 
   await recovery.click();
 
   await expect(page).toHaveURL(/\/studio\?step=classic$/);
-  await expect(page.getByRole("heading", { name: "选择古代名作" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "东亚历代绘画" })).toBeVisible();
   await expect(page.locator(".classic-card").first()).toBeVisible();
   expect(generationRequests).toBe(0);
 });

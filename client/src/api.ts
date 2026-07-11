@@ -25,9 +25,9 @@ export interface ExpertService {
 
 export interface Expert {
   id: string;
-  name: string;
-  region: string;
-  bio: string;
+  name: string | Record<string, string>;
+  region: string | Record<string, string>;
+  bio: string | Record<string, string>;
   phone?: string;
   wechat?: string;
   credentials?: string[];
@@ -117,11 +117,10 @@ export interface LibraryRecord {
   calligraphy_verification?: CalligraphyVerification;
   diagnostics?: GenerationDiagnostics | null;
   generation_profile?: GenerationProfile;
-}
-
-export interface GenerationRecord extends LibraryRecord {
   answers?: Answers;
 }
+
+export type GenerationRecord = LibraryRecord;
 
 export interface GenerationJob {
   id: string;

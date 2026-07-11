@@ -145,15 +145,7 @@
     {
       "id": "calligraphy_script",
       "applies_to": ["calligraphy", "fusion"],
-      "preview_image": "/previews/questions/calligraphy-script.webp",
-      "option_preview_images": [
-        "/previews/options/calligraphy-script-0-regular.webp",
-        "/previews/options/calligraphy-script-1-running.webp",
-        "/previews/options/calligraphy-script-2-cursive.webp",
-        "/previews/options/calligraphy-script-3-clerical.webp",
-        "/previews/options/calligraphy-script-4-seal.webp"
-      ],
-      "preview_prompt": "书法书体选择，楷行草隶篆",
+      "preview_prompt": "以可靠碑帖和法书为取法线索选择书体，不生成或展示伪书法样张",
       "title": {
         "zh-Hans": "偏好哪种书体？",
         "zh-Hant": "偏好哪種書體？",
@@ -163,7 +155,14 @@
         "zh-Hans": ["楷书", "行书", "草书", "隶书", "篆书"],
         "zh-Hant": ["楷書", "行書", "草書", "隸書", "篆書"],
         "en": ["Regular", "Running", "Cursive", "Clerical", "Seal"]
-      }
+      },
+      "option_source_notes": [
+        { "zh-Hans": "取法线索：唐 · 颜真卿《多宝塔碑》", "zh-Hant": "取法線索：唐 · 顏真卿《多寶塔碑》", "en": "Source reference: Yan Zhenqing, Duobao Pagoda Stele" },
+        { "zh-Hans": "取法线索：唐摹王羲之《兰亭序》神龙本（旧传冯承素摹）", "zh-Hant": "取法線索：唐摹王羲之《蘭亭序》神龍本（舊傳馮承素摹）", "en": "Source reference: Tang copy of Wang Xizhi's Orchid Pavilion Preface, Shenlong version (traditionally attributed to Feng Chengsu)" },
+        { "zh-Hans": "取法线索：唐 · 孙过庭《书谱》", "zh-Hant": "取法線索：唐 · 孫過庭《書譜》", "en": "Source reference: Sun Guoting, Treatise on Calligraphy" },
+        { "zh-Hans": "取法线索：东汉《曹全碑》", "zh-Hant": "取法線索：東漢《曹全碑》", "en": "Source reference: Eastern Han, Cao Quan Stele" },
+        { "zh-Hans": "取法线索：秦《泰山刻石》", "zh-Hant": "取法線索：秦《泰山刻石》", "en": "Source reference: Qin dynasty, Mount Tai Inscription" }
+      ]
     },
     {
       "id": "calligraphy_spirit",

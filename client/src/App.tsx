@@ -1311,7 +1311,14 @@ export default function App() {
                   removeConfirmTitle: t("library.removeConfirmTitle"),
                   removeConfirmHint: t("library.removeConfirmHint"),
                   removeConfirmCancel: t("library.removeConfirmCancel"),
-                  removeConfirmAction: t("library.removeConfirmAction")
+                  removeConfirmAction: t("library.removeConfirmAction"),
+                  workTypePainting: t("library.workTypePainting"),
+                  workTypeCalligraphy: t("library.workTypeCalligraphy"),
+                  format: t("library.format"),
+                  density: t("library.density"),
+                  densitySmall: t("library.densitySmall"),
+                  densityMedium: t("library.densityMedium"),
+                  densityLarge: t("library.densityLarge")
                 }}
                 onEmptyAction={() => {
                   setLibraryActionError("");
@@ -1337,6 +1344,8 @@ export default function App() {
                 extraServiceDescription={t("experts.extraServiceDescription")}
                 expectationLabel={t("experts.expectation")}
                 sampleHeading={t("experts.sampleHeading")}
+                profileNotice={t("experts.profileNotice")}
+                serviceBoundary={t("experts.serviceBoundary")}
               />
             ) : null}
           </>

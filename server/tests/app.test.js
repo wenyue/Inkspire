@@ -155,7 +155,7 @@ test("GET /api/config/public returns tabs/questions/experts without codex intern
 
     assert.equal(response.body.i18n["zh-Hans"].tabs.studio, "画案");
     assert.ok(response.body.questions.painting.length > 0);
-    assert.equal(response.body.experts[0].id, "wu_jiayin");
+    assert.equal(response.body.experts[0].id, "platform_artisan_match");
     assert.equal(typeof response.body.productionAvailable, "boolean");
     assert.equal(Object.hasOwn(response.body, "runtime"), false);
     assert.equal(Object.hasOwn(response.body, "codexCommand"), false);
@@ -715,7 +715,7 @@ test("GET /api/library returns the generated record", async () => {
     const agent = request.agent(app);
     const created = await agent
       .post("/api/generations")
-      .send({ type: "calligraphy", answers: { text: "明月松间照" } })
+      .send({ type: "calligraphy", answers: { text: "明月松间照", calligraphy_layout: "立轴" } })
       .expect(201);
 
     await waitForJob(agent, created.body.job.id);
@@ -725,6 +725,7 @@ test("GET /api/library returns the generated record", async () => {
     assert.equal(response.body.records[0].id, created.body.record.id);
     assert.equal(response.body.records[0].favorite, true);
     assert.equal(response.body.records[0].thumbnail_path, created.body.record.artwork_path);
+    assert.deepEqual(response.body.records[0].answers, { calligraphy_layout: "立轴" });
   });
 });
 
@@ -847,7 +848,7 @@ test("POST /api/records/:id/production-estimate returns expert_custom > expert_g
 
     const response = await agent
       .post(`/api/records/${created.body.record.id}/production-estimate`)
-      .send({ expertId: "wu_jiayin" })
+      .send({ expertId: "platform_artisan_match" })
       .expect(200);
 
     assert.ok(response.body.estimates.expert_custom.amount > response.body.estimates.expert_guided.amount);
@@ -866,7 +867,7 @@ test("POST /api/records/:id/production-estimate scales estimates by selected siz
 
     const response = await agent
       .post(`/api/records/${created.body.record.id}/production-estimate`)
-      .send({ expertId: "wu_jiayin", size: "large" })
+      .send({ expertId: "platform_artisan_match", size: "large" })
       .expect(200);
 
     assert.equal(response.body.size, "large");
@@ -886,7 +887,7 @@ test("POST /api/records/:id/production-estimate scales estimates by generation c
 
     const response = await agent
       .post(`/api/records/${created.body.record.id}/production-estimate`)
-      .send({ expertId: "wu_jiayin", size: "medium" })
+      .send({ expertId: "platform_artisan_match", size: "medium" })
       .expect(200);
 
     assert.equal(response.body.estimates.expert_custom.amount, 2250);
@@ -905,7 +906,7 @@ test("POST /api/records/:id/production-orders rejects orders while production co
 
     const response = await agent
       .post(`/api/records/${created.body.record.id}/production-orders`)
-      .send({ expertId: "wu_jiayin", serviceId: "expert_custom", referenceLevel: 3 })
+      .send({ expertId: "platform_artisan_match", serviceId: "expert_custom", referenceLevel: 3 })
       .expect(409);
 
     assert.equal(response.body.code, "production_unavailable");
@@ -925,7 +926,7 @@ test("POST /api/records/:id/production-orders rejects orders while production co
 });
 
 test("POST /api/records/:id/production-orders creates retrievable order with size and reference level", async () => {
-  await withTempApp(async ({ app }) => {
+  await withTempApp(async ({ app, temp }) => {
     const agent = request.agent(app);
     const upload = await agent
       .post("/api/uploads/photo")
@@ -945,7 +946,7 @@ test("POST /api/records/:id/production-orders creates retrievable order with siz
     const response = await agent
       .post(`/api/records/${created.body.record.id}/production-orders`)
       .send({
-        expertId: "wu_jiayin",
+        expertId: "platform_artisan_match",
         serviceId: "expert_custom",
         size: { preset_id: "custom", label: "自定义尺寸", width_cm: 42, height_cm: 66 },
         referenceLevel: 3
@@ -969,6 +970,21 @@ test("POST /api/records/:id/production-orders creates retrievable order with siz
       .expect(200);
 
     assert.deepEqual(lookup.body.order, response.body.order);
+
+    const Database = require("better-sqlite3");
+    const db = new Database(path.join(temp, "inkspire.db"));
+    try {
+      const stored = JSON.parse(db.prepare("SELECT order_json FROM production_orders WHERE id = ?")
+        .get(response.body.order.id).order_json);
+      db.prepare("UPDATE production_orders SET order_json = ? WHERE id = ?")
+        .run(JSON.stringify({ ...stored, expert_id: "wu_jiayin" }), response.body.order.id);
+    } finally {
+      db.close();
+    }
+    const legacyLookup = await agent
+      .get(`/api/production-orders/${response.body.order.id}`)
+      .expect(200);
+    assert.equal(legacyLookup.body.order.expert_id, "platform_artisan_match");
   }, {
     configure: (config) => {
       config.app.productionContact = { phone: "020-12345678", wechat: "" };
@@ -991,7 +1007,7 @@ test("POST /api/records/:id/production-orders retries when a short order id alre
 
     const response = await agent
       .post(`/api/records/${created.body.record.id}/production-orders`)
-      .send({ expertId: "wu_jiayin", serviceId: "expert_custom", referenceLevel: 3 })
+      .send({ expertId: "platform_artisan_match", serviceId: "expert_custom", referenceLevel: 3 })
       .expect(201);
 
     assert.equal(response.body.order.id, "ord-bbbbbbbb");

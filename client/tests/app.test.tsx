@@ -89,14 +89,6 @@ const publicConfig: PublicConfig = {
       {
         id: "calligraphy_script",
         applies_to: ["calligraphy", "fusion"],
-        preview_image: "/previews/questions/calligraphy-script.webp",
-        option_preview_images: [
-          "/previews/options/calligraphy-script-0-regular.webp",
-          "/previews/options/calligraphy-script-1-running.webp",
-          "/previews/options/calligraphy-script-2-cursive.webp",
-          "/previews/options/calligraphy-script-3-clerical.webp",
-          "/previews/options/calligraphy-script-4-seal.webp"
-        ],
         preview_prompt: {
           "zh-Hans": "书法字体选择，行草楷隶",
           "zh-Hant": "書法字體選擇，行草楷隸",
@@ -111,14 +103,19 @@ const publicConfig: PublicConfig = {
           "zh-Hans": ["楷书", "行书", "草书", "隶书", "篆书"],
           "zh-Hant": ["楷書", "行書", "草書", "隸書", "篆書"],
           en: ["Regular", "Running", "Cursive", "Clerical", "Seal"]
-        }
+        },
+        option_source_notes: ["楷书", "行书", "草书", "隶书", "篆书"].map((script) => ({
+          "zh-Hans": `取法线索：${script}碑帖`,
+          "zh-Hant": `取法線索：${script}碑帖`,
+          en: `Source reference: ${script}`
+        }))
       }
     ]
   },
   classicArtworks: classicArtworkSample,
   experts: [
     {
-      id: "wu_jiayin",
+      id: "platform_artisan_match",
       name: "吴嘉茵",
       region: "广东省",
       bio: "中国书法家协会会员，中山大学中国美学博士，岭南书画领域青年艺术家。",
@@ -126,7 +123,7 @@ const publicConfig: PublicConfig = {
       wechat: "",
       credentials: ["中国书法家协会会员", "中山大学中国美学博士"],
       sampleImages: [
-        "/previews/options/calligraphy-script-1-running.webp",
+        "/classic-artworks/中国-han-gan-night-shining-white-39901-thumb.webp",
         "/previews/options/painting-subject-0-landscape.webp"
       ],
       services: [
@@ -197,7 +194,7 @@ const calligraphyTextQuestion: Question = {
   id: "text",
   applies_to: ["calligraphy", "fusion"],
   input_type: "textarea",
-  preview_image: "/previews/questions/calligraphy-script.webp",
+  preview_image: "/previews/questions/calligraphy-text.webp",
   preview_prompt: {
     "zh-Hans": "书法正文，祝福语或诗句",
     "zh-Hant": "書法正文，祝福語或詩句",
@@ -447,7 +444,7 @@ describe("App", () => {
         const body = init?.body ? JSON.parse(String(init.body)) : {};
         const multiplier = body.size === "large" ? 1.5 : body.size === "small" ? 0.75 : 1;
         return Response.json({
-          expert_id: "wu_jiayin",
+          expert_id: "platform_artisan_match",
           size: body.size || "medium",
           estimates: {
             expert_custom: { amount: Math.round(1800 * multiplier), currency: "CNY", rule: "按尺寸、复杂度和交付周期估算" },
@@ -808,7 +805,7 @@ describe("App", () => {
     const user = userEvent.setup();
     const { container } = renderApp();
 
-    const workTypeHero = await screen.findByRole("img", { name: "选择国画、书法或古代名作参考" });
+    const workTypeHero = await screen.findByRole("img", { name: "选择国画、书法或东亚历代绘画参考" });
     expect(workTypeHero).toHaveClass("preview-hero-image");
     expect(workTypeHero).toHaveAttribute("src", "/previews/questions/work-type.webp");
     expect(container.querySelectorAll(".preview-montage")).toHaveLength(0);
@@ -943,7 +940,7 @@ describe("App", () => {
     await user.selectOptions(screen.getByLabelText("语言"), "en");
 
     expect(screen.getByText("Choose the work type")).toBeInTheDocument();
-    expect(screen.queryByText("选择国画、书法或古代名作参考")).not.toBeInTheDocument();
+    expect(screen.queryByText("选择国画、书法或东亚历代绘画参考")).not.toBeInTheDocument();
     expect(screen.getByRole("img", { name: "Preview the artwork direction" })).toBeInTheDocument();
     const workTypePreviews = [...container.querySelectorAll(".option-preview-image")].map((image) => image.getAttribute("src"));
     expect(workTypePreviews).toHaveLength(3);
@@ -958,7 +955,7 @@ describe("App", () => {
     expect(new Set(subjectPreviews).size).toBe(5);
   });
 
-  it("leaves option preview frames empty before images decode", async () => {
+  it("uses source notes instead of pseudo-calligraphy preview images", async () => {
     const user = userEvent.setup();
     const { container } = renderApp();
 
@@ -966,7 +963,9 @@ describe("App", () => {
 
     expect(screen.getByRole("heading", { name: "偏好哪种书体？" })).toBeInTheDocument();
     expect(container.querySelectorAll(".option-preview-fallback")).toHaveLength(0);
-    expect(container.querySelectorAll(".option-preview-image")).toHaveLength(5);
+    expect(container.querySelectorAll(".option-preview-image")).toHaveLength(0);
+    expect(screen.getAllByText(/取法线索/)).toHaveLength(5);
+    expect(screen.getByRole("button", { name: "楷书" })).toHaveAccessibleDescription(/取法线索：楷书/);
   });
 
   it("advances the question flow after clicking 国画", async () => {
@@ -1011,10 +1010,12 @@ describe("App", () => {
     const user = userEvent.setup();
     renderApp();
 
-    await user.click(await screen.findByRole("button", { name: "古代名作" }));
+    await user.click(await screen.findByRole("button", { name: "东亚历代绘画" }));
 
-    expect(await screen.findByRole("heading", { name: "选择古代名作" })).toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: /古画|溪山行旅图/ })).toHaveLength(100);
+    expect(await screen.findByRole("heading", { name: "东亚历代绘画" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "全部馆藏 · 保留原题" }));
+    expect(screen.getAllByRole("button", { name: /古画|溪山行旅图/ })).toHaveLength(12);
+    expect(screen.getByRole("button", { name: /再看一批/ })).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /溪山行旅图/ }));
 
@@ -1023,7 +1024,8 @@ describe("App", () => {
       "/classic-artworks/classic-1.webp"
     );
     expect(screen.getByText(/范宽/)).toBeInTheDocument();
-    expect(screen.getByText(/用于测试的古代绘画介绍/)).toBeInTheDocument();
+    expect(screen.getByText(/尚未完成中文策展核验/)).toBeInTheDocument();
+    expect(screen.queryByText(/用于测试的古代绘画介绍/)).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "选择此作品" }));
 
@@ -1037,7 +1039,8 @@ describe("App", () => {
     const user = userEvent.setup();
     renderApp();
 
-    await user.click(await screen.findByRole("button", { name: "古代名作" }));
+    await user.click(await screen.findByRole("button", { name: "东亚历代绘画" }));
+    await user.click(screen.getByRole("button", { name: "全部馆藏 · 保留原题" }));
     await user.click(await screen.findByRole("button", { name: /溪山行旅图/ }));
     await user.click(await screen.findByRole("button", { name: "选择此作品" }));
     await user.click(screen.getByRole("button", { name: "不需要效果图，直接生成" }));
@@ -1066,14 +1069,15 @@ describe("App", () => {
     const user = userEvent.setup();
     renderApp();
 
-    await user.click(await screen.findByRole("button", { name: "古代名作" }));
+    await user.click(await screen.findByRole("button", { name: "东亚历代绘画" }));
+    await user.click(screen.getByRole("button", { name: "全部馆藏 · 保留原题" }));
     await user.click(await screen.findByRole("button", { name: /溪山行旅图/ }));
     await user.click(await screen.findByRole("button", { name: "选择此作品" }));
 
     expect(await screen.findByLabelText("相册")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "上一步" }));
 
-    expect(await screen.findByRole("heading", { name: "选择古代名作" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "东亚历代绘画" })).toBeInTheDocument();
   });
 
   it("persists answered questions across remounts", async () => {
@@ -1713,7 +1717,7 @@ describe("App", () => {
 
     expect(window.location.pathname).toBe("/studio");
     expect(window.location.search).toBe("?step=classic");
-    expect(await screen.findByRole("heading", { name: "选择古代名作" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "东亚历代绘画" })).toBeInTheDocument();
     expect(generationRequestBodies()).toHaveLength(0);
     expect(JSON.parse(window.localStorage.getItem("inkspire.generationSessions.v1") ?? "{}")).not.toHaveProperty("studio");
   });
@@ -2554,7 +2558,7 @@ describe("App", () => {
         "/api/records/record-1/production-estimate",
         expect.objectContaining({
           method: "POST",
-          body: JSON.stringify({ expertId: "wu_jiayin", size: "large" })
+          body: JSON.stringify({ expertId: "platform_artisan_match", size: "large" })
         })
       );
     });
@@ -2586,7 +2590,7 @@ describe("App", () => {
         "/api/records/record-1/production-estimate",
         expect.objectContaining({
           method: "POST",
-          body: JSON.stringify({ expertId: "wu_jiayin", size: "medium" })
+          body: JSON.stringify({ expertId: "platform_artisan_match", size: "medium" })
         })
       );
     });
@@ -2698,7 +2702,7 @@ describe("App", () => {
         "/api/records/record-1/production-estimate",
         expect.objectContaining({
           method: "POST",
-          body: JSON.stringify({ expertId: "wu_jiayin", size: "large" })
+          body: JSON.stringify({ expertId: "platform_artisan_match", size: "large" })
         })
       );
     });
@@ -2788,7 +2792,7 @@ describe("App", () => {
         expect.objectContaining({
           method: "POST",
           body: JSON.stringify({
-            expertId: "wu_jiayin",
+            expertId: "platform_artisan_match",
             serviceId: "expert_custom",
             size: {
               preset_id: "custom",
@@ -3104,7 +3108,7 @@ describe("App", () => {
     await user.click(await screen.findByRole("button", { name: "藏卷" }));
 
     expect(screen.getByRole("heading", { name: "藏卷还空着" })).toBeInTheDocument();
-    expect(screen.getByText("喜欢的画案或生成作品会收在这里。")).toBeInTheDocument();
+    expect(screen.getByText("先去画案定题材与形制；收藏后会保留作品、形制与疏密线索。")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "移出藏卷" })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "去画案看看" }));
@@ -3123,10 +3127,12 @@ describe("App", () => {
     expect(screen.getByText("专家定制")).toBeInTheDocument();
     expect(screen.getByText("专家指导")).toBeInTheDocument();
     expect(screen.getByText("装裱与落地咨询")).toBeInTheDocument();
-    expect(screen.getByText("中国书法家协会会员")).toBeInTheDocument();
-    expect(screen.getByText("中山大学中国美学博士")).toBeInTheDocument();
-    expect(screen.getByText("风格样张")).toBeInTheDocument();
-    expect(screen.getAllByRole("img", { name: /风格样张/ })).toHaveLength(2);
+    expect(screen.queryByText("中国书法家协会会员")).not.toBeInTheDocument();
+    expect(screen.queryByText("中山大学中国美学博士")).not.toBeInTheDocument();
+    expect(screen.getByText("参考方向（非专家作品）")).toBeInTheDocument();
+    expect(screen.getByText("此页展示平台可协助对接的方向；具体承接人的身份、履历与档期需在咨询后确认。")).toBeInTheDocument();
+    expect(screen.getByText("页面金额仅作平台估算，不构成报价；服务范围、费用、修改轮次与交付时间均以承接确认单为准。")).toBeInTheDocument();
+    expect(screen.getAllByRole("img", { name: /参考方向（非专家作品）/ })).toHaveLength(2);
     expect(container.querySelectorAll(".expert-sample-fallback")).toHaveLength(0);
     expect(screen.queryByText("联系方式待确认")).not.toBeInTheDocument();
   });
@@ -3779,7 +3785,7 @@ describe("App", () => {
     await user.selectOptions(screen.getByLabelText("语言"), "en");
     await user.click(screen.getByRole("button", { name: "Library" }));
 
-    expect(await screen.findByText(`Artwork · ${expectedDate}`)).toBeInTheDocument();
+    expect(await screen.findByText(`Artwork · Painting · ${expectedDate}`)).toBeInTheDocument();
   });
 
   it("can remove a generated artwork from the library", async () => {

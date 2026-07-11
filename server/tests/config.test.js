@@ -22,8 +22,10 @@ test("loads required Inkspire configuration", () => {
   });
   assert.equal(config.app.image.outputFormat, "webp");
   assert.equal(config.app.image.webpQuality, 82);
-  assert.equal(config.experts[0].name, "吴嘉茵");
-  assert.equal(config.experts[0].region, "广东省");
+  assert.equal(config.experts[0].id, "platform_artisan_match");
+  assert.equal(config.experts[0].name["zh-Hans"], "平台合作雅匠");
+  assert.equal(config.experts[0].name.en, "Platform artisan matching");
+  assert.equal(config.experts[0].region["zh-Hant"], "承接人待確認");
   assert.deepEqual(config.experts[0].services.map((service) => service.id), [
     "expert_custom",
     "expert_guided"
@@ -33,9 +35,25 @@ test("loads required Inkspire configuration", () => {
   assert.equal(config.questions.calligraphy[0].id, "text");
   assert.equal(config.questions.calligraphy[0].input_type, "textarea");
   assert.match(config.questions.calligraphy[0].placeholder["zh-Hans"], /祝福语|诗句|词句/);
+  const retiredPseudoCalligraphyAssets = [
+    "client/public/previews/calligraphy-script.svg",
+    "client/public/previews/questions/calligraphy-script.webp",
+    ...["0-regular", "1-running", "2-cursive", "3-clerical", "3-inkspire-decide", "4-seal"]
+      .map((suffix) => `client/public/previews/options/calligraphy-script-${suffix}.webp`)
+  ];
+  for (const asset of retiredPseudoCalligraphyAssets) {
+    assert.equal(fs.existsSync(path.join(root, asset)), false, `${asset} must not be published`);
+  }
   for (const question of [...config.questions.painting, ...config.questions.calligraphy]) {
-    assert.match(question.preview_image, /^\/previews\/questions\/.+\.webp$/);
-    assert.ok(fs.existsSync(path.join(root, "client/public", question.preview_image)));
+    if (question.id === "calligraphy_script") {
+      assert.equal(question.preview_image, undefined);
+      assert.equal(question.option_preview_images, undefined);
+      assert.equal(question.option_source_notes.length, question.options["zh-Hans"].length);
+      continue;
+    } else {
+      assert.match(question.preview_image, /^\/previews\/questions\/.+\.webp$/);
+      assert.ok(fs.existsSync(path.join(root, "client/public", question.preview_image)));
+    }
     if (question.input_type === "textarea") {
       assert.equal(question.options, undefined);
       assert.equal(question.option_preview_images, undefined);
@@ -102,7 +120,7 @@ test("public config exposes only UI-safe fields", () => {
   const exposed = publicConfig(loadConfig(root));
   assert.equal(exposed.name, "墨起");
   assert.equal(exposed.defaultLocale, "zh-Hans");
-  assert.equal(exposed.experts[0].name, "吴嘉茵");
+  assert.equal(exposed.experts[0].name["zh-Hans"], "平台合作雅匠");
   assert.equal(exposed.experts[0].services[0].id, "expert_custom");
   assert.equal(Object.hasOwn(exposed, "codex"), false);
   assert.equal(Object.hasOwn(exposed, "runtime"), false);

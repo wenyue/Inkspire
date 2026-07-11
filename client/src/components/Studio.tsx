@@ -96,7 +96,7 @@ function localizedPreviewImage(question: Question, locale: Locale): string {
   if (typeof image === "string" && image.length > 0) {
     return image;
   }
-  return question.id.startsWith("calligraphy") ? "/previews/calligraphy-script.svg" : "/previews/painting-subject.svg";
+  return question.id.startsWith("calligraphy") ? "/previews/questions/calligraphy-text.webp" : "/previews/painting-subject.svg";
 }
 
 function questionOptions(question: Question, locale: Locale): string[] {
@@ -105,6 +105,11 @@ function questionOptions(question: Question, locale: Locale): string[] {
 
 function optionPreviewImage(question: Question, index: number, locale: Locale): string {
   return question.option_preview_images?.[index] ?? localizedPreviewImage(question, locale);
+}
+
+export function optionSourceNote(question: Question, index: number, locale: Locale): string {
+  const note = question.option_source_notes?.[index];
+  return note ? localizedText(note, locale) : "";
 }
 
 function continueLabel(locale: Locale): string {
@@ -785,13 +790,19 @@ export default function Studio({
               />
             ) : question ? (
               <>
-                <div className="preview-ink">
-                  <img
-                    className="preview-hero-image"
-                    src={localizedPreviewImage(question, locale)}
-                    alt={localizedPreviewText(question, locale)}
-                  />
-                </div>
+                {question.id !== "calligraphy_script" ? (
+                  <div className="preview-ink">
+                    <img
+                      className="preview-hero-image"
+                      src={localizedPreviewImage(question, locale)}
+                      alt={localizedPreviewText(question, locale)}
+                    />
+                  </div>
+                ) : (
+                  <p className="script-source-intro">
+                    {locale === "en" ? "Choose by structure and brush rhythm. Source notes point to established works; the cards are not facsimiles." : locale === "zh-Hant" ? "按結體與筆勢選擇。以下只標明取法來源，卡片不冒充原帖摹本。" : "按结体与笔势选择。以下只标明取法来源，卡片不冒充原帖摹本。"}
+                  </p>
+                )}
                 <h2>{localizedText(question.title, locale)}</h2>
                 {question.input_type === "textarea" ? (
                   <div className="text-question">
@@ -827,20 +838,20 @@ export default function Studio({
                       <button
                         key={option}
                         type="button"
+                        className={question.id === "calligraphy_script" ? "script-source-option" : undefined}
+                        aria-label={question.id === "calligraphy_script" ? option : undefined}
+                        aria-describedby={question.id === "calligraphy_script" && optionSourceNote(question, index, locale) ? `script-source-${index}` : undefined}
                         onClick={() => answerQuestion(option)}
                       >
-                        <span
-                          className="option-preview-frame"
-                          aria-hidden="true"
-                        >
-                          <img
-                            className="option-preview-image"
-                            src={optionPreviewImage(question, index, locale)}
-                            alt=""
-                            aria-hidden="true"
-                          />
+                        {question.id !== "calligraphy_script" ? (
+                          <span className="option-preview-frame" aria-hidden="true">
+                            <img className="option-preview-image" src={optionPreviewImage(question, index, locale)} alt="" aria-hidden="true" />
+                          </span>
+                        ) : null}
+                        <span>
+                          <span className="option-label">{option}</span>
+                          {optionSourceNote(question, index, locale) ? <small id={`script-source-${index}`} className="option-source-note">{optionSourceNote(question, index, locale)}</small> : null}
                         </span>
-                        <span className="option-label">{option}</span>
                       </button>
                     ))}
                   </div>

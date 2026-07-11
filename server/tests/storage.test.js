@@ -201,7 +201,7 @@ test("listLibrary returns spec summaries sorted newest first", async () => {
       fusion_path: "records/fused-work/fusion.webp",
       favorite: true,
       status: "succeeded",
-      answers: { calligraphy_script: "行书" }
+      answers: { calligraphy_script: "行书", calligraphy_layout: "立轴" }
     });
     await storage.saveRecord({
       id: "queued-work",
@@ -243,7 +243,8 @@ test("listLibrary returns spec summaries sorted newest first", async () => {
         thumbnail_path: "records/fused-work/artwork.webp",
         has_fusion: true,
         favorite: true,
-        status: "succeeded"
+        status: "succeeded",
+        answers: { calligraphy_layout: "立轴" }
       },
       {
         id: "older",
@@ -386,7 +387,7 @@ test("ensureStore imports legacy production order JSON files into SQLite once", 
       user_id: "user-a",
       created_at: "2026-06-25T10:00:00.000Z",
       record_id: "legacy-record",
-      expert_id: "wu_jiayin"
+      expert_id: "platform_artisan_match"
     };
     await fs.writeFile(path.join(temp, "orders", "ord-aaaaaaaa.json"), `${JSON.stringify(legacyOrder)}\n`);
 
@@ -406,7 +407,7 @@ test("saveProductionOrder stores orders in SQLite", async () => {
       user_id: "user-a",
       created_at: "2026-06-25T10:00:00.000Z",
       record_id: "record-a",
-      expert_id: "wu_jiayin"
+      expert_id: "platform_artisan_match"
     };
 
     await storage.saveProductionOrder(order, "user-a");

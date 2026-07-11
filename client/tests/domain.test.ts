@@ -18,15 +18,15 @@ describe("domain question flow", () => {
     const question = getInitialQuestion(config);
 
     expect(question.id).toBe("work_type");
-    expect(question.options?.["zh-Hans"]).toEqual(["国画", "书法", "古代名作"]);
-    expect(question.options?.en).toEqual(["Painting", "Calligraphy", "Classic Artworks"]);
+    expect(question.options?.["zh-Hans"]).toEqual(["国画", "书法", "东亚历代绘画"]);
+    expect(question.options?.en).toEqual(["Painting", "Calligraphy", "East Asian Painting"]);
   });
 
   it("maps the third work type option to the classic reference picker", () => {
     const question = getInitialQuestion(config);
 
-    expect(optionValueForQuestion(question, "古代名作", "zh-Hans")).toBe("classic_reference");
-    expect(optionValueForQuestion(question, "Classic Artworks", "en")).toBe("classic_reference");
+    expect(optionValueForQuestion(question, "东亚历代绘画", "zh-Hans")).toBe("classic_reference");
+    expect(optionValueForQuestion(question, "East Asian Painting", "en")).toBe("classic_reference");
   });
 
   it("shows only painting follow-up questions after choosing painting", () => {

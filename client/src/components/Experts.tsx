@@ -10,9 +10,12 @@ interface ExpertsProps {
   extraServiceDescription: string;
   expectationLabel: string;
   sampleHeading: string;
+  profileNotice: string;
+  serviceBoundary: string;
 }
 
-function localizedText(value: Record<string, string>, locale: Locale): string {
+function localizedText(value: string | Record<string, string>, locale: Locale): string {
+  if (typeof value === "string") return value;
   return value[locale] ?? value["zh-Hans"] ?? Object.values(value)[0] ?? "";
 }
 
@@ -24,7 +27,9 @@ export default function Experts({
   extraServiceName,
   extraServiceDescription,
   expectationLabel,
-  sampleHeading
+  sampleHeading,
+  profileNotice,
+  serviceBoundary
 }: ExpertsProps) {
   return (
     <section className="experts-panel">
@@ -32,18 +37,14 @@ export default function Experts({
       {experts.map((expert) => (
         <article className="expert-card" key={expert.id}>
           <div className="expert-profile">
-            <div className="expert-avatar" aria-hidden="true">{expert.name.slice(0, 1)}</div>
+            <div className="expert-avatar" aria-hidden="true">{localizedText(expert.name, locale).slice(0, 1)}</div>
             <div>
-              <h3>{expert.name}</h3>
-              <p>{expert.region}</p>
-              {expert.credentials?.length ? (
-                <div className="expert-credentials" aria-label={expectationLabel}>
-                  {expert.credentials.map((credential) => <span key={credential}>{credential}</span>)}
-                </div>
-              ) : null}
+              <h3>{localizedText(expert.name, locale)}</h3>
+              <p>{localizedText(expert.region, locale)}</p>
+              <span className="expert-pricing-note">{expectationLabel}</span>
             </div>
           </div>
-          <p>{expert.bio}</p>
+          <p className="expert-profile-notice">{profileNotice}</p>
           {expert.sampleImages?.length ? (
             <div className="expert-samples">
               <strong>{sampleHeading}</strong>
@@ -71,6 +72,7 @@ export default function Experts({
               </li>
             </ul>
           </div>
+          <p className="expert-service-boundary">{serviceBoundary}</p>
         </article>
       ))}
     </section>
