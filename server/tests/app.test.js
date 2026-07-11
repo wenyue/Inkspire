@@ -5,8 +5,9 @@ const os = require("node:os");
 const path = require("node:path");
 const request = require("supertest");
 const { PNG } = require("pngjs");
+const sharp = require("sharp");
 const { loadConfig } = require("../src/config");
-const { createApp } = require("../src/app");
+const { createApp, createCodexRunnerDispatch } = require("../src/app");
 
 const root = path.resolve(__dirname, "../..");
 
@@ -21,9 +22,21 @@ async function withTempApp(fn, overrides = {}) {
       dataDir: temp,
       config,
       orderIdGenerator: overrides.orderIdGenerator,
-      runner: overrides.runner || (async ({ outputPngPath }) => {
+      runner: overrides.runner || (async ({ outputPngPath, canvas, stage, record }) => {
+        if (stage === "calligraphy_verification") {
+          return {
+            json: {
+              detected_text: record.answers.text,
+              no_extra_text: true,
+              legible: true,
+              confidence: 1,
+              decision: "verified",
+              issues: []
+            }
+          };
+        }
         await fs.mkdir(path.dirname(outputPngPath), { recursive: true });
-        await fs.writeFile(outputPngPath, pngBuffer());
+        await fs.writeFile(outputPngPath, artworkPngBuffer(canvas));
         return { pngPath: outputPngPath, diagnostics: { reason: "fake_runner" } };
       })
     });
@@ -44,6 +57,39 @@ function pngBuffer() {
   }
   return PNG.sync.write(png);
 }
+
+function artworkPngBuffer(canvas) {
+  const width = canvas?.width > canvas?.height ? 3 : canvas?.width === canvas?.height ? 2 : 2;
+  const height = canvas?.width > canvas?.height ? 2 : canvas?.width === canvas?.height ? 2 : 3;
+  const png = new PNG({ width, height });
+  for (let offset = 0; offset < png.data.length; offset += 4) {
+    png.data[offset] = 25;
+    png.data[offset + 1] = 80;
+    png.data[offset + 2] = 120;
+    png.data[offset + 3] = 255;
+  }
+  return PNG.sync.write(png);
+}
+
+test("Codex runner dispatch routes calligraphy verification to JSON inspection", async () => {
+  assert.equal(typeof createCodexRunnerDispatch, "function");
+  const calls = [];
+  const dispatch = createCodexRunnerDispatch({
+    projectRoot: root,
+    dataDir: "D:\\Inkspire\\data",
+    config: { app: { runtime: {} } },
+    runImage: async (options) => calls.push({ runner: "image", options }),
+    runEstimation: async (options) => calls.push({ runner: "estimation", options }),
+    runInspection: async (options) => calls.push({ runner: "inspection", options })
+  });
+
+  await dispatch({ stage: "calligraphy_verification", record: { id: "record-1" }, prompt: "核验", referenceImages: {} });
+  await dispatch({ stage: "size_estimation", record: { id: "record-1" }, prompt: "估算", referenceImages: {} });
+  await dispatch({ stage: "artwork", record: { id: "record-1" }, outputPngPath: "candidate.png" });
+
+  assert.deepEqual(calls.map(({ runner }) => runner), ["inspection", "estimation", "image"]);
+  assert.match(calls[0].options.jobDir, /calligraphy-verification$/);
+});
 
 async function waitUntil(predicate, timeoutMs = 2000) {
   const startedAt = Date.now();
@@ -178,6 +224,40 @@ test("POST /api/generations creates a job and eventually a record with artwork",
   });
 });
 
+test("E2E deterministic runner creates a successful handscroll at the selected aspect", async () => {
+  const previousE2e = process.env.INKSPIRE_E2E;
+  const previousRealCodex = process.env.INKSPIRE_REAL_CODEX;
+  process.env.INKSPIRE_E2E = "1";
+  delete process.env.INKSPIRE_REAL_CODEX;
+  const temp = await fs.mkdtemp(path.join(os.tmpdir(), "inkspire-e2e-runner-"));
+  try {
+    const config = loadConfig(root);
+    const app = createApp({ projectRoot: root, dataDir: temp, config });
+    const agent = request.agent(app);
+    const created = await agent
+      .post("/api/generations")
+      .send({
+        type: "painting",
+        answers: { work_type: "painting", painting_format: "手卷" }
+      })
+      .expect(201);
+
+    await waitForJob(agent, created.body.job.id);
+    const record = await waitForRecordStatus(agent, created.body.record.id);
+    const metadata = await sharp(await fs.readFile(path.join(temp, record.artwork_path))).metadata();
+
+    assert.equal(record.status, "succeeded");
+    assert.equal(record.resolved_orientation, "landscape");
+    assert.equal(metadata.width / metadata.height, 2);
+  } finally {
+    if (previousE2e === undefined) delete process.env.INKSPIRE_E2E;
+    else process.env.INKSPIRE_E2E = previousE2e;
+    if (previousRealCodex === undefined) delete process.env.INKSPIRE_REAL_CODEX;
+    else process.env.INKSPIRE_REAL_CODEX = previousRealCodex;
+    await fs.rm(temp, { recursive: true, force: true });
+  }
+});
+
 test("painting titles avoid kept user history and ignore removed records", async () => {
   await withTempApp(async ({ app }) => {
     const firstUser = request.agent(app);
@@ -246,11 +326,13 @@ test("painting title pools provide more than four kept titles before ordinal fal
 });
 
 test("generation route preserves origin tab and operation metadata", async () => {
+  let receivedPayload = null;
   const app = createApp({
     projectRoot: root,
     jobs: {
-      createArtwork: async (payload) => ({
-        job: {
+      createArtwork: async (payload) => {
+        receivedPayload = payload;
+        return { job: {
           id: "job-1",
           recordId: "record-1",
           stage: "artwork",
@@ -258,8 +340,8 @@ test("generation route preserves origin tab and operation metadata", async () =>
           status: "queued",
           origin_tab: payload.originTab,
           operation: payload.operation
-        }
-      }),
+        } };
+      },
       listActiveJobs: () => [],
       getJob: () => null
     }
@@ -277,6 +359,7 @@ test("generation route preserves origin tab and operation metadata", async () =>
 
   assert.equal(response.body.job.origin_tab, "library");
   assert.equal(response.body.job.operation, "adjust");
+  assert.equal(receivedPayload.generationComplexityExplicit, false);
 });
 
 test("regenerate and fusion routes pass origin tab and operation metadata", async () => {
@@ -338,6 +421,7 @@ test("regenerate and fusion routes pass origin tab and operation metadata", asyn
     .expect(201);
   assert.equal(regenerated.body.job.origin_tab, "library");
   assert.equal(regenerated.body.job.operation, "adjust");
+  assert.equal(calls[0].payload.generationComplexityExplicit, false);
 
   const fused = await request(app)
     .post("/api/records/record-1/fusion")
@@ -359,6 +443,43 @@ test("regenerate and fusion routes pass origin tab and operation metadata", asyn
   });
   assert.equal(calls[1].payload.originTab, "library");
   assert.equal(calls[1].payload.operation, "create");
+});
+
+test("regenerate preserves explicit density provenance and safely defaults non-photo legacy records", async () => {
+  const payloads = [];
+  const app = createApp({
+    projectRoot: root,
+    storage: {
+      getRecordForUser: async (id) => id === "explicit-record" ? {
+        id,
+        type: "painting",
+        answers: {},
+        source_photo_path: "records/explicit-record/source-photo.webp",
+        generation_complexity: "small",
+        generation_complexity_explicit: true
+      } : {
+        id,
+        type: "painting",
+        answers: {},
+        source_photo_path: "",
+        generation_complexity: "medium"
+      }
+    },
+    jobs: {
+      createArtwork: async (payload) => {
+        payloads.push(payload);
+        return { job: { id: `job-${payloads.length}`, status: "queued" } };
+      },
+      listActiveJobs: () => [],
+      getJob: () => null
+    }
+  });
+
+  await request(app).post("/api/records/explicit-record/regenerate").send({}).expect(201);
+  await request(app).post("/api/records/legacy-record/regenerate").send({}).expect(201);
+
+  assert.equal(payloads[0].generationComplexityExplicit, true);
+  assert.equal(payloads[1].generationComplexityExplicit, true);
 });
 
 test("POST /api/uploads/photo returns source_photo_path without inferred artwork size", async () => {
@@ -563,9 +684,9 @@ test("POST /api/records/:id/fusion reuses the record environment image when no p
     assert.equal(fused.body.fusion_path, `records/${created.body.record.id}/fusion.webp`);
     assert.equal(fused.body.has_fusion, true);
   }, {
-    runner: async ({ outputPngPath }) => {
+    runner: async ({ outputPngPath, canvas }) => {
       await fs.mkdir(path.dirname(outputPngPath), { recursive: true });
-      await fs.writeFile(outputPngPath, pngBuffer());
+      await fs.writeFile(outputPngPath, artworkPngBuffer(canvas));
       return { pngPath: outputPngPath, diagnostics: { reason: "fake_runner" } };
     }
   });
@@ -627,12 +748,24 @@ test("GET /api/library hides queued or running generation records until completi
     assert.equal(completedLibrary.body.records.length, 1);
     assert.equal(completedLibrary.body.records[0].id, created.body.record.id);
   }, {
-    runner: async ({ outputPngPath }) => {
+    runner: async ({ outputPngPath, canvas, stage, record }) => {
+      if (stage === "calligraphy_verification") {
+        return {
+          json: {
+            detected_text: record.answers.text,
+            no_extra_text: true,
+            legible: true,
+            confidence: 1,
+            decision: "verified",
+            issues: []
+          }
+        };
+      }
       await new Promise((resolve) => {
         releases.push(resolve);
       });
       await fs.mkdir(path.dirname(outputPngPath), { recursive: true });
-      await fs.writeFile(outputPngPath, pngBuffer());
+      await fs.writeFile(outputPngPath, artworkPngBuffer(canvas));
       return { pngPath: outputPngPath, diagnostics: { reason: "slow_runner" } };
     }
   });
@@ -692,12 +825,12 @@ test("POST /api/generations scopes active jobs by origin tab", async () => {
     await waitForJob(agent, studio.body.job.id);
     await waitForJob(agent, library.body.job.id);
   }, {
-    runner: async ({ outputPngPath }) => {
+    runner: async ({ outputPngPath, canvas }) => {
       await new Promise((resolve) => {
         releases.push(resolve);
       });
       await fs.mkdir(path.dirname(outputPngPath), { recursive: true });
-      await fs.writeFile(outputPngPath, pngBuffer());
+      await fs.writeFile(outputPngPath, artworkPngBuffer(canvas));
       return { pngPath: outputPngPath, diagnostics: { reason: "slow_runner" } };
     }
   });

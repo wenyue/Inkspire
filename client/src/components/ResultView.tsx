@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, Brush, ImagePlus, Wand2 } from "lucide-react";
 import type { GenerationRecord } from "../api";
 import { resultLayoutForWidth } from "../domain";
+import { generationFailureKind } from "../generationFailure";
 import ImageViewer from "./ImageViewer";
 
 interface ResultViewProps {
@@ -31,6 +32,9 @@ interface ResultViewProps {
   onAdjust: () => void;
   onAttachPhoto: (file: File) => void;
   onGenerateFusion: () => void;
+  t: (key: string) => string;
+  onSelectClassic: () => void;
+  onRetryCalligraphy: () => void;
 }
 
 function recordImage(record: GenerationRecord, kind: "artwork" | "fusion") {
@@ -75,7 +79,10 @@ export default function ResultView({
   onMake,
   onAdjust,
   onAttachPhoto,
-  onGenerateFusion
+  onGenerateFusion,
+  t,
+  onSelectClassic,
+  onRetryCalligraphy
 }: ResultViewProps) {
   const [layout, setLayout] = useState(resultLayoutForWidth(window.innerWidth));
   const [failedImages, setFailedImages] = useState<Record<string, boolean>>({});
@@ -135,6 +142,9 @@ export default function ResultView({
   const artwork = recordImage(record, "artwork");
   const fusion = recordImage(record, "fusion");
   const failed = record.status === "failed";
+  const failureKind = generationFailureKind(record);
+  const classicReferenceUnavailable = failed && failureKind === "classic_reference_unavailable";
+  const calligraphyNeedsReview = failed && failureKind === "calligraphy_text_unverified";
   const artworkFailed = Boolean(artwork && failedImages.artwork);
   const fusionFailed = Boolean(fusion && failedImages.fusion);
   const hasEnvironmentImage = Boolean(record.source_photo_path);
@@ -193,16 +203,28 @@ export default function ResultView({
   const resultActions = (
     <>
       {canMake && !failed && !artworkFailed ? <p className="result-conversion-hint">{makeHint}</p> : null}
-      <div className="result-actions">
+      <div className="result-actions mobile-action-surface">
         {canMake && !failed && !artworkFailed ? (
           <button className="primary-action result-action-button" type="button" onClick={onMake}>
             <Brush aria-hidden="true" size={16} />
             {makeLabel}
           </button>
         ) : null}
-        <button className="secondary-action result-action-button" type="button" onClick={onAdjust}>
+        <button
+          className={`${classicReferenceUnavailable || calligraphyNeedsReview ? "primary-action" : "secondary-action"} result-action-button`}
+          type="button"
+          onClick={classicReferenceUnavailable
+            ? onSelectClassic
+            : calligraphyNeedsReview
+              ? onRetryCalligraphy
+              : onAdjust}
+        >
           <Wand2 aria-hidden="true" size={16} />
-          {failed || artworkFailed ? adjustRetryLabel : adjustLabel}
+          {classicReferenceUnavailable
+            ? t("generationFailure.classicReference.action")
+            : calligraphyNeedsReview
+              ? t("generationFailure.calligraphyReview.action")
+              : failed || artworkFailed ? adjustRetryLabel : adjustLabel}
         </button>
         {!failed && !fusion && hasEnvironmentImage ? (
           <button
@@ -246,8 +268,17 @@ export default function ResultView({
       ) : null}
       {failed ? (
         <div className="result-failed" role="status">
-          <strong>{failedTitle}</strong>
-          <span>{failedHint}</span>
+          <strong>{classicReferenceUnavailable
+            ? t("generationFailure.classicReference.title")
+            : calligraphyNeedsReview
+              ? t("generationFailure.calligraphyReview.title")
+              : failedTitle}</strong>
+          <span>{classicReferenceUnavailable
+            ? t("generationFailure.classicReference.hint")
+            : calligraphyNeedsReview
+              ? t("generationFailure.calligraphyReview.hint")
+              : failedHint}</span>
+          {calligraphyNeedsReview ? <span className="generation-review-status">{t("generationFailure.calligraphyReview.status")}</span> : null}
         </div>
       ) : (
         <>

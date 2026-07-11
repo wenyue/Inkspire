@@ -47,16 +47,193 @@ describe("i18n", () => {
     expect(t("production.confirm")).toBe("Confirm production");
   });
 
-  it("uses locale-specific default suggestion lists", () => {
+  it("describes generation choices as density and openness in every locale", () => {
+    const zhHansTranslator = createTranslator("zh-Hans", dictionaries);
+    const zhHantTranslator = createTranslator("zh-Hant", dictionaries);
+    const enTranslator = createTranslator("en", dictionaries);
+
+    expect([
+      zhHansTranslator("studio.complexityTitle"),
+      zhHansTranslator("studio.complexityHint"),
+      zhHansTranslator("studio.complexitySmall"),
+      zhHansTranslator("studio.complexitySmallHint"),
+      zhHansTranslator("studio.complexityMedium"),
+      zhHansTranslator("studio.complexityMediumHint"),
+      zhHansTranslator("studio.complexityLarge"),
+      zhHansTranslator("studio.complexityLargeHint")
+    ]).toEqual([
+      "希望画面如何安排疏密？",
+      "没有环境照片时，疏密与虚实会帮助墨起估算画面信息量和制作尺寸。",
+      "疏朗",
+      "主体集中，虚处充分，保留清楚气口。",
+      "均衡",
+      "主次明确，疏密相间。",
+      "繁密",
+      "层次丰富但仍保留虚处，不填满画面。"
+    ]);
+    expect([
+      zhHantTranslator("studio.complexityTitle"),
+      zhHantTranslator("studio.complexityHint"),
+      zhHantTranslator("studio.complexitySmall"),
+      zhHantTranslator("studio.complexitySmallHint"),
+      zhHantTranslator("studio.complexityMedium"),
+      zhHantTranslator("studio.complexityMediumHint"),
+      zhHantTranslator("studio.complexityLarge"),
+      zhHantTranslator("studio.complexityLargeHint")
+    ]).toEqual([
+      "希望畫面如何安排疏密？",
+      "沒有環境照片時，疏密與虛實會幫助墨起估算畫面資訊量和製作尺寸。",
+      "疏朗",
+      "主體集中，虛處充分，保留清楚氣口。",
+      "均衡",
+      "主次明確，疏密相間。",
+      "繁密",
+      "層次豐富但仍保留虛處，不填滿畫面。"
+    ]);
+    expect([
+      enTranslator("studio.complexityTitle"),
+      enTranslator("studio.complexityHint"),
+      enTranslator("studio.complexitySmall"),
+      enTranslator("studio.complexitySmallHint"),
+      enTranslator("studio.complexityMedium"),
+      enTranslator("studio.complexityMediumHint"),
+      enTranslator("studio.complexityLarge"),
+      enTranslator("studio.complexityLargeHint")
+    ]).toEqual([
+      "How should density and openness be balanced?",
+      "Without a placement photo, the balance between dense detail and open space helps Inkspire estimate visual information and production size.",
+      "Open",
+      "The subject stays focused, with generous open space and clear breathing room.",
+      "Balanced",
+      "A clear hierarchy alternates dense passages with open space.",
+      "Dense",
+      "Rich layers preserve open passages rather than filling the entire composition."
+    ]);
+  });
+
+  it("uses distinct locale-specific painting and calligraphy suggestion lists", () => {
     const zhHansList = createListTranslator("zh-Hans", dictionaries);
     const zhHantList = createListTranslator("zh-Hant", dictionaries);
     const enList = createListTranslator("en", dictionaries);
 
-    expect(zhHansList("suggestions")[0]).toBe("可以开始生成");
-    expect(zhHansList("suggestions")).toContain("更雅");
-    expect(zhHansList("suggestions")).toContain("墨色淡些");
-    expect(zhHansList("suggestions").length).toBeGreaterThan(6);
-    expect(zhHantList("suggestions")[0]).toBe("可以開始生成");
-    expect(enList("suggestions")[0]).toBe("Start generating");
+    expect(zhHansList("suggestions.painting")).toEqual([
+      "可以开始生成",
+      "主次更明确",
+      "留白再多些",
+      "干湿层次更清楚",
+      "气口更通透",
+      "设色更克制",
+      "节奏更从容",
+      "按墙面陈设调整幅式比例",
+      "减少装饰性效果"
+    ]);
+    expect(zhHansList("suggestions.calligraphy")).toEqual([
+      "可以开始生成",
+      "正文更醒目",
+      "行气更贯通",
+      "结字更从容",
+      "调整字距与行距",
+      "提按更分明",
+      "枯润变化更克制",
+      "章法更稳定",
+      "按陈设尺寸调整行列"
+    ]);
+    expect(zhHantList("suggestions.painting")).toEqual([
+      "可以開始生成",
+      "主次更明確",
+      "留白再多些",
+      "乾濕層次更清楚",
+      "氣口更通透",
+      "設色更克制",
+      "節奏更從容",
+      "按牆面陳設調整幅式比例",
+      "減少裝飾性效果"
+    ]);
+    expect(zhHantList("suggestions.calligraphy")).toEqual([
+      "可以開始生成",
+      "正文更醒目",
+      "行氣更貫通",
+      "結字更從容",
+      "調整字距與行距",
+      "提按更分明",
+      "枯潤變化更克制",
+      "章法更穩定",
+      "按陳設尺寸調整行列"
+    ]);
+    expect(enList("suggestions.painting")).toEqual([
+      "Start generating",
+      "Clarify the focal hierarchy",
+      "Leave more open space",
+      "Clarify wet-dry ink layers",
+      "Open up the breathing space",
+      "Restrain the color palette",
+      "Use a more measured rhythm",
+      "Adjust the format to the wall",
+      "Reduce decorative effects"
+    ]);
+    expect(enList("suggestions.calligraphy")).toEqual([
+      "Start generating",
+      "Make the main text more prominent",
+      "Strengthen the flow between lines",
+      "Use more composed character structures",
+      "Refine character and line spacing",
+      "Clarify pressure modulation",
+      "Restrain dry-wet variation",
+      "Stabilize the overall layout",
+      "Adjust rows and columns to display size"
+    ]);
+
+    for (const list of [
+      zhHansList("suggestions.painting"),
+      zhHansList("suggestions.calligraphy"),
+      zhHantList("suggestions.painting"),
+      zhHantList("suggestions.calligraphy"),
+      enList("suggestions.painting"),
+      enList("suggestions.calligraphy")
+    ]) {
+      expect(list).toHaveLength(9);
+      expect(list).not.toEqual(expect.arrayContaining([
+        "更雅",
+        "更有诗意",
+        "更有气韵",
+        "更有詩意",
+        "更有氣韻",
+        "More refined",
+        "More poetic",
+        "More lively energy",
+        "更适合作为礼赠",
+        "更適合作為禮贈",
+        "Better suited as a gift"
+      ]));
+    }
+
+    expect(zhHansList("suggestions.calligraphy")).not.toEqual(expect.arrayContaining(["气口更通透", "设色更克制"]));
+    expect(zhHantList("suggestions.calligraphy")).not.toEqual(expect.arrayContaining(["氣口更通透", "設色更克制"]));
+    expect(enList("suggestions.calligraphy")).not.toEqual(expect.arrayContaining(["Open up the breathing space", "Restrain the color palette"]));
+  });
+
+  it("provides localized recoverable generation failure copy", () => {
+    const translators = [
+      createTranslator("zh-Hans", dictionaries),
+      createTranslator("zh-Hant", dictionaries),
+      createTranslator("en", dictionaries)
+    ];
+    const keys = [
+      "generationFailure.classicReference.title",
+      "generationFailure.classicReference.hint",
+      "generationFailure.classicReference.action",
+      "generationFailure.calligraphyReview.title",
+      "generationFailure.calligraphyReview.hint",
+      "generationFailure.calligraphyReview.status",
+      "generationFailure.calligraphyReview.action",
+      "generationFailure.retryError"
+    ];
+
+    for (const translate of translators) {
+      for (const key of keys) {
+        expect(translate(key)).not.toBe(key);
+        expect(translate(key).trim()).not.toHaveLength(0);
+      }
+    }
   });
 });

@@ -360,7 +360,9 @@ export default function Studio({
     return nextQuestion(config, answers);
   }, [answers, config]);
   const complete = isQuestionFlowComplete(config, answers);
-  const suggestions = list("suggestions");
+  const suggestions = list(answers.work_type === "calligraphy"
+    ? "suggestions.calligraphy"
+    : "suggestions.painting");
   const noteSuggestions = suggestions.slice(1);
   const showClassicPicker = isChoosingClassicReference(answers);
   const canGoBack = Boolean(answers.work_type) && !showClassicPicker;
@@ -952,7 +954,7 @@ export default function Studio({
                     >
                       <span className="option-preview-frame" aria-hidden="true">
                         <span className="option-preview-fallback">
-                          {value === "small" ? "简" : value === "medium" ? "衡" : "丰"}
+                          {value === "small" ? "疏" : value === "medium" ? "衡" : "密"}
                         </span>
                       </span>
                       <span>
@@ -982,14 +984,17 @@ export default function Studio({
                       type="button"
                       className="conversation-note-clear surface-clear-button"
                       aria-label={t("studio.clearNotes")}
-                      onClick={() => setConversationNotes("")}
+                      onClick={() => {
+                        setConversationNotes("");
+                        notesRef.current?.focus();
+                      }}
                     >
                       <X aria-hidden="true" size={14} />
                     </button>
                   ) : null}
                 </div>
                 <p className="generation-summary">{generationSummary}</p>
-                <div className="suggestion-row">
+                <div className="suggestion-row notes-suggestion-row">
                   {noteSuggestions.map((suggestion) => (
                     <button
                       key={suggestion}
@@ -1000,7 +1005,7 @@ export default function Studio({
                     </button>
                   ))}
                 </div>
-                <div className="conversation-actions">
+                <div className="conversation-actions mobile-action-surface">
                   <button
                     className="primary-action"
                     type="button"

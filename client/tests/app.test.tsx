@@ -14,6 +14,12 @@ function generationRequestBodies(): Array<Record<string, unknown>> {
     .map(([, init]) => init?.body ? JSON.parse(String(init.body)) as Record<string, unknown> : {});
 }
 
+function regenerateRequestBodies(): Array<Record<string, unknown>> {
+  return vi.mocked(fetch).mock.calls
+    .filter(([input]) => /\/api\/records\/[^/]+\/regenerate$/.test(String(input)))
+    .map(([, init]) => init?.body ? JSON.parse(String(init.body)) as Record<string, unknown> : {});
+}
+
 const classicArtworkSample: ClassicArtwork[] = Array.from({ length: 100 }, (_, index) => ({
   id: `classic-${index + 1}`,
   title: {
@@ -243,12 +249,16 @@ describe("App", () => {
   let activeJobsResponse: unknown[] = [];
   let queuedGenerationJob: unknown | null = null;
   let jobResponses: Record<string, unknown> = {};
+  let failedJobRequestIds = new Set<string>();
   let holdGenerationResponse = false;
   let releaseGenerationResponse: (() => void) | null = null;
   let holdFusionResponse = false;
   let releaseFusionResponse: (() => void) | null = null;
   let recordOneSourcePhotoPath = "";
   let recordOneGenerationComplexity: unknown;
+  let recordOneResponse: Record<string, unknown> | null = null;
+  let generationFailureMode: "" | "network" | "limit" = "";
+  let regenerateFailureMode: "" | "network" | "limit" = "";
 
   beforeEach(() => {
     failLateFusion = false;
@@ -259,12 +269,16 @@ describe("App", () => {
     activeJobsResponse = [];
     queuedGenerationJob = null;
     jobResponses = {};
+    failedJobRequestIds = new Set();
     holdGenerationResponse = false;
     releaseGenerationResponse = null;
     holdFusionResponse = false;
     releaseFusionResponse = null;
     recordOneSourcePhotoPath = "";
     recordOneGenerationComplexity = undefined;
+    recordOneResponse = null;
+    generationFailureMode = "";
+    regenerateFailureMode = "";
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       if (url.endsWith("/api/config/public")) {
@@ -278,7 +292,11 @@ describe("App", () => {
       }
       const jobMatch = url.match(/\/api\/jobs\/([^/?]+)$/);
       if (jobMatch) {
-        return Response.json(jobResponses[decodeURIComponent(jobMatch[1])] ?? {});
+        const jobId = decodeURIComponent(jobMatch[1]);
+        if (failedJobRequestIds.has(jobId)) {
+          throw new Error("job polling unavailable");
+        }
+        return Response.json(jobResponses[jobId] ?? {});
       }
       if (url.endsWith("/api/uploads/photo")) {
         if (failUploadTooLarge) {
@@ -290,6 +308,16 @@ describe("App", () => {
         }, { status: 201 });
       }
       if (url.endsWith("/api/generations")) {
+        if (generationFailureMode === "network") {
+          throw new Error("network unavailable");
+        }
+        if (generationFailureMode === "limit") {
+          return Response.json({
+            error: "generation limit reached",
+            code: "tab_generation_limit_reached",
+            activeJobs: []
+          }, { status: 429 });
+        }
         const body = init?.body ? JSON.parse(String(init.body)) : {};
         recordOneGenerationComplexity = body.generation_complexity;
         if (holdGenerationResponse) {
@@ -350,6 +378,19 @@ describe("App", () => {
             status: "succeeded"
           }
         }, { status: 201 });
+      }
+      if (url.endsWith("/api/records/record-1/regenerate") && init?.method === "POST") {
+        if (regenerateFailureMode === "network") {
+          throw new Error("network unavailable");
+        }
+        if (regenerateFailureMode === "limit") {
+          return Response.json({
+            error: "generation limit reached",
+            code: "tab_generation_limit_reached",
+            activeJobs: []
+          }, { status: 429 });
+        }
+        return Response.json({ job: queuedGenerationJob }, { status: 201 });
       }
       if (url.endsWith("/api/records/record-1/fusion")) {
         if (failLateFusion) {
@@ -432,6 +473,9 @@ describe("App", () => {
         return Response.json({ error: "not found" }, { status: 404 });
       }
       if (url.endsWith("/api/records/record-1") && (!init || !init.method || init.method === "GET")) {
+        if (recordOneResponse) {
+          return Response.json(recordOneResponse);
+        }
         return Response.json({
           id: "record-1",
           type: "painting",
@@ -1091,7 +1135,7 @@ describe("App", () => {
       window.history.back();
     });
 
-    expect(await screen.findByRole("heading", { name: "想让作品丰富到什么程度？" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "希望画面如何安排疏密？" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "生成" })).not.toBeInTheDocument();
   });
 
@@ -1108,7 +1152,7 @@ describe("App", () => {
 
     await user.click(screen.getByRole("button", { name: "不需要效果图，直接生成" }));
     expect(window.location.search).toBe("?step=complexity");
-    expect(screen.getByRole("heading", { name: "想让作品丰富到什么程度？" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "希望画面如何安排疏密？" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "生成" })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /均衡/ }));
@@ -1119,7 +1163,7 @@ describe("App", () => {
       window.history.back();
     });
 
-    expect(await screen.findByRole("heading", { name: "想让作品丰富到什么程度？" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "希望画面如何安排疏密？" })).toBeInTheDocument();
     expect(window.location.search).toBe("?step=complexity");
 
     await act(async () => {
@@ -1148,7 +1192,7 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: "上一步" }));
 
     expect(historyBack).not.toHaveBeenCalled();
-    expect(await screen.findByRole("heading", { name: "想让作品丰富到什么程度？" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "希望画面如何安排疏密？" })).toBeInTheDocument();
     expect(window.location.search).toBe("?step=complexity");
   });
 
@@ -1160,8 +1204,8 @@ describe("App", () => {
 
     expect(screen.getByText("将生成作品图。")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "可以开始生成" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "更雅" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "墨色淡些" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "主次更明确" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "干湿层次更清楚" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "生成" })).toBeInTheDocument();
   });
 
@@ -1366,10 +1410,19 @@ describe("App", () => {
     await completePaintingQuestions(user);
     await user.click(screen.getByRole("button", { name: "不需要效果图，直接生成" }));
 
-    expect(screen.getByRole("heading", { name: "想让作品丰富到什么程度？" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "希望画面如何安排疏密？" })).toBeInTheDocument();
+    expect(screen.getByText("没有环境照片时，疏密与虚实会帮助墨起估算画面信息量和制作尺寸。")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /疏朗.*主体集中，虚处充分，保留清楚气口。/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /均衡.*主次明确，疏密相间。/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /繁密.*层次丰富但仍保留虚处，不填满画面。/ })).toBeInTheDocument();
+    expect(within(screen.getByRole("button", { name: /疏朗/ })).getByText("疏")).toHaveClass("option-preview-fallback");
+    expect(within(screen.getByRole("button", { name: /均衡/ })).getByText("衡")).toHaveClass("option-preview-fallback");
+    expect(within(screen.getByRole("button", { name: /繁密/ })).getByText("密")).toHaveClass("option-preview-fallback");
+    expect(screen.queryByText("简", { selector: ".option-preview-fallback" })).not.toBeInTheDocument();
+    expect(screen.queryByText("丰", { selector: ".option-preview-fallback" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "生成" })).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: /丰富/ }));
+    await user.click(screen.getByRole("button", { name: /繁密/ }));
     await user.click(screen.getByRole("button", { name: "生成" }));
 
     await waitFor(() => {
@@ -1385,7 +1438,7 @@ describe("App", () => {
 
     await completePaintingWithPhoto(user);
 
-    expect(screen.queryByRole("heading", { name: "想让作品丰富到什么程度？" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "希望画面如何安排疏密？" })).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "生成" }));
 
     await waitFor(() => {
@@ -1611,21 +1664,292 @@ describe("App", () => {
     }));
   });
 
-  it("puts refinement suggestions into notes before generating", async () => {
+  it("clears an unavailable classic session and opens the classic picker without retrying", async () => {
+    activeJobsResponse = [{
+      id: "job-classic-failed",
+      recordId: "record-1",
+      stage: "artwork",
+      origin_tab: "studio",
+      operation: "create",
+      status: "running"
+    }];
+    jobResponses = {
+      "job-classic-failed": {
+        id: "job-classic-failed",
+        recordId: "record-1",
+        stage: "artwork",
+        origin_tab: "studio",
+        operation: "create",
+        status: "failed",
+        error: "classic asset missing at private path",
+        diagnostics: { reason: "classic_reference_unavailable" }
+      }
+    };
+    window.localStorage.setItem("inkspire.generationSessions.v1", JSON.stringify({
+      studio: {
+        originTab: "studio",
+        operation: "create",
+        jobId: "job-classic-failed",
+        startedAt: Date.now(),
+        status: "running",
+        payload: {
+          type: "painting",
+          answers: {
+            work_type: "painting",
+            creation_mode: "classic_reference",
+            classic_artwork_id: "classic-missing"
+          }
+        }
+      }
+    }));
+    const user = userEvent.setup();
+    renderApp();
+
+    expect(await screen.findByRole("heading", { name: "所选名作暂不可用" }, { timeout: 2500 })).toBeInTheDocument();
+    expect(screen.queryByText("classic asset missing at private path")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "重新尝试" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "重新选择名作" }));
+
+    expect(window.location.pathname).toBe("/studio");
+    expect(window.location.search).toBe("?step=classic");
+    expect(await screen.findByRole("heading", { name: "选择古代名作" })).toBeInTheDocument();
+    expect(generationRequestBodies()).toHaveLength(0);
+    expect(JSON.parse(window.localStorage.getItem("inkspire.generationSessions.v1") ?? "{}")).not.toHaveProperty("studio");
+  });
+
+  it("shows a rejected calligraphy verification without exposing an image and regenerates from the existing flow", async () => {
+    queuedGenerationJob = {
+      id: "job-calligraphy-retry",
+      recordId: "record-calligraphy-retry",
+      stage: "artwork",
+      origin_tab: "library",
+      operation: "adjust",
+      status: "queued"
+    };
+    recordOneResponse = {
+      id: "record-1",
+      type: "calligraphy",
+      title: "内部校验失败",
+      answers: { work_type: "calligraphy", text: "澄怀观道" },
+      artwork_path: "records/record-1/rejected.webp",
+      status: "failed",
+      calligraphy_verification: {
+        status: "needs_review",
+        detected_text: "澄怀覌道",
+        issues: ["character mismatch"]
+      }
+    };
+    const user = userEvent.setup();
+    renderApp({ initialRoute: "/records/record-1?from=library" });
+
+    expect(await screen.findByText("书法文字需要重新核验")).toBeInTheDocument();
+    expect(screen.getByText("系统未能确认每个字都准确，因此没有接受这张图片。")).toBeInTheDocument();
+    expect(screen.getByText("逐字核验：需要重新生成")).toBeInTheDocument();
+    expect(screen.queryByRole("img", { name: "作品图" })).not.toBeInTheDocument();
+    expect(screen.queryByText("澄怀覌道")).not.toBeInTheDocument();
+    expect(screen.queryByText("character mismatch")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "重新生成书法" }));
+
+    await waitFor(() => expect(regenerateRequestBodies()).toHaveLength(1));
+    expect(regenerateRequestBodies()[0]).toEqual({
+      origin_tab: "library",
+      operation: "adjust"
+    });
+    expect(generationRequestBodies()).toHaveLength(0);
+    expect(await screen.findByRole("heading", { name: "艺术家正在理解原作" })).toBeInTheDocument();
+    expect(screen.queryByRole("img", { name: "作品图" })).not.toBeInTheDocument();
+    expect(screen.queryByText("澄怀覌道")).not.toBeInTheDocument();
+  });
+
+  it("keeps the calligraphy review result visible when regeneration fails", async () => {
+    regenerateFailureMode = "network";
+    recordOneResponse = {
+      id: "record-1",
+      type: "calligraphy",
+      title: "内部校验失败",
+      answers: { work_type: "calligraphy", text: "澄怀观道" },
+      artwork_path: "records/record-1/rejected.webp",
+      status: "failed",
+      calligraphy_verification: { status: "needs_review" }
+    };
+    const user = userEvent.setup();
+    renderApp({ initialRoute: "/records/record-1?from=library" });
+
+    await user.click(await screen.findByRole("button", { name: "重新生成书法" }));
+
+    expect(await screen.findByText("暂时无法重新生成，请检查网络后再试。")).toBeInTheDocument();
+    expect(screen.getByText("书法文字需要重新核验")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "重新生成书法" })).toBeInTheDocument();
+    expect(screen.queryByRole("img", { name: "作品图" })).not.toBeInTheDocument();
+    expect(window.location.pathname).toBe("/records/record-1");
+
+    regenerateFailureMode = "";
+    queuedGenerationJob = {
+      id: "job-calligraphy-retry-after-error",
+      recordId: "record-calligraphy-retry-after-error",
+      stage: "artwork",
+      origin_tab: "library",
+      operation: "adjust",
+      status: "queued"
+    };
+    await user.click(screen.getByRole("button", { name: "重新生成书法" }));
+
+    expect(await screen.findByRole("heading", { name: "艺术家正在理解原作" })).toBeInTheDocument();
+    expect(screen.queryByText("暂时无法重新生成，请检查网络后再试。")).not.toBeInTheDocument();
+  });
+
+  it("restores a failed generation session when retry reaches the generation limit", async () => {
+    activeJobsResponse = [{
+      id: "job-calligraphy-limit",
+      recordId: "record-1",
+      stage: "artwork",
+      origin_tab: "studio",
+      operation: "create",
+      status: "running"
+    }];
+    jobResponses = {
+      "job-calligraphy-limit": {
+        id: "job-calligraphy-limit",
+        recordId: "record-1",
+        stage: "artwork",
+        origin_tab: "studio",
+        operation: "create",
+        status: "failed",
+        diagnostics: { reason: "calligraphy_text_unverified" }
+      }
+    };
+    generationFailureMode = "limit";
+    window.localStorage.setItem("inkspire.generationSessions.v1", JSON.stringify({
+      studio: {
+        originTab: "studio",
+        operation: "create",
+        jobId: "job-calligraphy-limit",
+        startedAt: Date.now(),
+        status: "running",
+        payload: {
+          type: "calligraphy",
+          answers: { work_type: "calligraphy", text: "澄怀观道" },
+          conversationNotes: "原始要求"
+        }
+      }
+    }));
+    const user = userEvent.setup();
+    renderApp();
+
+    await user.click(await screen.findByRole("button", { name: "重新生成书法" }, { timeout: 2500 }));
+
+    expect(await screen.findByText("画案已有生成任务，请等它完成后再开始。")).toBeInTheDocument();
+    expect(screen.queryByText("暂时无法重新生成，请检查网络后再试。")).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "书法文字需要重新核验" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "重新生成书法" })).toBeInTheDocument();
+    expect(JSON.parse(window.localStorage.getItem("inkspire.generationSessions.v1") ?? "{}").studio).toEqual(
+      expect.objectContaining({
+        jobId: "job-calligraphy-limit",
+        status: "failed",
+        failureKind: "calligraphy_text_unverified"
+      })
+    );
+  });
+
+  it("keeps the calligraphy review result visible and explains regeneration limits accurately", async () => {
+    regenerateFailureMode = "limit";
+    recordOneResponse = {
+      id: "record-1",
+      type: "calligraphy",
+      answers: { work_type: "calligraphy", text: "澄怀观道" },
+      status: "failed",
+      calligraphy_verification: { status: "needs_review" }
+    };
+    const user = userEvent.setup();
+    renderApp({ initialRoute: "/records/record-1?from=library" });
+
+    await user.click(await screen.findByRole("button", { name: "重新生成书法" }));
+
+    expect(await screen.findByText("画案已有生成任务，请等它完成后再开始。")).toBeInTheDocument();
+    expect(screen.queryByText("暂时无法重新生成，请检查网络后再试。")).not.toBeInTheDocument();
+    expect(screen.getByText("书法文字需要重新核验")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "重新生成书法" })).toBeInTheDocument();
+  });
+
+  it("classifies a failed record when job polling falls back to the record endpoint", async () => {
+    activeJobsResponse = [{
+      id: "job-record-fallback",
+      recordId: "record-1",
+      stage: "artwork",
+      origin_tab: "studio",
+      operation: "create",
+      status: "running"
+    }];
+    failedJobRequestIds.add("job-record-fallback");
+    recordOneResponse = {
+      id: "record-1",
+      type: "calligraphy",
+      answers: { work_type: "calligraphy", text: "澄怀观道" },
+      status: "failed",
+      calligraphy_verification: { status: "needs_review" }
+    };
+    window.localStorage.setItem("inkspire.generationSessions.v1", JSON.stringify({
+      studio: {
+        originTab: "studio",
+        operation: "create",
+        jobId: "job-record-fallback",
+        startedAt: Date.now(),
+        status: "running",
+        payload: {
+          type: "calligraphy",
+          answers: { work_type: "calligraphy", text: "澄怀观道" }
+        }
+      }
+    }));
+    renderApp();
+
+    expect(await screen.findByRole("heading", { name: "书法文字需要重新核验" }, { timeout: 2500 })).toBeInTheDocument();
+    expect(screen.getByText("逐字核验：需要重新生成")).toBeInTheDocument();
+  });
+
+  it("uses a primary classic recovery action on a persisted failed result", async () => {
+    recordOneResponse = {
+      id: "record-1",
+      type: "painting",
+      answers: {
+        work_type: "painting",
+        creation_mode: "classic_reference",
+        classic_artwork_id: "missing-classic"
+      },
+      status: "failed",
+      diagnostics: { reason: "classic_reference_unavailable" }
+    };
+    const user = userEvent.setup();
+    renderApp({ initialRoute: "/records/record-1?from=library" });
+
+    expect(await screen.findByText("所选名作暂不可用")).toBeInTheDocument();
+    const recovery = screen.getByRole("button", { name: "重新选择名作" });
+    expect(recovery).toHaveClass("primary-action");
+
+    await user.click(recovery);
+
+    expect(window.location.pathname).toBe("/studio");
+    expect(window.location.search).toBe("?step=classic");
+    expect(generationRequestBodies()).toHaveLength(0);
+  });
+
+  it("puts the final precise suggestion into notes before generating", async () => {
     const user = userEvent.setup();
     renderApp();
 
     await completePaintingWithoutPhoto(user);
-    await user.click(screen.getByRole("button", { name: "更雅" }));
+    await user.click(screen.getByRole("button", { name: "减少装饰性效果" }));
 
-    expect(screen.getByLabelText("也可以补一句想法")).toHaveValue("更雅");
+    expect(screen.getByLabelText("也可以补一句想法")).toHaveValue("减少装饰性效果");
     expect(generationRequestBodies()).toHaveLength(0);
     await user.click(screen.getByRole("button", { name: "生成" }));
 
     await waitFor(() => {
       expect(generationRequestBodies()).toHaveLength(1);
     });
-    expect(generationRequestBodies()[0].conversationNotes).toBe("更雅");
+    expect(generationRequestBodies()[0].conversationNotes).toBe("减少装饰性效果");
   });
 
   it("shows a clear action inside the notes field and clears the draft", async () => {
@@ -1633,13 +1957,39 @@ describe("App", () => {
     renderApp();
 
     await completePaintingWithoutPhoto(user);
-    await user.click(screen.getByRole("button", { name: "更有气韵" }));
+    await user.click(screen.getByRole("button", { name: "气口更通透" }));
 
-    expect(screen.getByLabelText("也可以补一句想法")).toHaveValue("更有气韵");
+    expect(screen.getByLabelText("也可以补一句想法")).toHaveValue("气口更通透");
     await user.click(screen.getByRole("button", { name: "清除想法" }));
 
     expect(screen.getByLabelText("也可以补一句想法")).toHaveValue("");
+    expect(screen.getByLabelText("也可以补一句想法")).toHaveFocus();
     expect(screen.queryByRole("button", { name: "清除想法" })).not.toBeInTheDocument();
+  });
+
+  it("shows calligraphy-only suggestions in the Studio notes step", async () => {
+    window.localStorage.setItem("inkspire.studioDraft.v1", JSON.stringify({
+      answers: { work_type: "calligraphy", calligraphy_script: "楷书" },
+      photoStepComplete: true,
+      complexityStepComplete: true
+    }));
+    renderApp({ initialRoute: "/studio?step=notes" });
+
+    expect(await screen.findByRole("button", { name: "正文更醒目" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "按陈设尺寸调整行列" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "气口更通透" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "设色更克制" })).not.toBeInTheDocument();
+  });
+
+  it("shows painting-only suggestions in the Studio notes step", async () => {
+    const user = userEvent.setup();
+    renderApp();
+
+    await completePaintingWithoutPhoto(user);
+
+    expect(screen.getByRole("button", { name: "气口更通透" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "设色更克制" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "正文更醒目" })).not.toBeInTheDocument();
   });
 
   it("persists notes and uploaded photo path across remounts", async () => {
@@ -1871,6 +2221,7 @@ describe("App", () => {
     const { container } = renderApp();
 
     await completePaintingWithoutPhoto(user);
+    expect(container.querySelector(".conversation-actions.mobile-action-surface")).not.toBeNull();
     await user.click(screen.getByRole("button", { name: "生成" }));
 
     expect(await screen.findByRole("img", { name: "作品图" })).toBeInTheDocument();
@@ -1878,6 +2229,7 @@ describe("App", () => {
     expect(screen.queryByLabelText("相册")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "制作作品" })).toBeInTheDocument();
     expect(screen.getByText("可先看尺寸和估价，确认意向后再联系制作。")).toBeInTheDocument();
+    expect(container.querySelector(".result-actions.mobile-action-surface")).not.toBeNull();
     expect(container.querySelector(".result-actions")?.firstElementChild).toHaveTextContent("制作作品");
 
     await user.click(screen.getByRole("button", { name: "调整作品" }));
@@ -2086,9 +2438,158 @@ describe("App", () => {
     await waitFor(() => {
       expect(screen.getByRole("dialog", { name: "制作作品" })).toBeInTheDocument();
     });
+    const dialog = screen.getByRole("dialog", { name: "制作作品" });
+    expect(dialog.querySelector(":scope > .production-dialog-header")).not.toBeNull();
+    expect(dialog.querySelector(":scope > .production-dialog-body")).not.toBeNull();
+    const footer = dialog.querySelector(":scope > .production-dialog-footer");
+    expect(footer).not.toBeNull();
+    expect(footer).toContainElement(screen.getByRole("button", { name: "确认制作意向" }));
     expect(screen.getByText("先调整规格、选择服务和参考程度；估价仅作参考，确认后生成单号和联系方式。")).toBeInTheDocument();
     expect(screen.getByText("专家定制")).toBeInTheDocument();
     expect(screen.getByText("专家指导")).toBeInTheDocument();
+  });
+
+  it("localizes generated density size labels and hints in Simplified Chinese", async () => {
+    recordOneResponse = {
+      id: "record-1",
+      type: "painting",
+      title: "疏朗山水",
+      artwork_path: "records/record-1/artwork.webp",
+      generation_complexity: "small",
+      recommended_artwork_size: {
+        preset_id: "complexity_small",
+        label: "简洁参考尺寸",
+        width_cm: 30,
+        height_cm: 45,
+        reason: "按作品复杂度和画面比例估算，适合作为简洁作品制作参考。"
+      },
+      status: "succeeded"
+    };
+
+    renderApp({ initialRoute: "/records/record-1/production?from=library" });
+
+    expect(await screen.findByText("疏朗参考尺寸 · 约 30 × 45 cm")).toBeInTheDocument();
+    expect(screen.getByText("按画面疏密与比例估算，适合作为疏朗布局制作参考。")).toBeInTheDocument();
+    expect(screen.queryByText(/简洁参考尺寸|作品复杂度/)).not.toBeInTheDocument();
+  });
+
+  it("localizes generated density size labels and hints in Traditional Chinese and English", async () => {
+    recordOneResponse = {
+      id: "record-1",
+      type: "painting",
+      title: "繁密山水",
+      artwork_path: "records/record-1/artwork.webp",
+      generation_complexity: "large",
+      recommended_artwork_size: {
+        preset_id: "environment_estimate_large",
+        label: "丰富参考尺寸",
+        width_cm: 60,
+        height_cm: 90,
+        reason: "按作品复杂度和画面比例估算，适合作为丰富作品制作参考。"
+      },
+      status: "succeeded"
+    };
+    window.localStorage.setItem("inkspire.locale", "zh-Hant");
+
+    renderApp({ initialRoute: "/records/record-1/production?from=library" });
+
+    expect(await screen.findByText("繁密參考尺寸 · 約 60 × 90 cm")).toBeInTheDocument();
+    expect(screen.getByText("根據所提供環境圖片的可用牆面或陳設比例估算尺寸，並結合繁密佈局與作品幅式，同時保留清楚氣口與虛處。")).toBeInTheDocument();
+
+    await userEvent.setup().selectOptions(screen.getByLabelText("語言"), "en");
+
+    expect(screen.getByText("Dense reference size · approx. 60 × 90 cm")).toBeInTheDocument();
+    expect(screen.getByText("Estimated from the available wall or display proportions in the supplied environment image, combined with a dense layout and artwork format while preserving open passages.")).toBeInTheDocument();
+    expect(screen.queryByText(/丰富参考尺寸|作品复杂度/)).not.toBeInTheDocument();
+  });
+
+  it("localizes the known environment fallback from its stable preset and record density", async () => {
+    recordOneResponse = {
+      id: "record-1",
+      type: "painting",
+      title: "均衡山水",
+      artwork_path: "records/record-1/artwork.webp",
+      recommended_artwork_size: {
+        preset_id: "environment_fallback_medium_portrait",
+        label: "环境估算备用尺寸",
+        width_cm: 45,
+        height_cm: 70,
+        reason: "环境图片 AI 尺寸估算不可用时使用的均衡竖幅备用尺寸。"
+      },
+      status: "succeeded"
+    };
+    window.localStorage.setItem("inkspire.locale", "en");
+
+    renderApp({ initialRoute: "/records/record-1/production?from=library" });
+
+    expect(await screen.findByText("Balanced reference size · approx. 45 × 70 cm")).toBeInTheDocument();
+    expect(screen.getByText("The environment-image estimate was unavailable, so a balanced-density fallback was combined with the artwork format.")).toBeInTheDocument();
+    expect(screen.queryByText(/环境估算|均衡竖幅/)).not.toBeInTheDocument();
+  });
+
+  it("uses record density to localize and quote an old inferred environment size", async () => {
+    recordOneResponse = {
+      id: "record-1",
+      type: "painting",
+      title: "旧卷繁密山水",
+      artwork_path: "records/record-1/artwork.webp",
+      generation_complexity: "large",
+      recommended_artwork_size: {
+        preset_id: "old-ai-wall-fit",
+        label: "客厅主墙",
+        width_cm: 60,
+        height_cm: 90,
+        reason: "按沙发背景墙比例估算"
+      },
+      status: "succeeded"
+    };
+    window.localStorage.setItem("inkspire.locale", "en");
+
+    renderApp({ initialRoute: "/records/record-1/production?from=library" });
+
+    expect(await screen.findByText("Dense reference size · approx. 60 × 90 cm")).toBeInTheDocument();
+    expect(screen.getByText("Estimated from the available wall or display proportions in the supplied environment image, combined with a dense layout and artwork format while preserving open passages.")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(fetch).toHaveBeenCalledWith(
+        "/api/records/record-1/production-estimate",
+        expect.objectContaining({
+          method: "POST",
+          body: JSON.stringify({ expertId: "wu_jiayin", size: "large" })
+        })
+      );
+    });
+    expect(await screen.findByText(/2700 CNY/)).toBeInTheDocument();
+  });
+
+  it("quotes an inferred handscroll by its physical area", async () => {
+    recordOneResponse = {
+      id: "record-1",
+      type: "painting",
+      title: "手卷",
+      artwork_path: "records/record-1/artwork.webp",
+      generation_complexity: "medium",
+      recommended_artwork_size: {
+        preset_id: "environment_estimate_medium",
+        label: "均衡参考尺寸",
+        width_cm: 80,
+        height_cm: 40,
+        reason: "根据所提供环境图片的可用墙面或陈设比例估算尺寸，并结合均衡疏密与作品幅式。"
+      },
+      status: "succeeded"
+    };
+
+    renderApp({ initialRoute: "/records/record-1/production?from=library" });
+
+    await screen.findByText("均衡参考尺寸 · 约 80 × 40 cm");
+    await waitFor(() => {
+      expect(fetch).toHaveBeenCalledWith(
+        "/api/records/record-1/production-estimate",
+        expect.objectContaining({
+          method: "POST",
+          body: JSON.stringify({ expertId: "wu_jiayin", size: "medium" })
+        })
+      );
+    });
   });
 
   it("hides production entry points when production contact is unavailable", async () => {
@@ -2233,6 +2734,7 @@ describe("App", () => {
     expect(screen.queryByText("第3级 布局参考")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "调整尺寸" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "确认制作意向" })).not.toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "制作意向已记录" }).querySelector(".production-dialog-footer")).toBeNull();
     expect(screen.queryByRole("radio", { name: /第3级/ })).not.toBeInTheDocument();
     const wechatButton = screen.getByRole("button", { name: /微信：InkspireArt（点击拷贝）/ });
     const orderButton = screen.getByRole("button", { name: /单号：ord-k8p4x2q9（点击拷贝）/ });
@@ -3129,6 +3631,37 @@ describe("App", () => {
     expect(screen.getByRole("heading", { name: "调整这张作品" })).toBeInTheDocument();
     expect(screen.getByLabelText("调整这张作品")).toHaveFocus();
     expect(screen.queryByRole("heading", { name: "可选：添加环境照片" })).not.toBeInTheDocument();
+  });
+
+  it("shows painting-only suggestions when adjusting a painting", async () => {
+    recordOneResponse = {
+      id: "record-1",
+      type: "painting",
+      title: "藏卷山水",
+      artwork_path: "records/record-1/artwork.webp",
+      status: "succeeded"
+    };
+    renderApp({ initialRoute: "/records/record-1/adjust?from=library" });
+
+    expect(await screen.findByRole("button", { name: "气口更通透" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "设色更克制" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "正文更醒目" })).not.toBeInTheDocument();
+  });
+
+  it("shows calligraphy-only suggestions when adjusting calligraphy", async () => {
+    recordOneResponse = {
+      id: "record-1",
+      type: "calligraphy",
+      title: "藏卷书法",
+      artwork_path: "records/record-1/artwork.webp",
+      status: "succeeded"
+    };
+    renderApp({ initialRoute: "/records/record-1/adjust?from=library" });
+
+    expect(await screen.findByRole("button", { name: "正文更醒目" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "按陈设尺寸调整行列" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "气口更通透" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "设色更克制" })).not.toBeInTheDocument();
   });
 
   it("opens and closes the image viewer from the adjust page", async () => {

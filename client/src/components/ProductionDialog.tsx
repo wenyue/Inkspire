@@ -79,6 +79,69 @@ const LEGACY_SIZE_COPY: Record<string, Pick<ProductionSize, "labelText" | "hint"
   }
 };
 
+const GENERATED_DENSITY_SIZE_COPY: Record<SizePresetId, Pick<ProductionSize, "labelText" | "hint">> = {
+  small: {
+    labelText: { "zh-Hans": "疏朗参考尺寸", "zh-Hant": "疏朗參考尺寸", en: "Open reference size" },
+    hint: {
+      "zh-Hans": "按画面疏密与比例估算，适合作为疏朗布局制作参考。",
+      "zh-Hant": "按畫面疏密與比例估算，適合作為疏朗布局製作參考。",
+      en: "Estimated from visual density and proportion for an open composition."
+    }
+  },
+  medium: {
+    labelText: { "zh-Hans": "均衡参考尺寸", "zh-Hant": "均衡參考尺寸", en: "Balanced reference size" },
+    hint: {
+      "zh-Hans": "按画面疏密、虚实与比例估算，适合作为均衡布局制作参考。",
+      "zh-Hant": "按畫面疏密、虛實與比例估算，適合作為均衡布局製作參考。",
+      en: "Estimated from density, open space, and proportion for a balanced composition."
+    }
+  },
+  large: {
+    labelText: { "zh-Hans": "繁密参考尺寸", "zh-Hant": "繁密參考尺寸", en: "Dense reference size" },
+    hint: {
+      "zh-Hans": "按画面疏密与比例估算，层次繁密但仍保留清楚气口与虚处。",
+      "zh-Hant": "按畫面疏密與比例估算，層次繁密但仍保留清楚氣口與虛處。",
+      en: "Estimated from visual density and proportion; the composition stays dense while preserving clear open passages."
+    }
+  }
+};
+
+const ENVIRONMENT_ESTIMATE_HINTS: Record<SizePresetId, Record<Locale, string>> = {
+  small: {
+    "zh-Hans": "根据所提供环境图片的可用墙面或陈设比例估算尺寸，并结合疏朗布局与作品幅式。",
+    "zh-Hant": "根據所提供環境圖片的可用牆面或陳設比例估算尺寸，並結合疏朗佈局與作品幅式。",
+    en: "Estimated from the available wall or display proportions in the supplied environment image, combined with an open layout and artwork format."
+  },
+  medium: {
+    "zh-Hans": "根据所提供环境图片的可用墙面或陈设比例估算尺寸，并结合均衡疏密与作品幅式。",
+    "zh-Hant": "根據所提供環境圖片的可用牆面或陳設比例估算尺寸，並結合均衡疏密與作品幅式。",
+    en: "Estimated from the available wall or display proportions in the supplied environment image, combined with balanced density and artwork format."
+  },
+  large: {
+    "zh-Hans": "根据所提供环境图片的可用墙面或陈设比例估算尺寸，并结合繁密布局与作品幅式，同时保留清楚气口与虚处。",
+    "zh-Hant": "根據所提供環境圖片的可用牆面或陳設比例估算尺寸，並結合繁密佈局與作品幅式，同時保留清楚氣口與虛處。",
+    en: "Estimated from the available wall or display proportions in the supplied environment image, combined with a dense layout and artwork format while preserving open passages."
+  }
+};
+
+const ENVIRONMENT_FALLBACK_HINTS: Record<SizePresetId, Record<Locale, string>> = {
+  small: {
+    "zh-Hans": "环境图片尺寸估算不可用，因此按疏朗布局与作品幅式提供备用参考。",
+    "zh-Hant": "環境圖片尺寸估算不可用，因此按疏朗佈局與作品幅式提供備用參考。",
+    en: "The environment-image estimate was unavailable, so an open-layout fallback was combined with the artwork format."
+  },
+  medium: {
+    "zh-Hans": "环境图片尺寸估算不可用，因此按均衡疏密与作品幅式提供备用参考。",
+    "zh-Hant": "環境圖片尺寸估算不可用，因此按均衡疏密與作品幅式提供備用參考。",
+    en: "The environment-image estimate was unavailable, so a balanced-density fallback was combined with the artwork format."
+  },
+  large: {
+    "zh-Hans": "环境图片尺寸估算不可用，因此按繁密布局与作品幅式提供备用参考，同时保留清楚气口与虚处。",
+    "zh-Hant": "環境圖片尺寸估算不可用，因此按繁密佈局與作品幅式提供備用參考，同時保留清楚氣口與虛處。",
+    en: "The environment-image estimate was unavailable, so a dense-layout fallback was combined with the artwork format while preserving open passages."
+  }
+};
+
 const SIZE_PRESET_IDS: SizePresetId[] = ["small", "medium", "large"];
 
 const REFERENCE_LEVELS: ReferenceLevel[] = [
@@ -161,6 +224,26 @@ function isSizePresetId(value: string): value is SizePresetId {
   return SIZE_PRESET_IDS.includes(value as SizePresetId);
 }
 
+function generatedDensityPreset(size: ArtworkSize, generationComplexity?: string): SizePresetId | null {
+  if (size.preset_id === "custom" || isSizePresetId(size.preset_id) || LEGACY_SIZE_COPY[size.preset_id]) {
+    return null;
+  }
+  if (generationComplexity && isSizePresetId(generationComplexity)) {
+    return generationComplexity;
+  }
+  const stablePreset = /^(?:complexity|environment_(?:estimate|fallback))_(small|medium|large)(?:_|$)/.exec(size.preset_id)?.[1];
+  if (stablePreset && isSizePresetId(stablePreset)) {
+    return stablePreset;
+  }
+  return null;
+}
+
+function generatedSizeSource(size: ArtworkSize): "complexity" | "environment_estimate" | "environment_fallback" {
+  if (size.preset_id.startsWith("complexity_")) return "complexity";
+  if (size.preset_id.startsWith("environment_fallback_")) return "environment_fallback";
+  return "environment_estimate";
+}
+
 function roundToNearestFive(value: number): number {
   return Math.max(5, Math.round(value / 5) * 5);
 }
@@ -194,7 +277,11 @@ function sizeOptionsFor(inferredSize: ArtworkSize): ProductionSize[] {
   return SIZE_PRESET_IDS.map((presetId) => sizeFromRatio(presetId, ratio));
 }
 
-function localizedSizeName(size: ArtworkSize, locale: Locale): string {
+function localizedSizeName(size: ArtworkSize, locale: Locale, generationComplexity?: string): string {
+  const generatedPreset = generatedDensityPreset(size, generationComplexity);
+  if (generatedPreset) {
+    return text(GENERATED_DENSITY_SIZE_COPY[generatedPreset].labelText, locale);
+  }
   if (size.preset_id === "custom") {
     return customSizeLabel(locale);
   }
@@ -211,12 +298,23 @@ function localizedSizeName(size: ArtworkSize, locale: Locale): string {
   return locale === "en" && /[\u3400-\u9fff]/.test(size.label) ? "Suggested size" : size.label;
 }
 
-function sizeLabel(size: ArtworkSize, locale: Locale): string {
-  const qualifier = locale === "en" ? "approx." : "约";
-  return `${localizedSizeName(size, locale)} · ${qualifier} ${size.width_cm} × ${size.height_cm} cm`;
+function sizeLabel(size: ArtworkSize, locale: Locale, generationComplexity?: string): string {
+  const qualifier = locale === "en" ? "approx." : locale === "zh-Hant" ? "約" : "约";
+  return `${localizedSizeName(size, locale, generationComplexity)} · ${qualifier} ${size.width_cm} × ${size.height_cm} cm`;
 }
 
-function sizeHint(size: ArtworkSize, locale: Locale): string {
+function sizeHint(size: ArtworkSize, locale: Locale, generationComplexity?: string): string {
+  const generatedPreset = generatedDensityPreset(size, generationComplexity);
+  if (generatedPreset) {
+    const source = generatedSizeSource(size);
+    if (source === "environment_estimate") {
+      return text(ENVIRONMENT_ESTIMATE_HINTS[generatedPreset], locale);
+    }
+    if (source === "environment_fallback") {
+      return text(ENVIRONMENT_FALLBACK_HINTS[generatedPreset], locale);
+    }
+    return text(GENERATED_DENSITY_SIZE_COPY[generatedPreset].hint, locale);
+  }
   if (size.reason) {
     return locale === "en" && /[\u3400-\u9fff]/.test(size.reason) ? "Suggested from the artwork size estimate." : size.reason;
   }
@@ -234,7 +332,18 @@ function sizeHint(size: ArtworkSize, locale: Locale): string {
 }
 
 function estimateSizeKey(size: ArtworkSize): string {
-  return ["small", "medium", "large"].includes(size.preset_id) ? size.preset_id : "medium";
+  if (isSizePresetId(size.preset_id)) {
+    return size.preset_id;
+  }
+  const area = Number(size.width_cm) * Number(size.height_cm);
+  if (!Number.isFinite(area) || area <= 0) {
+    return "medium";
+  }
+  return SIZE_PRESET_IDS.reduce((closest, presetId) => (
+    Math.abs(SIZE_TARGET_AREAS[presetId] - area) < Math.abs(SIZE_TARGET_AREAS[closest] - area)
+      ? presetId
+      : closest
+  ), "medium");
 }
 
 function scrollIntoViewIfAvailable(element: HTMLElement | null, options: ScrollIntoViewOptions): void {
@@ -479,7 +588,7 @@ export default function ProductionDialog({
   };
 
   return (
-    <div className="dialog-layer">
+    <div className="dialog-layer production-dialog-layer">
       <section
         className="production-dialog"
         ref={dialogRef}
@@ -488,17 +597,18 @@ export default function ProductionDialog({
         aria-labelledby={dialogTitleId}
         onKeyDown={onDialogKeyDown}
       >
-        <div className="dialog-heading">
+        <header className="production-dialog-header dialog-heading">
           <div>
             <h2 id={dialogTitleId}>{page === "size" ? (locale === "en" ? "Adjust Artwork Size" : "调整作品尺寸") : order ? successTitleLabel : title}</h2>
           </div>
           <button ref={closeButtonRef} className="icon-button" type="button" onClick={onClose} aria-label={closeLabel}>
             <X aria-hidden="true" size={18} />
           </button>
-        </div>
+        </header>
 
-        {page === "size" ? (
-          <div className="size-adjust-panel">
+        <div className="production-dialog-body">
+          {page === "size" ? (
+            <div className="size-adjust-panel">
             <button className="secondary-action compact-action" type="button" onClick={() => setPage("main")}>
               <ArrowLeft aria-hidden="true" size={16} />
               {locale === "en" ? "Back" : "返回"}
@@ -551,9 +661,9 @@ export default function ProductionDialog({
             <button className="primary-action" type="button" disabled={customSelected && !customSizeValid} onClick={applySize}>
               {locale === "en" ? "Use this size" : "用这个尺寸"}
             </button>
-          </div>
-        ) : order ? (
-          <div className="production-success">
+            </div>
+          ) : order ? (
+            <div className="production-success">
             <div className="production-success-hero">
               <CheckCircle2 aria-hidden="true" size={26} />
               <strong>{successTitleLabel}</strong>
@@ -567,7 +677,7 @@ export default function ProductionDialog({
               </div>
               <div className="production-summary-card">
                 <span>{summarySizeLabel}</span>
-                <strong>{sizeLabel(selectedSize, locale)}</strong>
+                <strong>{sizeLabel(selectedSize, locale, record.generation_complexity)}</strong>
               </div>
               <div className="production-summary-card">
                 <span>{summaryReferenceLabel}</span>
@@ -597,17 +707,17 @@ export default function ProductionDialog({
               {copyToast ? <p className="status-line copy-toast" role="status">{copyToast}</p> : null}
               {!contact.phone && !contact.wechat ? <span>{contactPendingLabel}</span> : null}
             </div>
-          </div>
-        ) : (
-          <>
+            </div>
+          ) : (
+            <>
             <p className="production-intro">{introLabel}</p>
             <div className="size-section">
               <p>{sizeSectionLabel}</p>
               <div className="selected-size-panel">
                 <Ruler aria-hidden="true" size={18} />
                 <div>
-                  <strong>{sizeLabel(selectedSize, locale)}</strong>
-                  {sizeHint(selectedSize, locale) ? <span>{sizeHint(selectedSize, locale)}</span> : null}
+                  <strong>{sizeLabel(selectedSize, locale, record.generation_complexity)}</strong>
+                  {sizeHint(selectedSize, locale, record.generation_complexity) ? <span>{sizeHint(selectedSize, locale, record.generation_complexity)}</span> : null}
                 </div>
                 <button className="secondary-action compact-action" type="button" onClick={() => {
                   setDraftSize(selectedSize);
@@ -679,19 +789,24 @@ export default function ProductionDialog({
               <div className="reference-hint reference-hint-measure" ref={referenceHintMeasureRef} aria-hidden="true" />
             </div>
 
-            {!productionOpen ? (
-              <div className="contact-panel" role="status">
-                <strong>{productionUnavailableLabel}</strong>
-                <span>{contactPendingLabel}</span>
-              </div>
-            ) : (
-              <button className="primary-action" type="button" onClick={confirm}>
-                {confirmLabel}
-              </button>
-            )}
+              {!productionOpen ? (
+                <div className="contact-panel" role="status">
+                  <strong>{productionUnavailableLabel}</strong>
+                  <span>{contactPendingLabel}</span>
+                </div>
+              ) : null}
+            </>
+          )}
+        </div>
+
+        {page === "main" && !order && productionOpen ? (
+          <footer className="production-dialog-footer">
+            <button className="primary-action" type="button" onClick={confirm}>
+              {confirmLabel}
+            </button>
             {error ? <p className="error-line" role="status">{error}</p> : null}
-          </>
-        )}
+          </footer>
+        ) : null}
       </section>
     </div>
   );

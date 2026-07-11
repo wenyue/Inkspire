@@ -29,7 +29,8 @@ function productionAvailable(config) {
 }
 
 function loadConfig(projectRoot = path.resolve(__dirname, "../..")) {
-  const configDir = path.join(projectRoot, "config");
+  const resolvedProjectRoot = path.resolve(projectRoot);
+  const configDir = path.join(resolvedProjectRoot, "config");
   const app = readJson(path.join(configDir, "app.json"));
   const experts = requireArray(readJson(path.join(configDir, "experts.json")), "experts");
   const questions = readJson(path.join(configDir, "questions.json"));
@@ -42,6 +43,7 @@ function loadConfig(projectRoot = path.resolve(__dirname, "../..")) {
   const prompts = {
     painting: readJson(path.join(configDir, "prompts", "painting.json")),
     calligraphy: readJson(path.join(configDir, "prompts", "calligraphy.json")),
+    calligraphyVerification: readJson(path.join(configDir, "prompts", "calligraphyVerification.json")),
     fusion: readJson(path.join(configDir, "prompts", "fusion.json")),
     sizeEstimationPrompt: readJson(path.join(configDir, "prompts", "sizeEstimationPrompt.json"))
   };
@@ -51,7 +53,7 @@ function loadConfig(projectRoot = path.resolve(__dirname, "../..")) {
 
   app.productionContact = productionContact(app);
 
-  return { app, experts, questions, classicArtworks, i18n, prompts };
+  return { _projectRoot: resolvedProjectRoot, app, experts, questions, classicArtworks, i18n, prompts };
 }
 
 function publicConfig(config) {

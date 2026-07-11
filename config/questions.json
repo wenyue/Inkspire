@@ -132,9 +132,9 @@
         "en": "For example: Peace and joy, or a short blessing"
       },
       "helper_text": {
-        "zh-Hans": "这会作为书法正文进入生成；后面再选择书体、气息、章法和纸墨。",
-        "zh-Hant": "這會作為書法正文進入生成；後面再選擇書體、氣息、章法和紙墨。",
-        "en": "This becomes the calligraphy wording; script, spirit, layout, and material come next."
+        "zh-Hans": "这会作为书法正文进入生成；后面再选择书体、气息、形制和纸墨。",
+        "zh-Hant": "這會作為書法正文進入生成；後面再選擇書體、氣息、形制和紙墨。",
+        "en": "This becomes the calligraphy wording; script, spirit, format, and material come next."
       },
       "submit_label": {
         "zh-Hans": "继续定书体",
@@ -199,11 +199,11 @@
         "/previews/options/calligraphy-layout-3-handscroll.webp",
         "/previews/options/calligraphy-layout-4-album.webp"
       ],
-      "preview_prompt": "书法章法，立轴横幅斗方手卷册页",
+      "preview_prompt": "书法形制，立轴横幅斗方手卷册页",
       "title": {
-        "zh-Hans": "想要哪种章法？",
-        "zh-Hant": "想要哪種章法？",
-        "en": "Which layout do you want?"
+        "zh-Hans": "想要哪种形制？",
+        "zh-Hant": "想要哪種形制？",
+        "en": "Which format should it take?"
       },
       "options": {
         "zh-Hans": ["立轴", "横幅", "斗方", "手卷", "册页"],
@@ -221,16 +221,16 @@
         "/previews/options/calligraphy-material-2-gold-flecked.webp",
         "/previews/options/calligraphy-material-3-rubbing.webp"
       ],
-      "preview_prompt": "书法纸墨质感，素宣仿古洒金碑拓",
+      "preview_prompt": "书法纸墨质感，素宣仿古洒金碑拓肌理",
       "title": {
         "zh-Hans": "偏好哪种纸墨质感？",
         "zh-Hant": "偏好哪種紙墨質感？",
         "en": "Which paper and ink surface do you prefer?"
       },
       "options": {
-        "zh-Hans": ["素宣", "仿古", "洒金", "碑拓"],
-        "zh-Hant": ["素宣", "仿古", "灑金", "碑拓"],
-        "en": ["Plain Xuan", "Antique Paper", "Gold-flecked", "Rubbing"]
+        "zh-Hans": ["素宣", "仿古", "洒金", "碑拓肌理"],
+        "zh-Hant": ["素宣", "仿古", "灑金", "碑拓肌理"],
+        "en": ["Plain Xuan", "Antique Paper", "Gold-flecked", "Rubbing Texture"]
       }
     }
   ]

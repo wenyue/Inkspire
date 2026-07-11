@@ -5,6 +5,7 @@ import {
   fallbackConfig,
   createFusion,
   createGeneration,
+  regenerateRecord,
   getRecord,
   getJob,
   isGenerationLimitError,
@@ -29,6 +30,7 @@ import ParticleBackdrop from "./components/ParticleBackdrop";
 import ProductionDialog from "./components/ProductionDialog";
 import ConfirmDialog from "./components/ConfirmDialog";
 import ResultView from "./components/ResultView";
+import { generationFailureKind } from "./generationFailure";
 import AdjustView from "./components/AdjustView";
 import Studio from "./components/Studio";
 import type { Locale } from "./domain";
@@ -285,6 +287,7 @@ export default function App() {
   const [recordViewOpen, setRecordViewOpen] = useState(false);
   const [activeJobs, setActiveJobs] = useState<GenerationJob[]>([]);
   const [generationSessions, setGenerationSessions] = useState<GenerationSessionMap>(() => readGenerationSessions());
+  const [generationRetryErrors, setGenerationRetryErrors] = useState<Partial<Record<OriginTab, string>>>({});
   const [restoringRecordId, setRestoringRecordId] = useState("");
   const [showProduction, setShowProduction] = useState(false);
   const [isAttachingPhoto, setIsAttachingPhoto] = useState(false);
@@ -348,7 +351,7 @@ export default function App() {
     });
   }, [updateGenerationSessions]);
 
-  const markGenerationSessionFailed = useCallback((job: GenerationJob, error?: string) => {
+  const markGenerationSessionFailed = useCallback((job: GenerationJob, error?: string, record?: GenerationRecord) => {
     updateGenerationSessions((sessions) => {
       const metadata = generationJobMetadata(job, sessions);
       const current = sessions[metadata.originTab];
@@ -361,7 +364,8 @@ export default function App() {
           jobId: current?.jobId ?? job.id,
           resultRecordId: current?.resultRecordId ?? job.recordId,
           status: "failed",
-          error: error || job.error
+          error: error || job.error,
+          failureKind: generationFailureKind(record) ?? generationFailureKind(job)
         }
       };
     });
@@ -787,6 +791,64 @@ export default function App() {
     }
   }, [applyFinishedRecord, clearGenerationSession, clearGenerationSessionIfJob, handleGenerationStart, navigate, replaceActiveJobs, startFusionJob, upsertGenerationSession]);
 
+  const startRecordRegeneration = useCallback(async (
+    recordId: string,
+    originTab: OriginTab,
+    operation: GenerationOperation,
+    payload: GenerationSession["payload"]
+  ) => {
+    const pendingId = pendingJobId("pending-regeneration", originTab);
+    const startedAt = Date.now();
+    upsertGenerationSession({
+      originTab,
+      operation,
+      jobId: pendingId,
+      sourceRecordId: recordId,
+      startedAt,
+      status: "running",
+      payload
+    });
+
+    try {
+      const result = startResultWithFallbackMetadata(
+        await regenerateRecord(recordId, { origin_tab: originTab, operation }),
+        { originTab, operation }
+      );
+      handleGenerationStart(result);
+      if (result.job?.status === "queued" || result.job?.status === "running") {
+        upsertGenerationSession({
+          ...runningSessionFromJob(result.job, payload, { originTab, operation }),
+          startedAt,
+          sourceRecordId: recordId
+        });
+        navigate(fallbackPathForSource(originTab), { replace: true });
+      }
+      if (result.record && !result.job) {
+        if (
+          result.record.status === "succeeded"
+          && result.record.source_photo_path
+          && !result.record.fusion_path
+          && !autoFusionRecordIds.current.has(result.record.id)
+        ) {
+          autoFusionRecordIds.current.add(result.record.id);
+          await startFusionJob(result.record.id, result.record.source_photo_path, originTab, operation);
+          return;
+        }
+        clearGenerationSession(originTab);
+        applyFinishedRecord(result.record);
+      }
+      if (result.job?.status === "failed") {
+        throw new Error(result.job.error || "regeneration failed");
+      }
+    } catch (error) {
+      if (isGenerationLimitError(error)) {
+        replaceActiveJobs((error.payload as GenerationStartResult).activeJobs ?? []);
+      }
+      clearGenerationSessionIfJob(originTab, pendingId);
+      throw error;
+    }
+  }, [applyFinishedRecord, clearGenerationSession, clearGenerationSessionIfJob, handleGenerationStart, navigate, replaceActiveJobs, startFusionJob, upsertGenerationSession]);
+
   const finishRecordForJob = useCallback(async (job: GenerationJob, record: GenerationRecord) => {
     const metadata = generationJobMetadata(job, generationSessionsRef.current);
     const originTab = metadata.originTab;
@@ -802,7 +864,7 @@ export default function App() {
       return;
     }
     if (record.status === "failed") {
-      markGenerationSessionFailed(job, record.title);
+      markGenerationSessionFailed(job, record.title, record);
       return;
     }
     applyFinishedRecordForOrigin(record, originTab);
@@ -852,7 +914,7 @@ export default function App() {
           }
           completedIds.add(job.id);
           if (record.status === "failed") {
-            markGenerationSessionFailed(job);
+            markGenerationSessionFailed(job, record.title, record);
             return;
           }
           await finishRecordForJob(job, record);
@@ -898,6 +960,7 @@ export default function App() {
   };
 
   const goToTab = (tab: Tab) => {
+    setGenerationRetryErrors({});
     if (tab === "studio" && activeTab === "studio" && currentRecord && !adjustOpen && !productionDialogOpen) {
       startNewArtwork();
       return;
@@ -1011,17 +1074,68 @@ export default function App() {
     if (!session.payload.type || !session.payload.answers) {
       return;
     }
-    void startGenerationJob({
-      type: session.payload.type,
-      answers: session.payload.answers,
-      conversationNotes: session.payload.conversationNotes ?? "",
-      source_photo_path: session.payload.source_photo_path,
-      recommended_artwork_size: session.payload.recommended_artwork_size ?? null,
-      generation_complexity: session.payload.generation_complexity,
-      origin_tab: session.originTab,
-      operation: session.operation
+    setGenerationRetryErrors((current) => ({ ...current, [session.originTab]: "" }));
+    const retry = session.sourceRecordId
+      ? startRecordRegeneration(session.sourceRecordId, session.originTab, session.operation, session.payload)
+      : startGenerationJob({
+        type: session.payload.type,
+        answers: session.payload.answers,
+        conversationNotes: session.payload.conversationNotes ?? "",
+        source_photo_path: session.payload.source_photo_path,
+        recommended_artwork_size: session.payload.recommended_artwork_size ?? null,
+        generation_complexity: session.payload.generation_complexity,
+        origin_tab: session.originTab,
+        operation: session.operation
+      });
+    void retry.catch((error) => {
+      upsertGenerationSession(session);
+      setGenerationRetryErrors((current) => ({
+        ...current,
+        [session.originTab]: isGenerationLimitError(error)
+          ? t("studio.generationLimit")
+          : t("generationFailure.retryError")
+      }));
     });
-  }, [startGenerationJob]);
+  }, [startGenerationJob, startRecordRegeneration, t, upsertGenerationSession]);
+
+  const retryCalligraphyRecord = useCallback(async () => {
+    if (!currentRecord) {
+      return;
+    }
+    const originTab = tabToOriginTab(readSourceTab(location.search));
+    setResultActionError("");
+    try {
+      await startRecordRegeneration(currentRecord.id, originTab, "adjust", {
+        type: currentRecord.type,
+        answers: currentRecord.answers,
+        source_photo_path: currentRecord.source_photo_path,
+        recommended_artwork_size: currentRecord.recommended_artwork_size ?? null,
+        generation_complexity: currentRecord.generation_complexity
+      });
+    } catch (error) {
+      setResultActionError(isGenerationLimitError(error)
+        ? t("studio.generationLimit")
+        : t("generationFailure.retryError"));
+    }
+  }, [currentRecord, location.search, startRecordRegeneration, t]);
+
+  const recoverClassicReference = useCallback((originTab?: OriginTab) => {
+    if (originTab) {
+      clearGenerationSession(originTab);
+    }
+    if (currentRecord?.id) {
+      recordCacheRef.current.delete(currentRecord.id);
+    }
+    setCurrentRecord(null);
+    setRestoringRecordId("");
+    setShowProduction(false);
+    setAdjustOpen(false);
+    setRecordViewOpen(false);
+    setResultActionError("");
+    setLibraryActionError("");
+    setStudioResetRequest((request) => request + 1);
+    navigate("/studio?step=classic");
+  }, [clearGenerationSession, currentRecord?.id, navigate]);
 
   const resultSource = readSourceTab(location.search);
   let resultBackLabel: string | undefined;
@@ -1073,6 +1187,9 @@ export default function App() {
           setIsAttachingPhoto(false);
         }
       }}
+      t={t}
+      onSelectClassic={() => recoverClassicReference()}
+      onRetryCalligraphy={retryCalligraphyRecord}
       onAttachPhoto={async (file) => {
         if (!currentRecord?.id) {
           return;
@@ -1107,7 +1224,9 @@ export default function App() {
       clearLabel={t("adjust.clearNote")}
       baseLabel={t("adjust.baseLabel")}
       artworkLabel={t("result.artwork")}
-      suggestions={list("suggestions").slice(1)}
+      suggestions={list(currentRecord.type === "calligraphy"
+        ? "suggestions.calligraphy"
+        : "suggestions.painting").slice(1)}
       isSubmitting={isAdjusting}
       error={adjustError}
       onBack={navigateBack}
@@ -1154,6 +1273,9 @@ export default function App() {
             locale={locale}
             t={t}
             onRetry={activeTabSessionRetry}
+            failureKind={activeTabSession.failureKind}
+            onSelectClassic={() => recoverClassicReference(activeTabSession.originTab)}
+            recoveryError={generationRetryErrors[activeTabSession.originTab]}
             expectsPreviewGeneration={expectsPreviewGeneration(activeTabSession)}
           />
         ) : recordView ?? (

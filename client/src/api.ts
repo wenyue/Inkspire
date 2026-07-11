@@ -75,6 +75,17 @@ export interface GenerationProfile {
   }>;
 }
 
+export interface CalligraphyVerification {
+  status: "verified" | "needs_review";
+  detected_text?: string;
+  issues?: string[];
+  confidence?: number;
+}
+
+export interface GenerationDiagnostics {
+  reason?: string;
+}
+
 export interface PublicConfig extends QuestionConfig {
   name?: string;
   defaultLocale?: Locale;
@@ -103,6 +114,8 @@ export interface LibraryRecord {
   favorite?: boolean;
   status?: string;
   fusion_status?: string;
+  calligraphy_verification?: CalligraphyVerification;
+  diagnostics?: GenerationDiagnostics | null;
   generation_profile?: GenerationProfile;
 }
 
@@ -124,6 +137,7 @@ export interface GenerationJob {
   started_at?: string | null;
   completed_at?: string | null;
   error?: string;
+  diagnostics?: GenerationDiagnostics | null;
   generation_profile?: GenerationProfile;
 }
 
@@ -302,6 +316,17 @@ export async function createFusion(
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ source_photo_path: sourcePhotoPath, origin_tab, operation })
+  });
+}
+
+export async function regenerateRecord(
+  recordId: string,
+  metadata: { origin_tab: OriginTab; operation: GenerationOperation }
+): Promise<GenerationStartResult> {
+  return requestJson(`/api/records/${recordId}/regenerate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(metadata)
   });
 }
 

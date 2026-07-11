@@ -6,10 +6,12 @@ const os = require("node:os");
 const path = require("node:path");
 const { PNG } = require("pngjs");
 const {
+  buildJsonInspectionPrompt,
   buildImageGenerationPrompt,
   diagnoseCodexImageGeneration,
   runCodexImageGeneration,
-  runCodexJsonEstimation
+  runCodexJsonEstimation,
+  runCodexJsonInspection
 } = require("../src/codexRunner");
 
 async function withTempDir(fn) {
@@ -60,7 +62,7 @@ function pngBuffer(red) {
   return PNG.sync.write(png);
 }
 
-function fakeSpawn({ stdout = "", stderr = "", onStart = async () => {} }) {
+function fakeSpawn({ stdout = "", stderr = "", exitCode = 0, onStart = async () => {} }) {
   return (command, args) => {
     const child = new EventEmitter();
     child.stdout = new EventEmitter();
@@ -71,7 +73,7 @@ function fakeSpawn({ stdout = "", stderr = "", onStart = async () => {} }) {
       await onStart();
       if (stdout) child.stdout.emit("data", Buffer.from(stdout));
       if (stderr) child.stderr.emit("data", Buffer.from(stderr));
-      child.emit("close", 0);
+      child.emit("close", exitCode);
     });
 
     return child;
@@ -144,6 +146,37 @@ test("finds newest generated PNG under generated_images root when events have no
   });
 });
 
+test("uses an explicit square canvas in the Codex image prompt", async () => {
+  await withTempDir(async (temp) => {
+    let codexPrompt = "";
+    const image = pngBuffer(120);
+    const spawnImpl = (command, args) => {
+      codexPrompt = args.at(-1);
+      return fakeSpawn({
+        stdout: JSON.stringify({ type: "image_generation_end", result: image.toString("base64") })
+      })(command, args);
+    };
+
+    await runCodexImageGeneration({
+      prompt: "生成一幅斗方书法",
+      canvas: { width: 1024, height: 1024, aspectRatio: "1:1", orientation: "square" },
+      outputPngPath: path.join(temp, "square.png"),
+      jobDir: path.join(temp, "job"),
+      generatedImagesRoot: path.join(temp, "generated_images"),
+      config: {
+        runtime: {
+          codexCommand: "codex",
+          codexModel: "gpt-5",
+          generationCanvas: { width: 1024, height: 1536, aspectRatio: "2:3" }
+        }
+      },
+      spawnImpl
+    });
+
+    assert.match(codexPrompt, /Target canvas: 1024x1024 pixels, 1:1 aspect ratio/);
+  });
+});
+
 test("runs Codex JSON estimation without requiring an output PNG path", async () => {
   await withTempDir(async (temp) => {
     const result = await runCodexJsonEstimation({
@@ -170,6 +203,87 @@ test("runs Codex JSON estimation without requiring an output PNG path", async ()
     assert.match(result.text, /generation_complexity/);
     assert.equal(typeof result.diagnostics.codex_process_ms, "number");
     assert.ok(result.diagnostics.codex_process_ms >= 0);
+  });
+});
+
+test("runs dedicated calligraphy JSON inspection without image generation", async () => {
+  assert.equal(typeof buildJsonInspectionPrompt, "function");
+  assert.equal(typeof runCodexJsonInspection, "function");
+  await withTempDir(async (temp) => {
+    let codexArgs = [];
+    const spawnImpl = (command, args) => {
+      codexArgs = args;
+      return fakeSpawn({
+        stdout: JSON.stringify({
+          type: "message",
+          text: "{\"detected_text\":\"清风明月\",\"no_extra_text\":true,\"legible\":true,\"confidence\":0.98,\"decision\":\"verified\",\"issues\":[]}"
+        })
+      })(command, args);
+    };
+
+    const result = await runCodexJsonInspection({
+      prompt: "期望正文是清风明月，只返回 JSON",
+      referenceImages: { calligraphyCandidate: "D:\\Inkspire\\data\\records\\record-1\\artwork.png" },
+      jobDir: path.join(temp, "inspect"),
+      config: { runtime: { codexCommand: "codex", codexModel: "gpt-5" } },
+      spawnImpl
+    });
+
+    assert.equal(result.json.detected_text, "清风明月");
+    assert.equal(codexArgs.includes("image_generation"), false);
+    assert.match(codexArgs.at(-1), /calligraphy text verification worker/i);
+    assert.match(codexArgs.at(-1), /calligraphyCandidate: D:\\Inkspire\\data\\records\\record-1\\artwork\.png/);
+    assert.doesNotMatch(codexArgs.at(-1), /environment-size estimation worker/i);
+  });
+});
+
+test("calligraphy inspection classifies process and safety failures", async () => {
+  await withTempDir(async (temp) => {
+    await assert.rejects(
+      runCodexJsonInspection({
+        prompt: "核验",
+        jobDir: path.join(temp, "inspect-process"),
+        config: { runtime: { codexCommand: "codex", codexModel: "gpt-5" } },
+        spawnImpl: fakeSpawn({ exitCode: 7, stderr: "request was refused by safety policy" })
+      }),
+      (error) => {
+        assert.ok(error.diagnostics);
+        assert.deepEqual(error.diagnostics, {
+          reason: "codex_process_failed",
+          status: "process_error",
+          exit_code: 7,
+          codex_process_ms: error.diagnostics.codex_process_ms,
+          possible_safety_block: true
+        });
+        assert.equal(typeof error.diagnostics.codex_process_ms, "number");
+        return true;
+      }
+    );
+  });
+});
+
+test("calligraphy inspection classifies malformed JSON without exposing stderr", async () => {
+  await withTempDir(async (temp) => {
+    await assert.rejects(
+      runCodexJsonInspection({
+        prompt: "核验",
+        jobDir: path.join(temp, "inspect-json"),
+        config: { runtime: { codexCommand: "codex", codexModel: "gpt-5" } },
+        spawnImpl: fakeSpawn({
+          stdout: JSON.stringify({ type: "message", text: "not-json" }),
+          stderr: "D:\\private\\codex-stderr.log"
+        })
+      }),
+      (error) => {
+        assert.ok(error.diagnostics);
+        assert.equal(error.diagnostics.reason, "json_parse_failed");
+        assert.equal(error.diagnostics.status, "invalid_json");
+        assert.equal(error.diagnostics.possible_safety_block, false);
+        assert.equal(typeof error.diagnostics.codex_process_ms, "number");
+        assert.equal(Object.hasOwn(error.diagnostics, "stderr_tail"), false);
+        return true;
+      }
+    );
   });
 });
 

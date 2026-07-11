@@ -1,6 +1,7 @@
 import { RotateCcw } from "lucide-react";
 import type { GenerationOperation, OriginTab } from "../api";
 import type { Locale } from "../domain";
+import type { GenerationFailureKind } from "../generationFailure";
 import { generationPhase, loadingImageIndex, type GenerationSessionStatus } from "../generationSession";
 
 const IMAGE_COUNT = 4;
@@ -15,6 +16,9 @@ interface GeneratingViewProps {
   locale: Locale;
   t: (key: string) => string;
   onRetry?: () => void;
+  failureKind?: GenerationFailureKind;
+  onSelectClassic?: () => void;
+  recoveryError?: string;
   expectsPreviewGeneration?: boolean;
 }
 
@@ -33,6 +37,9 @@ export default function GeneratingView({
   locale,
   t,
   onRetry,
+  failureKind,
+  onSelectClassic,
+  recoveryError,
   expectsPreviewGeneration = false
 }: GeneratingViewProps) {
   const elapsedSeconds = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
@@ -42,6 +49,18 @@ export default function GeneratingView({
   const estimateKey = expectsPreviewGeneration
     ? "generationLoading.estimate.double"
     : "generationLoading.estimate.single";
+  const classicReferenceUnavailable = failed && failureKind === "classic_reference_unavailable";
+  const calligraphyNeedsReview = failed && failureKind === "calligraphy_text_unverified";
+  const failureTitle = classicReferenceUnavailable
+    ? t("generationFailure.classicReference.title")
+    : calligraphyNeedsReview
+      ? t("generationFailure.calligraphyReview.title")
+      : t("generationLoading.failedTitle");
+  const failureHint = classicReferenceUnavailable
+    ? t("generationFailure.classicReference.hint")
+    : calligraphyNeedsReview
+      ? t("generationFailure.calligraphyReview.hint")
+      : error || t("generationLoading.failedHint");
 
   return (
     <section
@@ -55,13 +74,19 @@ export default function GeneratingView({
         <img src={loadingImagePath(operation, phase.imageStage, jobId)} alt="" aria-hidden="true" />
       </div>
       <div className="generating-copy">
-        <h2>{failed ? t("generationLoading.failedTitle") : t(copyKey)}</h2>
-        <p>{failed ? error || t("generationLoading.failedHint") : t(estimateKey)}</p>
+        <h2>{failed ? failureTitle : t(copyKey)}</h2>
+        <p>{failed ? failureHint : t(estimateKey)}</p>
+        {calligraphyNeedsReview ? <p className="generation-review-status">{t("generationFailure.calligraphyReview.status")}</p> : null}
       </div>
-      {failed && onRetry ? (
+      {recoveryError ? <p className="error-line" role="status">{recoveryError}</p> : null}
+      {classicReferenceUnavailable && onSelectClassic ? (
+        <button className="primary-action compact-action generating-retry-action" type="button" onClick={onSelectClassic}>
+          <span>{t("generationFailure.classicReference.action")}</span>
+        </button>
+      ) : failed && onRetry ? (
         <button className="primary-action compact-action generating-retry-action" type="button" onClick={onRetry}>
           <RotateCcw aria-hidden="true" size={16} />
-          <span>{t("generationLoading.retry")}</span>
+          <span>{calligraphyNeedsReview ? t("generationFailure.calligraphyReview.action") : t("generationLoading.retry")}</span>
         </button>
       ) : null}
     </section>

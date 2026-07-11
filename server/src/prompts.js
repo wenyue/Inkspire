@@ -41,9 +41,9 @@ function promptBrief(promptConfig, variables) {
 }
 
 const GENERATION_COMPLEXITY_COPY = {
-  small: "简洁：画面克制，留白明确，细节密度较低。",
-  medium: "均衡：细节与留白平衡，适合常规作品生成。",
-  large: "丰富：层次更充分，细节承载更多，适合主视觉作品。"
+  small: "疏朗：主体集中，虚处充足，气口舒展。",
+  medium: "均衡：疏密相间，虚实相生，主次清楚。",
+  large: "繁密：密处交织有序，虚处仍留气口与呼吸。"
 };
 
 function generationComplexityCopy(value) {
@@ -95,7 +95,7 @@ function buildArtworkPrompt({
     "用户选择:",
     ...answerLines(answers, labels),
     ...classicReferenceLines(answers),
-    "画面复杂度:",
+    "画面疏密与虚实倾向:",
     generationComplexityCopy(generationComplexity)
   ]);
 
@@ -119,6 +119,8 @@ function buildArtworkPrompt({
   if (conversationNotes) {
     lines.push("用户补充:", conversationNotes);
   }
+
+  lines.push(...renderSections(promptConfig.finalSections, answers));
 
   return lines.join("\n");
 }

@@ -8,6 +8,11 @@ const sharp = require("sharp");
 const { createStorage } = require("../src/storage");
 const { createJobManager: createRawJobManager } = require("../src/jobs");
 const sizeEstimationPrompt = require("../../config/prompts/sizeEstimationPrompt.json");
+const calligraphyVerification = {
+  minimumConfidence: 0.8,
+  system: "独立检查书法候选图文字，只返回 JSON。",
+  brief: "核对期望正文={{expected_text}}。"
+};
 
 function createJobManager(options) {
   return createRawJobManager({
@@ -16,6 +21,7 @@ function createJobManager(options) {
       ...options.config,
       prompts: {
         sizeEstimationPrompt,
+        calligraphyVerification,
         ...(options.config?.prompts || {})
       }
     }
@@ -42,7 +48,20 @@ async function waitUntil(predicate, timeoutMs = 2000) {
 }
 
 function pngBuffer(red = 40) {
-  return sizedPngBuffer(2, 2, red);
+  return sizedPngBuffer(2, 3, red);
+}
+
+function pngBufferForCanvas(canvas, red = 40) {
+  if (!canvas) return pngBuffer(red);
+  const divisor = greatestCommonDivisor(canvas.width, canvas.height);
+  return sizedPngBuffer(canvas.width / divisor, canvas.height / divisor, red);
+}
+
+function greatestCommonDivisor(left, right) {
+  let a = Math.round(left);
+  let b = Math.round(right);
+  while (b) [a, b] = [b, a % b];
+  return a || 1;
 }
 
 function sizedPngBuffer(width, height, red = 40) {
@@ -99,6 +118,23 @@ async function writeSourcePhotoImage(temp, recordId = "upload-source", { width =
   return `records/${recordId}/source-photo.webp`;
 }
 
+async function writeClassicArtwork(projectRoot, fileName = "trusted.webp") {
+  const assetPath = path.join(projectRoot, "client", "public", "classic-artworks", fileName);
+  await fs.mkdir(path.dirname(assetPath), { recursive: true });
+  await fs.writeFile(assetPath, Buffer.from("TRUSTED_CLASSIC_ARTWORK"));
+  return assetPath;
+}
+
+function classicArtworkConfig(projectRoot, classicArtworks) {
+  return {
+    _projectRoot: projectRoot,
+    app: { image: { webpQuality: 82 } },
+    classicArtworks,
+    prompts: {},
+    questions: {}
+  };
+}
+
 async function readRawImage(filePath) {
   const input = await fs.readFile(filePath);
   const image = sharp(input);
@@ -143,6 +179,213 @@ test("create artwork job writes artwork.webp and record.json using fake runner P
     assert.equal(stored.status, "succeeded");
     assert.equal(record.artwork_path, `records/${record.id}/artwork.webp`);
     assert.equal((await fs.readFile(path.join(temp, record.artwork_path))).subarray(0, 4).toString("ascii"), "RIFF");
+  });
+});
+
+test("immediate artwork render uses only the configured classic artwork file", async () => {
+  await withTempStore(async (temp) => {
+    const projectRoot = path.join(temp, "project");
+    const trustedPath = await writeClassicArtwork(projectRoot);
+    await fs.mkdir(path.join(projectRoot, "client", "public", "classic-artworks", "directory.webp"));
+    const runnerCalls = [];
+    const manager = createJobManager({
+      config: classicArtworkConfig(projectRoot, [
+        { id: "trusted", image: "/classic-artworks/trusted.webp" },
+        { id: "traversal", image: "/classic-artworks/../secret.webp" },
+        { id: "encoded-traversal", image: "/classic-artworks/%2e%2e/secret.webp" },
+        { id: "absolute", image: "C:/private/secret.webp" },
+        { id: "wrong-public-folder", image: "/uploads/secret.webp" },
+        { id: "missing", image: "/classic-artworks/missing.webp" },
+        { id: "directory", image: "/classic-artworks/directory.webp" }
+      ]),
+      storage: createStorage(path.join(temp, "data")),
+      runner: async (options) => {
+        runnerCalls.push(options);
+        await fs.mkdir(path.dirname(options.outputPngPath), { recursive: true });
+        await fs.writeFile(options.outputPngPath, pngBufferForCanvas(options.canvas));
+        return { pngPath: options.outputPngPath, diagnostics: { reason: "classic_reference" } };
+      }
+    });
+
+    const requests = [
+      {
+        creation_mode: "classic_reference",
+        classic_artwork_id: "trusted",
+        classic_artwork_image: "C:/client-controlled/override.webp"
+      },
+      {
+        creation_mode: "free",
+        classic_artwork_id: "trusted",
+        classic_artwork_image: "/classic-artworks/trusted.webp"
+      },
+      {
+        creation_mode: "classic_reference",
+        classic_artwork_id: "unknown",
+        classic_artwork_image: "/classic-artworks/trusted.webp"
+      },
+      { creation_mode: "classic_reference" },
+      { creation_mode: "classic_reference", classic_artwork_id: "" },
+      { creation_mode: "classic_reference", classic_artwork_id: 42 },
+      ...["traversal", "encoded-traversal", "absolute", "wrong-public-folder", "missing", "directory"].map((classicArtworkId) => ({
+        creation_mode: "classic_reference",
+        classic_artwork_id: classicArtworkId
+      }))
+    ];
+
+    const results = [];
+    for (const answers of requests) results.push(await manager.createArtwork({ type: "painting", answers }));
+
+    assert.deepEqual(runnerCalls[0].referenceImages, { classicArtwork: trustedPath });
+    assert.equal(runnerCalls[1].referenceImages, undefined);
+    assert.equal(runnerCalls.length, 2);
+    for (const result of results.slice(2)) {
+      assert.equal(result.job.status, "failed");
+      assert.equal(result.record.status, "failed");
+      assert.equal(result.job.error, "classic artwork reference unavailable");
+      assert.equal(result.record.error, "classic artwork reference unavailable");
+      assert.deepEqual(result.record.diagnostics, { reason: "classic_reference_unavailable" });
+    }
+  });
+});
+
+test("classic artwork canonical path cannot escape through a nested directory link", async (t) => {
+  await withTempStore(async (temp) => {
+    const projectRoot = path.join(temp, "project");
+    const classicRoot = path.join(projectRoot, "client", "public", "classic-artworks");
+    const outsideRoot = path.join(temp, "outside-classic-assets");
+    await fs.mkdir(classicRoot, { recursive: true });
+    await fs.mkdir(outsideRoot, { recursive: true });
+    await fs.writeFile(path.join(outsideRoot, "secret.webp"), Buffer.from("OUTSIDE_FILE"));
+    try {
+      await fs.symlink(
+        outsideRoot,
+        path.join(classicRoot, "linked"),
+        process.platform === "win32" ? "junction" : "dir"
+      );
+    } catch (error) {
+      if (["EPERM", "EACCES", "ENOTSUP", "UNKNOWN"].includes(error.code)) {
+        t.skip(`directory links are unavailable on this platform: ${error.code}`);
+        return;
+      }
+      throw error;
+    }
+
+    let runnerCalled = false;
+    const manager = createJobManager({
+      config: classicArtworkConfig(projectRoot, [
+        { id: "linked", image: "/classic-artworks/linked/secret.webp" }
+      ]),
+      storage: createStorage(path.join(temp, "data")),
+      runner: async () => {
+        runnerCalled = true;
+        throw new Error("runner must not receive an escaping classic reference");
+      }
+    });
+
+    const result = await manager.createArtwork({
+      type: "painting",
+      answers: { creation_mode: "classic_reference", classic_artwork_id: "linked" }
+    });
+
+    assert.equal(runnerCalled, false);
+    assert.equal(result.job.status, "failed");
+    assert.equal(result.record.status, "failed");
+    assert.equal(result.record.error, "classic artwork reference unavailable");
+    assert.deepEqual(result.record.diagnostics, { reason: "classic_reference_unavailable" });
+  });
+});
+
+test("queued artwork render passes the trusted classic reference without affecting other runner stages", async () => {
+  await withTempStore(async (temp) => {
+    const projectRoot = path.join(temp, "project");
+    const trustedPath = await writeClassicArtwork(projectRoot);
+    const runnerCalls = [];
+    const manager = createJobManager({
+      config: classicArtworkConfig(projectRoot, [
+        { id: "trusted", image: "/classic-artworks/trusted.webp" }
+      ]),
+      storage: createStorage(path.join(temp, "data")),
+      runner: async (options) => {
+        runnerCalls.push(options);
+        await fs.mkdir(path.dirname(options.outputPngPath), { recursive: true });
+        await fs.writeFile(options.outputPngPath, pngBufferForCanvas(options.canvas));
+        return { pngPath: options.outputPngPath, diagnostics: { reason: "queued_classic_reference" } };
+      }
+    });
+
+    const trustedResult = await manager.createArtwork({
+      userId: "classic-user",
+      type: "painting",
+      answers: {
+        creation_mode: "classic_reference",
+        classic_artwork_id: "trusted",
+        classic_artwork_image: "../../client-controlled.webp"
+      }
+    });
+    const freeResult = await manager.createArtwork({
+      userId: "free-user",
+      type: "painting",
+      answers: {
+        creation_mode: "free",
+        classic_artwork_id: "trusted"
+      }
+    });
+    const unknownResult = await manager.createArtwork({
+      userId: "unknown-user",
+      type: "painting",
+      answers: {
+        creation_mode: "classic_reference",
+        classic_artwork_id: "missing",
+        classic_artwork_image: "/classic-artworks/trusted.webp"
+      }
+    });
+    const missingIdResult = await manager.createArtwork({
+      userId: "missing-id-user",
+      type: "painting",
+      answers: { creation_mode: "classic_reference" }
+    });
+    const emptyIdResult = await manager.createArtwork({
+      userId: "empty-id-user",
+      type: "painting",
+      answers: { creation_mode: "classic_reference", classic_artwork_id: "" }
+    });
+    const nonStringIdResult = await manager.createArtwork({
+      userId: "non-string-id-user",
+      type: "painting",
+      answers: { creation_mode: "classic_reference", classic_artwork_id: { client: "controlled" } }
+    });
+    await manager.waitForIdle();
+
+    const artworkCalls = runnerCalls.filter(({ stage }) => stage === "artwork");
+    const trustedCall = artworkCalls.find(({ record }) => record.user_id === "classic-user");
+    const freeCall = artworkCalls.find(({ record }) => record.user_id === "free-user");
+    const unknownCall = artworkCalls.find(({ record }) => record.user_id === "unknown-user");
+    assert.deepEqual(trustedCall.referenceImages, { classicArtwork: trustedPath });
+    assert.equal(freeCall.referenceImages, undefined);
+    assert.equal(unknownCall, undefined);
+    assert.equal(manager.getJob(trustedResult.job.id, "classic-user").status, "succeeded");
+    assert.equal(manager.getJob(freeResult.job.id, "free-user").status, "succeeded");
+    const unknownJob = manager.getJob(unknownResult.job.id, "unknown-user");
+    const unknownRecord = await createStorage(path.join(temp, "data")).getRecord(unknownResult.record.id);
+    assert.equal(unknownJob.status, "failed");
+    assert.equal(unknownJob.error, "classic artwork reference unavailable");
+    assert.equal(unknownRecord.status, "failed");
+    assert.equal(unknownRecord.error, "classic artwork reference unavailable");
+    assert.deepEqual(unknownRecord.diagnostics, { reason: "classic_reference_unavailable" });
+    for (const [userId, result] of [
+      ["missing-id-user", missingIdResult],
+      ["empty-id-user", emptyIdResult],
+      ["non-string-id-user", nonStringIdResult]
+    ]) {
+      assert.equal(artworkCalls.find(({ record }) => record.user_id === userId), undefined);
+      const job = manager.getJob(result.job.id, userId);
+      const record = await createStorage(path.join(temp, "data")).getRecord(result.record.id);
+      assert.equal(job.status, "failed");
+      assert.equal(job.error, "classic artwork reference unavailable");
+      assert.equal(record.status, "failed");
+      assert.equal(record.error, "classic artwork reference unavailable");
+      assert.deepEqual(record.diagnostics, { reason: "classic_reference_unavailable" });
+    }
   });
 });
 
@@ -232,7 +475,7 @@ test("artwork creation copies the source photo into the new record directory", a
   });
 });
 
-test("artwork creation with source photo estimates complexity and size before artwork render", async () => {
+test("an explicit density choice remains canonical through environment estimation", async () => {
   await withTempStore(async (temp) => {
     const storage = createStorage(temp);
     const sourcePhotoPath = await writeSourcePhotoImage(temp);
@@ -272,16 +515,16 @@ test("artwork creation with source photo estimates complexity and size before ar
           };
         }
         assert.equal(stage, "artwork");
-        assert.equal(record.generation_complexity, "large");
+        assert.equal(record.generation_complexity, "small");
         assert.deepEqual(record.recommended_artwork_size, {
-          preset_id: "environment-wall",
-          label: "环境主墙",
-          width_cm: 40,
-          height_cm: 70,
-          reason: "按玄关墙面估算"
+          preset_id: "environment_estimate_small",
+          label: "疏朗参考尺寸",
+          width_cm: 45,
+          height_cm: 65,
+          reason: "根据所提供环境图片的可用墙面或陈设比例估算尺寸，并结合疏朗布局与作品幅式。"
         });
-        assert.match(prompt, /丰富/);
-        assert.match(prompt, /40 × 70 cm/);
+        assert.match(prompt, /疏朗/);
+        assert.match(prompt, /45 × 65 cm/);
         await fs.mkdir(path.dirname(outputPngPath), { recursive: true });
         await fs.writeFile(outputPngPath, pngBuffer(120));
         return { pngPath: outputPngPath, diagnostics: { reason: "artwork_success" } };
@@ -303,9 +546,360 @@ test("artwork creation with source photo estimates complexity and size before ar
     assert.deepEqual(runnerCalls[0].referenceImages, {
       environment: path.join(temp, "records", record.id, "source-photo.webp")
     });
-    assert.equal(stored.generation_complexity, "large");
-    assert.equal(stored.recommended_artwork_size.width_cm, 40);
-    assert.equal(stored.recommended_artwork_size.height_cm, 70);
+    assert.equal(stored.generation_complexity, "small");
+    assert.equal(stored.generation_complexity_explicit, true);
+    assert.equal(stored.recommended_artwork_size.preset_id, "environment_estimate_small");
+    assert.equal(stored.recommended_artwork_size.width_cm, 45);
+    assert.equal(stored.recommended_artwork_size.height_cm, 65);
+  });
+});
+
+test("environment estimation becomes the canonical density when the user did not choose one", async () => {
+  await withTempStore(async (temp) => {
+    const storage = createStorage(temp);
+    const sourcePhotoPath = await writeSourcePhotoImage(temp);
+    let artworkPrompt = "";
+    const manager = createJobManager({
+      config: {
+        app: { image: { webpQuality: 82 } },
+        prompts: { painting: { system: "国画系统", template: "国画模板 {{answers}} {{notes}}" } },
+        questions: {}
+      },
+      storage,
+      runner: async ({ outputPngPath, prompt, stage, record }) => {
+        if (stage === "size_estimation") {
+          return {
+            json: {
+              generation_complexity: "small",
+              recommended_artwork_size: {
+                preset_id: "arbitrary-ai-id",
+                label: "AI 自拟小幅",
+                width_cm: 30,
+                height_cm: 45,
+                reason: "AI 自拟理由"
+              }
+            }
+          };
+        }
+        artworkPrompt = prompt;
+        assert.equal(record.generation_complexity, "small");
+        assert.equal(record.recommended_artwork_size.preset_id, "environment_estimate_small");
+        await fs.mkdir(path.dirname(outputPngPath), { recursive: true });
+        await fs.writeFile(outputPngPath, sizedPngBuffer(60, 90, 75));
+        return { pngPath: outputPngPath, diagnostics: { reason: "artwork_success" } };
+      }
+    });
+
+    const { record } = await manager.createArtwork({
+      type: "painting",
+      answers: { work_type: "painting" },
+      sourcePhotoPath
+    });
+    const stored = await storage.getRecord(record.id);
+
+    assert.equal(stored.generation_complexity, "small");
+    assert.equal(stored.generation_complexity_explicit, false);
+    assert.equal(stored.recommended_artwork_size.preset_id, "environment_estimate_small");
+    assert.equal(stored.recommended_artwork_size.label, "疏朗参考尺寸");
+    assert.match(stored.recommended_artwork_size.reason, /疏朗布局/);
+    assert.match(artworkPrompt, /疏朗：/);
+    assert.doesNotMatch(artworkPrompt, /均衡：/);
+  });
+});
+
+test("estimated density provenance can adopt a new estimate during regeneration", async () => {
+  await withTempStore(async (temp) => {
+    const storage = createStorage(temp);
+    const sourcePhotoPath = await writeSourcePhotoImage(temp);
+    let estimateNumber = 0;
+    const manager = createJobManager({
+      config: { app: { image: { webpQuality: 82 } }, prompts: {}, questions: {} },
+      storage,
+      runner: async ({ outputPngPath, stage }) => {
+        if (stage === "size_estimation") {
+          estimateNumber += 1;
+          const density = estimateNumber === 1 ? "small" : "large";
+          return {
+            json: {
+              generation_complexity: density,
+              recommended_artwork_size: { width_cm: density === "small" ? 30 : 60, height_cm: density === "small" ? 45 : 90 }
+            }
+          };
+        }
+        await fs.mkdir(path.dirname(outputPngPath), { recursive: true });
+        await fs.writeFile(outputPngPath, sizedPngBuffer(60, 90, 75));
+        return { pngPath: outputPngPath, diagnostics: { reason: "artwork_success" } };
+      }
+    });
+
+    const first = await manager.createArtwork({ type: "painting", answers: {}, sourcePhotoPath });
+    const firstStored = await storage.getRecord(first.record.id);
+    const regenerated = await manager.createArtwork({
+      type: "painting",
+      answers: {},
+      sourcePhotoPath,
+      generationComplexity: firstStored.generation_complexity,
+      generationComplexityExplicit: firstStored.generation_complexity_explicit
+    });
+    const regeneratedStored = await storage.getRecord(regenerated.record.id);
+
+    assert.equal(firstStored.generation_complexity, "small");
+    assert.equal(firstStored.generation_complexity_explicit, false);
+    assert.equal(regeneratedStored.generation_complexity, "large");
+    assert.equal(regeneratedStored.generation_complexity_explicit, false);
+    assert.equal(regeneratedStored.recommended_artwork_size.preset_id, "environment_estimate_large");
+  });
+});
+
+test("artwork render receives the selected horizontal canvas without leaking it to other runner stages", async () => {
+  await withTempStore(async (temp) => {
+    const storage = createStorage(temp);
+    const sourcePhotoPath = await writeSourcePhotoImage(temp);
+    const runnerCalls = [];
+    const manager = createJobManager({
+      config: {
+        app: {
+          image: { webpQuality: 82 },
+          runtime: {
+            generationCanvas: { width: 1024, height: 1536, aspectRatio: "2:3" }
+          }
+        },
+        prompts: {},
+        questions: {}
+      },
+      storage,
+      runner: async (options) => {
+        runnerCalls.push(options);
+        if (options.stage === "size_estimation") {
+          return {
+            json: {
+              generation_complexity: "medium",
+              recommended_artwork_size: { width_cm: 70, height_cm: 45 }
+            }
+          };
+        }
+        await fs.mkdir(path.dirname(options.outputPngPath), { recursive: true });
+        await fs.writeFile(options.outputPngPath, pngBufferForCanvas(options.canvas));
+        return { pngPath: options.outputPngPath, diagnostics: { reason: options.stage } };
+      }
+    });
+
+    const { record } = await manager.createArtwork({
+      type: "painting",
+      answers: { work_type: "painting", painting_format: "横幅" },
+      sourcePhotoPath
+    });
+    await manager.createFusion({ recordId: record.id });
+
+    const artworkCall = runnerCalls.find(({ stage }) => stage === "artwork");
+    const nonArtworkCalls = runnerCalls.filter(({ stage }) => stage !== "artwork");
+    assert.deepEqual(artworkCall.canvas, {
+      width: 1536,
+      height: 1024,
+      aspectRatio: "3:2",
+      orientation: "landscape"
+    });
+    assert.ok(nonArtworkCalls.some(({ stage }) => stage === "size_estimation"));
+    assert.ok(nonArtworkCalls.some(({ stage }) => stage === "fusion_render"));
+    for (const call of nonArtworkCalls) {
+      assert.equal(call.canvas, undefined, call.stage);
+    }
+  });
+});
+
+test("immediate artwork canvas uses runtime fallback and lets known format win over legacy direction", async () => {
+  await withTempStore(async (temp) => {
+    const storage = createStorage(temp);
+    const runnerCalls = [];
+    const manager = createJobManager({
+      config: {
+        app: {
+          image: { webpQuality: 82 },
+          runtime: { generationCanvas: { width: 1024, height: 1024, aspectRatio: "1:1" } }
+        },
+        prompts: {
+          painting: { system: "国画系统", template: "国画模板 {{answers}} {{notes}}" }
+        },
+        questions: {}
+      },
+      storage,
+      runner: async (options) => {
+        runnerCalls.push(options);
+        await fs.mkdir(path.dirname(options.outputPngPath), { recursive: true });
+        await fs.writeFile(options.outputPngPath, pngBufferForCanvas(options.canvas));
+        return { pngPath: options.outputPngPath, diagnostics: { reason: "canvas_precedence" } };
+      }
+    });
+
+    const fallback = await manager.createArtwork({
+      type: "painting",
+      answers: { work_type: "painting" }
+    });
+    const handscroll = await manager.createArtwork({
+      type: "painting",
+      answers: {
+        work_type: "painting",
+        painting_format: "Handscroll",
+        painting_composition_orientation: "portrait"
+      }
+    });
+    const fallbackStored = await storage.getRecord(fallback.record.id);
+    const handscrollStored = await storage.getRecord(handscroll.record.id);
+    const fallbackCall = runnerCalls.find(({ record }) => record.id === fallback.record.id);
+    const handscrollCall = runnerCalls.find(({ record }) => record.id === handscroll.record.id);
+
+    assert.deepEqual(
+      fallbackCall.canvas,
+      { width: 1024, height: 1024, aspectRatio: "1:1", orientation: "square" }
+    );
+    assert.deepEqual(
+      handscrollCall.canvas,
+      { width: 1536, height: 768, aspectRatio: "2:1", orientation: "landscape" }
+    );
+    assert.equal(fallbackStored.resolved_orientation, "square");
+    assert.equal(fallbackStored.orientation_source, "runtime_fallback");
+    assert.match(fallbackCall.prompt, /方向: square/);
+    assert.match(fallbackCall.prompt, /来源: runtime_fallback/);
+    assert.equal(handscrollStored.resolved_orientation, "landscape");
+    assert.equal(handscrollStored.orientation_source, "question");
+    assert.match(handscrollCall.prompt, /方向: landscape/);
+    assert.match(handscrollCall.prompt, /来源: question/);
+  });
+});
+
+test("queued artwork canvas uses runtime fallback while notes override a known format", async () => {
+  await withTempStore(async (temp) => {
+    const storage = createStorage(temp);
+    const runnerCalls = [];
+    const manager = createJobManager({
+      config: {
+        app: {
+          image: { webpQuality: 82 },
+          runtime: { generationCanvas: { width: 1024, height: 1024, aspectRatio: "1:1" } }
+        },
+        prompts: {
+          painting: { system: "国画系统", template: "国画模板 {{answers}} {{notes}}" }
+        },
+        questions: {}
+      },
+      storage,
+      runner: async (options) => {
+        runnerCalls.push(options);
+        await fs.mkdir(path.dirname(options.outputPngPath), { recursive: true });
+        await fs.writeFile(options.outputPngPath, pngBufferForCanvas(options.canvas));
+        return { pngPath: options.outputPngPath, diagnostics: { reason: "queued_canvas_precedence" } };
+      }
+    });
+
+    const fallback = await manager.createArtwork({
+      userId: "user-canvas",
+      type: "painting",
+      answers: { work_type: "painting" }
+    });
+    await manager.waitForIdle();
+    const noteOverride = await manager.createArtwork({
+      userId: "user-canvas",
+      type: "painting",
+      answers: { work_type: "painting", painting_format: "Handscroll" },
+      conversationNotes: "最后改成竖幅"
+    });
+    await manager.waitForIdle();
+    const fallbackStored = await storage.getRecord(fallback.record.id);
+    const noteStored = await storage.getRecord(noteOverride.record.id);
+    const fallbackCall = runnerCalls.find(({ record }) => record.id === fallback.record.id);
+    const noteCall = runnerCalls.find(({ record }) => record.id === noteOverride.record.id);
+
+    assert.deepEqual(
+      fallbackCall.canvas,
+      { width: 1024, height: 1024, aspectRatio: "1:1", orientation: "square" }
+    );
+    assert.deepEqual(
+      noteCall.canvas,
+      { width: 1024, height: 1536, aspectRatio: "2:3", orientation: "portrait" }
+    );
+    assert.equal(fallbackStored.resolved_orientation, "square");
+    assert.equal(fallbackStored.orientation_source, "runtime_fallback");
+    assert.match(fallbackCall.prompt, /方向: square/);
+    assert.match(fallbackCall.prompt, /来源: runtime_fallback/);
+    assert.equal(noteStored.resolved_orientation, "portrait");
+    assert.equal(noteStored.orientation_source, "notes");
+    assert.match(noteCall.prompt, /方向: portrait/);
+    assert.match(noteCall.prompt, /来源: notes/);
+  });
+});
+
+test("handscroll environment estimation persists a recommendation near the 2:1 artwork ratio", async () => {
+  await withTempStore(async (temp) => {
+    const storage = createStorage(temp);
+    const sourcePhotoPath = await writeSourcePhotoImage(temp);
+    let sizeEstimationPrompt = "";
+    const manager = createJobManager({
+      config: { app: { image: { webpQuality: 82 } }, prompts: {}, questions: {} },
+      storage,
+      runner: async ({ outputPngPath, prompt, stage, canvas }) => {
+        if (stage === "size_estimation") {
+          sizeEstimationPrompt = prompt;
+          return {
+            json: {
+              generation_complexity: "medium",
+              recommended_artwork_size: { width_cm: 70, height_cm: 45 }
+            }
+          };
+        }
+        await fs.mkdir(path.dirname(outputPngPath), { recursive: true });
+        await fs.writeFile(outputPngPath, pngBufferForCanvas(canvas));
+        return { pngPath: outputPngPath, diagnostics: { reason: "handscroll_artwork" } };
+      }
+    });
+
+    const { record } = await manager.createArtwork({
+      type: "painting",
+      answers: {
+        work_type: "painting",
+        painting_format: "Handscroll",
+        painting_composition_orientation: "portrait"
+      },
+      sourcePhotoPath
+    });
+    const stored = await storage.getRecord(record.id);
+    const ratio = stored.recommended_artwork_size.width_cm / stored.recommended_artwork_size.height_cm;
+
+    assert.ok(Math.abs(ratio - 2) <= 0.1, `expected approximately 2:1, got ${ratio}:1`);
+    assert.equal(stored.resolved_orientation, "landscape");
+    assert.equal(stored.orientation_source, "question");
+    assert.match(sizeEstimationPrompt, /orientation: landscape/);
+    assert.match(sizeEstimationPrompt, /source: question/);
+  });
+});
+
+test("handscroll environment estimation failure normalizes the persisted default size to 2:1", async () => {
+  await withTempStore(async (temp) => {
+    const storage = createStorage(temp);
+    const sourcePhotoPath = await writeSourcePhotoImage(temp);
+    const manager = createJobManager({
+      config: { app: { image: { webpQuality: 82 } }, prompts: {}, questions: {} },
+      storage,
+      runner: async ({ outputPngPath, stage }) => {
+        if (stage === "size_estimation") throw new Error("estimation unavailable");
+        await fs.mkdir(path.dirname(outputPngPath), { recursive: true });
+        await fs.writeFile(outputPngPath, pngBuffer());
+        return { pngPath: outputPngPath, diagnostics: { reason: "handscroll_fallback_artwork" } };
+      }
+    });
+
+    const { record } = await manager.createArtwork({
+      type: "painting",
+      answers: { work_type: "painting", painting_format: "Handscroll" },
+      sourcePhotoPath
+    });
+    const stored = await storage.getRecord(record.id);
+    const ratio = stored.recommended_artwork_size.width_cm / stored.recommended_artwork_size.height_cm;
+
+    assert.ok(Math.abs(ratio - 2) <= 0.1, `expected approximately 2:1, got ${ratio}:1`);
+    assert.notDeepEqual(
+      [stored.recommended_artwork_size.width_cm, stored.recommended_artwork_size.height_cm],
+      [45, 70]
+    );
   });
 });
 
@@ -328,7 +922,7 @@ test("artwork without environment image stores complexity, resolved orientation,
       runner: async ({ outputPngPath, prompt }) => {
         runnerCalls.push({ prompt });
         await fs.mkdir(path.dirname(outputPngPath), { recursive: true });
-        await fs.writeFile(outputPngPath, sizedPngBuffer(60, 120, 75));
+        await fs.writeFile(outputPngPath, sizedPngBuffer(60, 90, 75));
         return { pngPath: outputPngPath, diagnostics: { reason: "portrait_runner" } };
       }
     });
@@ -346,13 +940,15 @@ test("artwork without environment image stores complexity, resolved orientation,
 
     assert.equal(stored.generation_complexity, "large");
     assert.equal(stored.resolved_orientation, "portrait");
-    assert.equal(stored.orientation_source, "artwork_aspect");
+    assert.equal(stored.orientation_source, "default");
     assert.equal(stored.recommended_artwork_size.preset_id, "complexity_large");
     assert.ok(stored.recommended_artwork_size.width_cm < stored.recommended_artwork_size.height_cm);
     assert.equal(artworkMetadata.width, 60);
-    assert.equal(artworkMetadata.height, 120);
-    assert.match(runnerCalls[0].prompt, /画面复杂度:/);
-    assert.match(runnerCalls[0].prompt, /large|丰富/);
+    assert.equal(artworkMetadata.height, 90);
+    assert.match(runnerCalls[0].prompt, /画面疏密与虚实倾向:/);
+    assert.doesNotMatch(runnerCalls[0].prompt, /画面复杂度:/);
+    assert.match(runnerCalls[0].prompt, /繁密：密处交织有序，虚处仍留气口与呼吸。/);
+    assert.doesNotMatch(runnerCalls[0].prompt, /信息量较低|层次丰富但仍有虚处/);
     assert.match(runnerCalls[0].prompt, /最终方向:/);
     assert.match(runnerCalls[0].prompt, /portrait/);
   });
@@ -560,17 +1156,73 @@ test("fusion job estimates and stores recommended size before AI render", async 
       environment: path.join(temp, "records", created.record.id, "source-photo.webp")
     });
     assert.deepEqual(fusionRenderCall.recommendedArtworkSize, {
-      preset_id: "fusion-wall",
-      label: "融合墙面",
+      preset_id: "environment_estimate_small",
+      label: "疏朗参考尺寸",
       width_cm: 110,
       height_cm: 60,
-      reason: "按沙发背景墙估算"
+      reason: "根据所提供环境图片的可用墙面或陈设比例估算尺寸，并结合疏朗布局与作品幅式。"
     });
-    assert.equal(fusionRenderCall.generationComplexity, "large");
+    assert.equal(fusionRenderCall.generationComplexity, "small");
     assert.match(fusionRenderCall.prompt, /110 × 60 cm/);
     assert.equal(fused.recommended_artwork_size.width_cm, 110);
     assert.equal(fused.recommended_artwork_size.height_cm, 60);
-    assert.equal(fused.generation_complexity, "large");
+    assert.equal(fused.generation_complexity, "small");
+  });
+});
+
+test("fusion preserves the finalized artwork orientation instead of resolving conflicting raw answers", async () => {
+  await withTempStore(async (temp) => {
+    const storage = createStorage(temp);
+    const sourcePhotoPath = await writeSourcePhotoImage(temp);
+    let fusionSizePrompt = "";
+    const manager = createJobManager({
+      config: { app: { image: { webpQuality: 82 } }, prompts: {}, questions: {} },
+      storage,
+      runner: async ({ outputPngPath, prompt, stage, canvas }) => {
+        if (stage === "size_estimation") {
+          fusionSizePrompt = prompt;
+          return {
+            json: {
+              generation_complexity: "medium",
+              recommended_artwork_size: { width_cm: 70, height_cm: 45 }
+            }
+          };
+        }
+        await fs.mkdir(path.dirname(outputPngPath), { recursive: true });
+        await fs.writeFile(outputPngPath, pngBufferForCanvas(canvas));
+        return { pngPath: outputPngPath, diagnostics: { reason: stage } };
+      }
+    });
+
+    const created = await manager.createArtwork({
+      userId: "user-final-orientation",
+      type: "painting",
+      answers: {
+        work_type: "painting",
+        painting_format: "Handscroll",
+        painting_composition_orientation: "portrait"
+      }
+    });
+    await manager.waitForIdle();
+    const artwork = await storage.getRecord(created.record.id);
+
+    assert.equal(artwork.resolved_orientation, "landscape");
+    assert.equal(artwork.orientation_source, "question");
+
+    await manager.createFusion({
+      userId: "user-final-orientation",
+      recordId: created.record.id,
+      sourcePhotoPath
+    });
+    await manager.waitForIdle();
+    const fused = await storage.getRecord(created.record.id);
+
+    assert.equal(fused.resolved_orientation, "landscape");
+    assert.equal(fused.orientation_source, "question");
+    assert.equal(fused.recommended_artwork_size.width_cm, 70);
+    assert.equal(fused.recommended_artwork_size.height_cm, 45);
+    assert.match(fusionSizePrompt, /orientation: landscape/);
+    assert.match(fusionSizePrompt, /source: question/);
   });
 });
 
@@ -1343,6 +1995,193 @@ test("artwork generation retries once before recording failure", async () => {
   });
 });
 
+test("immediate artwork retries an aspect mismatch and sizes from the accepted PNG", async () => {
+  await withTempStore(async (temp) => {
+    let attempts = 0;
+    const storage = createStorage(temp);
+    const manager = createJobManager({
+      config: { app: { image: { webpQuality: 82 } }, prompts: {}, questions: {} },
+      storage,
+      runner: async ({ outputPngPath }) => {
+        attempts += 1;
+        await fs.mkdir(path.dirname(outputPngPath), { recursive: true });
+        await fs.writeFile(
+          outputPngPath,
+          attempts === 1 ? sizedPngBuffer(800, 800) : sizedPngBuffer(800, 400)
+        );
+        return { pngPath: outputPngPath, diagnostics: { reason: `attempt_${attempts}` } };
+      }
+    });
+
+    const { job, record } = await manager.createArtwork({
+      type: "painting",
+      answers: { work_type: "painting", painting_format: "手卷" }
+    });
+    const stored = await storage.getRecord(record.id);
+
+    assert.equal(attempts, 2);
+    assert.equal(job.status, "succeeded");
+    assert.equal(stored.status, "succeeded");
+    assert.equal(stored.resolved_orientation, "landscape");
+    assert.equal(stored.diagnostics.reason, "attempt_2");
+    assert.equal(
+      stored.recommended_artwork_size.width_cm / stored.recommended_artwork_size.height_cm,
+      2
+    );
+    assert.deepEqual(
+      stored.generation_profile.attempts.map(({ status }) => status),
+      ["failed", "succeeded"]
+    );
+  });
+});
+
+test("queued artwork fails after two aspect mismatches without persisting WEBP", async () => {
+  await withTempStore(async (temp) => {
+    let attempts = 0;
+    const storage = createStorage(temp);
+    const manager = createJobManager({
+      config: { app: { image: { webpQuality: 82 } }, prompts: {}, questions: {} },
+      storage,
+      runner: async ({ outputPngPath }) => {
+        attempts += 1;
+        await fs.mkdir(path.dirname(outputPngPath), { recursive: true });
+        await fs.writeFile(outputPngPath, sizedPngBuffer(800, 400));
+        return { pngPath: outputPngPath, diagnostics: { reason: "ignored_square_canvas" } };
+      }
+    });
+
+    const created = await manager.createArtwork({
+      userId: "user-aspect",
+      type: "painting",
+      answers: { work_type: "painting", painting_format: "斗方" }
+    });
+    await manager.waitForIdle();
+    const stored = await storage.getRecord(created.record.id);
+    const finalJob = manager.getJob(created.job.id);
+
+    assert.equal(attempts, 2);
+    assert.equal(finalJob.status, "failed");
+    assert.equal(finalJob.diagnostics.reason, "artwork_aspect_mismatch");
+    assert.equal(stored.status, "failed");
+    assert.equal(stored.diagnostics.reason, "artwork_aspect_mismatch");
+    await assert.rejects(fs.access(path.join(temp, stored.artwork_path)));
+    await assert.rejects(fs.access(path.join(temp, "records", stored.id, "artwork.png")));
+  });
+});
+
+test("artwork retry cannot reuse a PNG left by a runner failure", async () => {
+  await withTempStore(async (temp) => {
+    let attempts = 0;
+    const storage = createStorage(temp);
+    const manager = createJobManager({
+      config: { app: { image: { webpQuality: 82 } }, prompts: {}, questions: {} },
+      storage,
+      runner: async ({ outputPngPath }) => {
+        attempts += 1;
+        if (attempts === 1) {
+          await fs.mkdir(path.dirname(outputPngPath), { recursive: true });
+          await fs.writeFile(outputPngPath, sizedPngBuffer(640, 640));
+          throw new Error("runner failed after writing output");
+        }
+        return { pngPath: outputPngPath, diagnostics: { reason: "stale_output" } };
+      }
+    });
+
+    const { job, record } = await manager.createArtwork({
+      type: "painting",
+      answers: { work_type: "painting", painting_format: "斗方" }
+    });
+    const stored = await storage.getRecord(record.id);
+
+    assert.equal(attempts, 2);
+    assert.equal(job.status, "failed");
+    assert.equal(stored.status, "failed");
+    await assert.rejects(fs.access(path.join(temp, stored.artwork_path)));
+    await assert.rejects(fs.access(path.join(temp, "records", stored.id, "artwork.png")));
+  });
+});
+
+test("artwork accepts proportionally scaled handscroll and square PNGs", async () => {
+  await withTempStore(async (temp) => {
+    const storage = createStorage(temp);
+    const manager = createJobManager({
+      config: { app: { image: { webpQuality: 82 } }, prompts: {}, questions: {} },
+      storage,
+      runner: async ({ outputPngPath, canvas }) => {
+        await fs.mkdir(path.dirname(outputPngPath), { recursive: true });
+        const buffer = canvas.aspectRatio === "2:1"
+          ? sizedPngBuffer(800, 400)
+          : sizedPngBuffer(640, 640);
+        await fs.writeFile(outputPngPath, buffer);
+        return { pngPath: outputPngPath, diagnostics: { reason: "scaled_canvas" } };
+      }
+    });
+
+    const handscroll = await manager.createArtwork({
+      type: "painting",
+      answers: { work_type: "painting", painting_format: "手卷" }
+    });
+    const square = await manager.createArtwork({
+      type: "painting",
+      answers: { work_type: "painting", painting_format: "斗方" }
+    });
+
+    assert.equal(handscroll.job.status, "succeeded");
+    assert.equal(square.job.status, "succeeded");
+    assert.equal((await storage.getRecord(handscroll.record.id)).status, "succeeded");
+    assert.equal((await storage.getRecord(square.record.id)).status, "succeeded");
+  });
+});
+
+test("fusion rendering does not enforce the artwork canvas aspect", async () => {
+  await withTempStore(async (temp) => {
+    const storage = createStorage(temp);
+    const sourcePhotoPath = await writeSourcePhotoImage(temp);
+    const manager = createJobManager({
+      config: {
+        app: { image: { webpQuality: 82 } },
+        prompts: {
+          fusion: {
+            system: "效果图系统提示",
+            template: "效果图模板 {{painting}} {{calligraphy}} {{relationship}}"
+          }
+        },
+        questions: {}
+      },
+      storage,
+      runner: async ({ outputPngPath, stage, canvas }) => {
+        if (stage === "size_estimation") {
+          return {
+            json: {
+              generation_complexity: "medium",
+              recommended_artwork_size: { width_cm: 40, height_cm: 40 }
+            }
+          };
+        }
+        await fs.mkdir(path.dirname(outputPngPath), { recursive: true });
+        await fs.writeFile(
+          outputPngPath,
+          stage === "artwork" && canvas?.aspectRatio === "1:1"
+            ? sizedPngBuffer(400, 400)
+            : sizedPngBuffer(900, 300)
+        );
+        return { pngPath: outputPngPath, diagnostics: { reason: stage } };
+      }
+    });
+
+    const created = await manager.createArtwork({
+      type: "painting",
+      answers: { work_type: "painting", painting_format: "斗方" },
+      sourcePhotoPath
+    });
+    const fused = await manager.createFusion({ recordId: created.record.id });
+
+    assert.equal(created.job.status, "succeeded");
+    assert.equal(fused.job.status, "succeeded");
+    assert.equal((await storage.getRecord(created.record.id)).fusion_status, "succeeded");
+  });
+});
+
 test("fusion generation calls the image runner for a second-pass render and preserves artwork", async () => {
   await withTempStore(async (temp) => {
     const storage = createStorage(temp);
@@ -1429,5 +2268,208 @@ test("returned job and record are detached from internal background state", asyn
     assert.equal(finalJob.diagnostics.reason, "fake_runner");
     assert.equal(stored.status, "succeeded");
     assert.equal(stored.diagnostics.reason, "fake_runner");
+  });
+});
+
+test("immediate calligraphy verifies exact text before succeeding", async () => {
+  await withTempStore(async (temp) => {
+    const storage = createStorage(temp);
+    const calls = [];
+    const manager = createJobManager({
+      config: { app: { image: { webpQuality: 82 } }, prompts: {}, questions: {} },
+      storage,
+      runner: async (options) => {
+        calls.push(options);
+        if (options.stage === "calligraphy_verification") {
+          return { json: { detected_text: "清风明月", no_extra_text: true, legible: true, confidence: 0.98, decision: "verified", issues: [] } };
+        }
+        await fs.mkdir(path.dirname(options.outputPngPath), { recursive: true });
+        await fs.writeFile(options.outputPngPath, pngBufferForCanvas(options.canvas));
+        return { pngPath: options.outputPngPath, diagnostics: { reason: "calligraphy_candidate" } };
+      }
+    });
+
+    const { job, record } = await manager.createArtwork({ type: "calligraphy", answers: { text: "清风明月" } });
+    const stored = await storage.getRecord(record.id);
+    const artworkCalls = calls.filter(({ stage }) => stage === "artwork");
+    const verificationCalls = calls.filter(({ stage }) => stage === "calligraphy_verification");
+
+    assert.equal(job.status, "succeeded");
+    assert.equal(stored.status, "succeeded");
+    assert.equal(artworkCalls.length, 1);
+    assert.equal(verificationCalls.length, 1);
+    assert.equal(verificationCalls[0].referenceImages.calligraphyCandidate, artworkCalls[0].outputPngPath);
+    assert.match(verificationCalls[0].prompt, /清风明月/);
+    assert.deepEqual(stored.calligraphy_verification, { status: "verified", detected_text: "清风明月", issues: [], confidence: 0.98 });
+    assert.equal(stored.generation_profile.stages.calligraphy_verification.count, 1);
+    assert.deepEqual(stored.generation_profile.attempts.map(({ stage }) => stage), ["artwork"]);
+  });
+});
+
+test("calligraphy retries a mismatched candidate and verifies the replacement", async () => {
+  await withTempStore(async (temp) => {
+    const storage = createStorage(temp);
+    let artworkCount = 0;
+    let verificationCount = 0;
+    const manager = createJobManager({
+      config: { app: { image: { webpQuality: 82 } }, prompts: {}, questions: {} },
+      storage,
+      runner: async (options) => {
+        if (options.stage === "calligraphy_verification") {
+          verificationCount += 1;
+          return { json: { detected_text: verificationCount === 1 ? "清风明日" : "清\n风 明月", no_extra_text: true, legible: true, confidence: 0.95, decision: "verified", issues: verificationCount === 1 ? ["一字不符"] : [] } };
+        }
+        artworkCount += 1;
+        await fs.mkdir(path.dirname(options.outputPngPath), { recursive: true });
+        await fs.writeFile(options.outputPngPath, pngBufferForCanvas(options.canvas, artworkCount));
+        return { pngPath: options.outputPngPath, diagnostics: { reason: `candidate_${artworkCount}` } };
+      }
+    });
+
+    const { job, record } = await manager.createArtwork({ type: "calligraphy", answers: { text: "清风明月" } });
+    const stored = await storage.getRecord(record.id);
+
+    assert.equal(job.status, "succeeded");
+    assert.equal(artworkCount, 2);
+    assert.equal(verificationCount, 2);
+    assert.equal(stored.calligraphy_verification.status, "verified");
+    assert.equal(stored.calligraphy_verification.detected_text, "清\n风 明月");
+    assert.deepEqual(stored.generation_profile.attempts.map(({ status }) => status), ["failed", "succeeded"]);
+  });
+});
+
+test("queued calligraphy fails safely after two unverified candidates", async () => {
+  await withTempStore(async (temp) => {
+    const storage = createStorage(temp);
+    let artworkCount = 0;
+    let verificationCount = 0;
+    const manager = createJobManager({
+      config: { app: { image: { webpQuality: 82 } }, prompts: {}, questions: {} },
+      storage,
+      runner: async (options) => {
+        if (options.stage === "calligraphy_verification") {
+          verificationCount += 1;
+          if (verificationCount === 1) return { json: { detected_text: "清风明月外" } };
+          throw new Error("inspection unavailable");
+        }
+        artworkCount += 1;
+        await fs.mkdir(path.dirname(options.outputPngPath), { recursive: true });
+        await fs.writeFile(options.outputPngPath, pngBufferForCanvas(options.canvas, artworkCount));
+        return { pngPath: options.outputPngPath, diagnostics: { reason: "candidate" } };
+      }
+    });
+
+    const created = await manager.createArtwork({ userId: "calligraphy-owner", type: "calligraphy", answers: { text: "清风明月" } });
+    await manager.waitForIdle();
+    const stored = await storage.getRecord(created.record.id);
+    const finalJob = manager.getJob(created.job.id);
+
+    assert.equal(artworkCount, 2);
+    assert.equal(verificationCount, 2);
+    assert.equal(finalJob.status, "failed");
+    assert.equal(finalJob.diagnostics.reason, "calligraphy_text_unverified");
+    assert.equal(stored.status, "failed");
+    assert.equal(stored.diagnostics.reason, "calligraphy_text_unverified");
+    assert.equal(stored.calligraphy_verification.status, "needs_review");
+    await assert.rejects(fs.access(path.join(temp, stored.artwork_path)));
+    await assert.rejects(fs.access(path.join(temp, "records", stored.id, "artwork.png")));
+  });
+});
+
+test("calligraphy rejects extra text and punctuation mismatches despite matching main text", async () => {
+  await withTempStore(async (temp) => {
+    const storage = createStorage(temp);
+    let verificationCount = 0;
+    const manager = createJobManager({
+      config: { app: { image: { webpQuality: 82 } }, prompts: {}, questions: {} },
+      storage,
+      runner: async (options) => {
+        if (options.stage === "calligraphy_verification") {
+          verificationCount += 1;
+          return { json: verificationCount === 1
+            ? { detected_text: "清风明月雅集", no_extra_text: false, legible: true, confidence: 0.99, decision: "verified", issues: [] }
+            : { detected_text: "清风，明月", no_extra_text: true, legible: true, confidence: 0.99, decision: "verified", issues: [] } };
+        }
+        await fs.mkdir(path.dirname(options.outputPngPath), { recursive: true });
+        await fs.writeFile(options.outputPngPath, pngBufferForCanvas(options.canvas));
+        return { pngPath: options.outputPngPath, diagnostics: { reason: "candidate" } };
+      }
+    });
+
+    const { record } = await manager.createArtwork({ type: "calligraphy", answers: { text: "清风明月" } });
+    const stored = await storage.getRecord(record.id);
+
+    assert.equal(stored.status, "failed");
+    assert.equal(stored.calligraphy_verification.status, "needs_review");
+    assert.deepEqual(stored.calligraphy_verification.issues, ["text_mismatch"]);
+    assert.equal(stored.diagnostics.reason, "calligraphy_text_unverified");
+  });
+});
+
+test("painting artwork and fusion never invoke calligraphy verification", async () => {
+  await withTempStore(async (temp) => {
+    const storage = createStorage(temp);
+    const sourcePhotoPath = await writeSourcePhotoImage(temp);
+    const stages = [];
+    const manager = createJobManager({
+      config: { app: { image: { webpQuality: 82 } }, prompts: { fusion: { system: "融合", brief: "{{painting}} {{calligraphy}} {{relationship}}" } }, questions: {} },
+      storage,
+      runner: async (options) => {
+        stages.push(options.stage);
+        if (options.stage === "size_estimation") return { json: { generation_complexity: "medium", recommended_artwork_size: { width_cm: 45, height_cm: 70 } } };
+        await fs.mkdir(path.dirname(options.outputPngPath), { recursive: true });
+        await fs.writeFile(options.outputPngPath, options.stage === "artwork" ? pngBufferForCanvas(options.canvas) : sizedPngBuffer(3, 2));
+        return { pngPath: options.outputPngPath, diagnostics: { reason: options.stage } };
+      }
+    });
+
+    const created = await manager.createArtwork({ type: "painting", answers: {}, sourcePhotoPath });
+    await manager.createFusion({ recordId: created.record.id });
+
+    assert.equal(stages.includes("calligraphy_verification"), false);
+  });
+});
+
+test("calligraphy verification preserves only safe runner failure diagnostics", async () => {
+  await withTempStore(async (temp) => {
+    const storage = createStorage(temp);
+    let verificationCount = 0;
+    const manager = createJobManager({
+      config: { app: { image: { webpQuality: 82 } }, prompts: {}, questions: {} },
+      storage,
+      runner: async (options) => {
+        if (options.stage === "calligraphy_verification") {
+          verificationCount += 1;
+          const error = new Error("private runner output");
+          error.diagnostics = verificationCount === 1
+            ? { reason: "codex_process_failed", status: "exited", exit_code: 2, codex_process_ms: 123 }
+            : {
+              reason: "json_parse_failed",
+              possible_safety_block: true,
+              status: "invalid_json",
+              exit_code: 0,
+              codex_process_ms: 456,
+              stderr_tail: "D:\\private\\record\\codex-stderr.log raw secret"
+            };
+          throw error;
+        }
+        await fs.mkdir(path.dirname(options.outputPngPath), { recursive: true });
+        await fs.writeFile(options.outputPngPath, pngBufferForCanvas(options.canvas));
+        return { pngPath: options.outputPngPath, diagnostics: { reason: "candidate" } };
+      }
+    });
+
+    const { record } = await manager.createArtwork({ type: "calligraphy", answers: { text: "清风明月" } });
+    const stored = await storage.getRecord(record.id);
+
+    assert.equal(stored.diagnostics.reason, "calligraphy_text_unverified");
+    assert.deepEqual(stored.diagnostics.verification_failure, {
+      reason: "json_parse_failed",
+      possible_safety_block: true,
+      status: "invalid_json",
+      exit_code: 0,
+      codex_process_ms: 456
+    });
+    assert.doesNotMatch(JSON.stringify(stored.diagnostics), /private|stderr|secret/);
   });
 });

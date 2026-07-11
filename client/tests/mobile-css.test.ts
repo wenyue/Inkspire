@@ -5,8 +5,8 @@ import { resolve } from "node:path";
 const css = readFileSync(resolve(__dirname, "../src/styles.css"), "utf8");
 const cssWithoutComments = css.replace(/\/\*[\s\S]*?\*\//g, "");
 
-function blockFor(selector: string): string {
-  const start = css.indexOf(selector);
+function blockFor(selector: string, startAt = 0): string {
+  const start = css.indexOf(selector, startAt);
   expect(start, `Missing CSS selector ${selector}`).not.toBe(-1);
   const open = css.indexOf("{", start);
   const close = css.indexOf("}", open);
@@ -28,6 +28,53 @@ describe("mobile touch targets", () => {
     expect(blockFor(".icon-button")).toContain("height: 44px");
     expect(blockFor(".compact-action")).toContain("min-height: 44px");
     expect(blockFor(".custom-size-grid input")).toContain("min-height: 44px");
+  });
+
+  it("keeps action surfaces in desktop flow and makes them sticky only on mobile", () => {
+    const baseActionSurface = blockFor(".mobile-action-surface {");
+    const mobileMediaStart = css.indexOf("@media (max-width: 520px)");
+    const nextMediaStart = css.indexOf("@media", mobileMediaStart + 1);
+    const mobileActionStart = css.indexOf(".mobile-action-surface {", mobileMediaStart);
+
+    expect(baseActionSurface).not.toMatch(/position:\s*sticky/);
+    expect(baseActionSurface).not.toMatch(/bottom:\s*0/);
+    expect(baseActionSurface).not.toMatch(/z-index:/);
+    expect(baseActionSurface).not.toMatch(/linear-gradient|safe-area-inset-bottom/);
+    expect(mobileMediaStart).not.toBe(-1);
+    expect(mobileActionStart).toBeGreaterThan(mobileMediaStart);
+    expect(mobileActionStart).toBeLessThan(nextMediaStart);
+
+    const mobileActionSurface = blockFor(".mobile-action-surface {", mobileMediaStart);
+    expect(mobileActionSurface).toContain("position: sticky");
+    expect(mobileActionSurface).toContain("bottom: 0");
+    expect(mobileActionSurface).toMatch(/z-index:\s*[1-9]/);
+    expect(mobileActionSurface).toMatch(/padding:[^;]*safe-area-inset-bottom/);
+    expect(mobileActionSurface).toMatch(/linear-gradient\([^;]*rgba\(255, 250, 240, 0\)[^;]*#fffaf0/);
+  });
+
+  it("gives only notes controls mobile scroll clearance for the sticky action", () => {
+    const mobileMediaStart = css.indexOf("@media (max-width: 520px)");
+    const mobileNotesClearance = blockFor(
+      ".notes-suggestion-row button,\n  .conversation-note-shell textarea",
+      mobileMediaStart
+    );
+
+    expect(css.slice(0, mobileMediaStart)).not.toContain(".notes-suggestion-row");
+    expect(mobileNotesClearance).toMatch(/scroll-margin-block-end:\s*calc\([^;]*safe-area-inset-bottom/);
+    expect(mobileNotesClearance).not.toMatch(/padding-bottom|margin-bottom/);
+  });
+
+  it("uses a fixed-header scroll-body safe-area-footer production dialog", () => {
+    const dialog = blockFor(".production-dialog {");
+    const body = blockFor(".production-dialog-body");
+    const footer = blockFor(".production-dialog-footer");
+
+    expect(dialog).toContain("display: grid");
+    expect(dialog).toContain("grid-template-rows: auto minmax(0, 1fr) auto");
+    expect(dialog).toContain("overflow: hidden");
+    expect(body).toContain("min-height: 0");
+    expect(body).toContain("overflow-y: auto");
+    expect(footer).toMatch(/padding-bottom:\s*calc\([^;]*safe-area-inset-bottom/);
   });
 
   it("keeps selected photo removal controls at least 44px", () => {
@@ -58,9 +105,12 @@ describe("mobile touch targets", () => {
 
   it("anchors a translucent clear button at the bottom-right of the notes field", () => {
     expect(blockFor(".conversation-note-shell")).toContain("position: relative");
+    expect(blockFor(".conversation-panel textarea")).toMatch(/padding:[^;]*56px/);
     expect(blockFor(".conversation-note-clear")).toContain("position: absolute");
-    expect(blockFor(".conversation-note-clear")).toContain("right: 10px");
-    expect(blockFor(".conversation-note-clear")).toContain("bottom: 10px");
+    expect(blockFor(".conversation-note-clear")).toContain("right: 4px");
+    expect(blockFor(".conversation-note-clear")).toContain("bottom: 4px");
+    expect(blockFor(".conversation-note-clear")).toContain("width: 44px");
+    expect(blockFor(".conversation-note-clear")).toContain("height: 44px");
     expect(blockFor(".conversation-note-clear")).toContain("background: rgba(255, 255, 255, 0.62)");
   });
 
@@ -74,6 +124,13 @@ describe("mobile touch targets", () => {
 
   it("shows complete result artwork and preview images without cropping", () => {
     expect(blockFor(".result-grid img,\n.image-placeholder")).toContain("object-fit: contain");
+  });
+
+  it("keeps compact result actions in one touch-friendly column", () => {
+    const compactResultRules = css.slice(css.indexOf("@media (max-width: 420px)"));
+
+    expect(compactResultRules).toMatch(/\.result-actions\s*{[^}]*grid-template-columns:\s*1fr/s);
+    expect(blockFor(".result-action-button,\n.result-upload-action")).toContain("min-height: 44px");
   });
 
   it("keeps image loading surfaces empty instead of patterned placeholders", () => {

@@ -3,13 +3,21 @@ const fs = require("node:fs/promises");
 const path = require("node:path");
 const { performance } = require("node:perf_hooks");
 const sharp = require("sharp");
+const { resolveArtworkCanvasTuple } = require("./artworkFormat");
+const {
+  assessCalligraphyVerification,
+  buildCalligraphyVerificationPrompt,
+  calligraphyTextUnverified
+} = require("./calligraphyVerification");
 const { convertPngToWebp } = require("./imagePipeline");
 const { buildArtworkPrompt, buildFusionPrompt, buildSizeEstimationPrompt } = require("./prompts");
 const {
   estimateFromEnvironment,
   normalizeGenerationComplexity,
+  normalizeArtworkSizeCandidate,
   resolveOrientation,
-  sizeFromComplexityAndAspectRatio
+  sizeFromComplexityAndAspectRatio,
+  stampGeneratedArtworkSize
 } = require("./sizeEstimation");
 const { resolveRecordAssetPath, validateRecordAssetPath } = require("./storage");
 
@@ -19,6 +27,69 @@ function newId(prefix) {
 
 function qualityFromConfig(config) {
   return config.app?.image?.webpQuality || config.image?.webpQuality || 82;
+}
+
+function classicArtworkUnavailable() {
+  const error = new Error("classic artwork reference unavailable");
+  error.diagnostics = { reason: "classic_reference_unavailable" };
+  return error;
+}
+
+async function classicArtworkReferenceImages(config, answers = {}) {
+  if (answers.creation_mode !== "classic_reference") {
+    return undefined;
+  }
+  if (typeof answers.classic_artwork_id !== "string" || !answers.classic_artwork_id.trim()) {
+    throw classicArtworkUnavailable();
+  }
+  const artwork = (config.classicArtworks || []).find((entry) => entry?.id === answers.classic_artwork_id);
+  const publicUrl = artwork?.image;
+  if (typeof publicUrl !== "string"
+    || !publicUrl.startsWith("/classic-artworks/")
+    || publicUrl.includes("%")
+    || publicUrl.includes("\\")
+    || publicUrl.includes("?")
+    || publicUrl.includes("#")) {
+    throw classicArtworkUnavailable();
+  }
+
+  const relativePath = publicUrl.slice("/classic-artworks/".length);
+  const segments = relativePath.split("/");
+  if (!relativePath || segments.some((segment) => !segment || segment === "." || segment === "..")) {
+    throw classicArtworkUnavailable();
+  }
+
+  if (typeof config._projectRoot !== "string" || !path.isAbsolute(config._projectRoot)) {
+    throw classicArtworkUnavailable();
+  }
+  const classicArtworkRoot = path.resolve(config._projectRoot, "client", "public", "classic-artworks");
+  const artworkPath = path.resolve(classicArtworkRoot, ...segments);
+  const lexicalRelativePath = path.relative(classicArtworkRoot, artworkPath);
+  if (!lexicalRelativePath
+    || lexicalRelativePath.startsWith(`..${path.sep}`)
+    || path.isAbsolute(lexicalRelativePath)) {
+    throw classicArtworkUnavailable();
+  }
+
+  try {
+    const [canonicalRoot, canonicalArtworkPath, candidateStats] = await Promise.all([
+      fs.realpath(classicArtworkRoot),
+      fs.realpath(artworkPath),
+      fs.lstat(artworkPath)
+    ]);
+    const canonicalRelativePath = path.relative(canonicalRoot, canonicalArtworkPath);
+    if (!canonicalRelativePath
+      || canonicalRelativePath.startsWith(`..${path.sep}`)
+      || path.isAbsolute(canonicalRelativePath)
+      || candidateStats.isSymbolicLink()) {
+      throw classicArtworkUnavailable();
+    }
+    const stats = await fs.stat(canonicalArtworkPath);
+    if (!stats.isFile()) throw classicArtworkUnavailable();
+    return { classicArtwork: canonicalArtworkPath };
+  } catch {
+    throw classicArtworkUnavailable();
+  }
 }
 
 const DEFAULT_DECIDE_VALUES = new Set(["由墨起决定", "由墨起決定", "Let Inkspire decide"]);
@@ -171,10 +242,36 @@ const VALID_ORIGIN_TABS = new Set(["studio", "library", "experts"]);
 const VALID_OPERATIONS = new Set(["create", "adjust"]);
 const SOURCE_PHOTO_FILES = new Set(["source-photo.webp"]);
 const ARTWORK_FILES = new Set(["artwork.webp"]);
-const COMPLEXITY_STRENGTH = { small: 1, medium: 2, large: 3 };
+const MAX_ARTWORK_ASPECT_RELATIVE_ERROR = 0.02;
 
 function diagnosticsFromError(error) {
   return error?.diagnostics || { reason: "runner_error" };
+}
+
+function artworkAspectMismatch(expectedRatio, actualRatio) {
+  const error = new Error("artwork aspect mismatch");
+  error.diagnostics = {
+    reason: "artwork_aspect_mismatch",
+    expected_ratio: Number(expectedRatio.toFixed(4)),
+    actual_ratio: Number(actualRatio.toFixed(4))
+  };
+  return error;
+}
+
+async function validateArtworkPngAspect(result, targetCanvas) {
+  const expectedRatio = Number(targetCanvas?.width) / Number(targetCanvas?.height);
+  const metadata = await sharp(result.pngPath).metadata();
+  const width = Number(metadata.width);
+  const height = Number(metadata.height);
+  const actualRatio = width / height;
+  const relativeError = Math.abs(actualRatio - expectedRatio) / expectedRatio;
+  if (!Number.isFinite(actualRatio)
+    || !Number.isFinite(expectedRatio)
+    || expectedRatio <= 0
+    || relativeError > MAX_ARTWORK_ASPECT_RELATIVE_ERROR) {
+    throw artworkAspectMismatch(expectedRatio, actualRatio);
+  }
+  return { width, height, aspectRatio: actualRatio };
 }
 
 function elapsedMs(startedAt) {
@@ -335,6 +432,14 @@ function createJobManager({ config, storage, runner }) {
       recommended_artwork_size: record.recommended_artwork_size && typeof record.recommended_artwork_size === "object"
         ? { ...record.recommended_artwork_size }
         : record.recommended_artwork_size,
+      calligraphy_verification: record.calligraphy_verification && typeof record.calligraphy_verification === "object"
+        ? {
+          ...record.calligraphy_verification,
+          issues: Array.isArray(record.calligraphy_verification.issues)
+            ? [...record.calligraphy_verification.issues]
+            : record.calligraphy_verification.issues
+        }
+        : record.calligraphy_verification,
       diagnostics: record.diagnostics && typeof record.diagnostics === "object" ? { ...record.diagnostics } : record.diagnostics,
       generation_profile: cloneProfile(record.generation_profile)
     };
@@ -347,7 +452,33 @@ function createJobManager({ config, storage, runner }) {
     };
   }
 
+  function resolveFinalArtworkTuple(record) {
+    const resolved = resolveArtworkCanvasTuple({
+      answers: record.answers || {},
+      resolvedOrientation: record.resolved_orientation,
+      orientationSource: record.orientation_source || "record",
+      fallbackCanvas: config.app?.runtime?.generationCanvas
+    });
+    record.resolved_orientation = resolved.orientation;
+    record.orientation_source = resolved.source;
+    return resolved;
+  }
+
   function resolveRecordOrientation(record) {
+    const finalized = resolveArtworkCanvasTuple({
+      answers: record.answers || {},
+      resolvedOrientation: record.resolved_orientation,
+      orientationSource: record.orientation_source || "unknown",
+      fallbackCanvas: config.app?.runtime?.generationCanvas
+    });
+    if (finalized.orientation === record.resolved_orientation
+      && finalized.source === record.orientation_source) {
+      return {
+        orientation: record.resolved_orientation,
+        source: record.orientation_source
+      };
+    }
+
     const resolved = resolveOrientation({
       answers: record.answers || {},
       conversationNotes: record.conversation_notes || ""
@@ -362,12 +493,21 @@ function createJobManager({ config, storage, runner }) {
     return resolved;
   }
 
-  async function estimateArtworkRecordFromEnvironment(record, profile = null) {
+  function alignGeneratedSizeDensity(size, generationComplexity, orientation) {
+    const source = /^environment_(estimate|fallback)_/.exec(size?.preset_id || "")?.[1];
+    if (!source) return size;
+    return stampGeneratedArtworkSize(
+      size,
+      generationComplexity,
+      `environment_${source}`,
+      orientation
+    );
+  }
+
+  async function estimateArtworkRecordFromEnvironment(record, targetCanvas, profile = null) {
     if (!record.source_photo_path) return;
     const existingComplexity = normalizeGenerationComplexity(record.generation_complexity);
-    const resolvedOrientation = resolveRecordOrientation(record);
-    record.resolved_orientation = resolvedOrientation.orientation;
-    record.orientation_source = resolvedOrientation.source;
+    const resolvedOrientation = promptResolvedOrientation(record);
     const prompt = buildSizeEstimationPrompt({
       record,
       answers: record.answers || {},
@@ -380,15 +520,20 @@ function createJobManager({ config, storage, runner }) {
       record,
       prompt,
       resolvedOrientation,
+      targetCanvas,
       fallbackSize: record.recommended_artwork_size || null,
       referenceImages: environmentReferenceImages(record),
       fallbackComplexity: existingComplexity
     }));
     const estimatedComplexity = normalizeGenerationComplexity(estimate.generation_complexity);
-    record.generation_complexity = COMPLEXITY_STRENGTH[estimatedComplexity] > COMPLEXITY_STRENGTH[existingComplexity]
-      ? estimatedComplexity
-      : existingComplexity;
-    record.recommended_artwork_size = estimate.recommended_artwork_size;
+    record.generation_complexity = record.generation_complexity_explicit
+      ? existingComplexity
+      : estimatedComplexity;
+    record.recommended_artwork_size = alignGeneratedSizeDensity(
+      estimate.recommended_artwork_size,
+      record.generation_complexity,
+      resolvedOrientation.orientation
+    );
   }
 
   async function estimateFusionRecordFromEnvironment(record, profile = null) {
@@ -413,31 +558,28 @@ function createJobManager({ config, storage, runner }) {
       referenceImages: environmentReferenceImages(record),
       fallbackComplexity: existingComplexity
     }));
-    const estimatedComplexity = normalizeGenerationComplexity(estimate.generation_complexity);
-    record.generation_complexity = COMPLEXITY_STRENGTH[estimatedComplexity] > COMPLEXITY_STRENGTH[existingComplexity]
-      ? estimatedComplexity
-      : existingComplexity;
-    record.recommended_artwork_size = estimate.recommended_artwork_size;
+    record.generation_complexity = existingComplexity;
+    record.recommended_artwork_size = alignGeneratedSizeDensity(
+      estimate.recommended_artwork_size,
+      existingComplexity,
+      resolvedOrientation.orientation
+    );
   }
 
-  async function updateArtworkRecommendationFromPng(record, pngPath) {
-    if (record.source_photo_path) return;
-    const metadata = await sharp(await fs.readFile(pngPath)).metadata();
-    const width = Number(metadata.width || 0);
-    const height = Number(metadata.height || 0);
-    if (!width || !height) return;
-    const aspectRatio = width / height;
-    const resolvedOrientation = resolveOrientation({
-      answers: record.answers || {},
-      conversationNotes: record.conversation_notes || "",
-      aspectRatio
-    });
-    record.resolved_orientation = resolvedOrientation.orientation;
-    record.orientation_source = resolvedOrientation.source;
+  function updateArtworkRecommendationFromPng(record, artworkMetadata) {
+    const aspectRatio = artworkMetadata.aspectRatio;
+    if (record.source_photo_path && record.recommended_artwork_size) {
+      record.recommended_artwork_size = normalizeArtworkSizeCandidate(
+        record.recommended_artwork_size,
+        record.resolved_orientation,
+        aspectRatio
+      ) || record.recommended_artwork_size;
+      return;
+    }
     record.recommended_artwork_size = sizeFromComplexityAndAspectRatio({
       generationComplexity: record.generation_complexity,
       aspectRatio,
-      orientation: resolvedOrientation.orientation
+      orientation: record.resolved_orientation
     });
   }
 
@@ -576,15 +718,56 @@ function createJobManager({ config, storage, runner }) {
   }
 
   async function runRunnerWithRetry(options, profile = null) {
+    const { validateResult, ...runnerOptions } = options;
     let lastError;
     for (let attempt = 0; attempt < 2; attempt += 1) {
+      if (validateResult) {
+        await fs.rm(runnerOptions.outputPngPath, { force: true });
+      }
       try {
-        return await recordRunnerAttempt(profile, options.stage, attempt + 1, () => runner(options));
+        return await recordRunnerAttempt(profile, runnerOptions.stage, attempt + 1, async () => {
+          const result = await runner(runnerOptions);
+          const validation = validateResult ? await validateResult(result) : null;
+          return validation ? { ...result, artworkMetadata: validation } : result;
+        });
       } catch (error) {
         lastError = error;
       }
     }
+    if (validateResult) {
+      await fs.rm(runnerOptions.outputPngPath, { force: true });
+    }
     throw lastError;
+  }
+
+  async function validateArtworkResult({ result, targetCanvas, type, record, profile }) {
+    const artworkMetadata = await validateArtworkPngAspect(result, targetCanvas);
+    if (type !== "calligraphy") return artworkMetadata;
+
+    const verificationConfig = config.prompts?.calligraphyVerification || {};
+    const expectedText = typeof record.answers?.text === "string" ? record.answers.text : "";
+    let verificationResult;
+    try {
+      verificationResult = await measureProfileStage(profile, "calligraphy_verification", () => runner({
+        stage: "calligraphy_verification",
+        prompt: buildCalligraphyVerificationPrompt({ expectedText, config: verificationConfig }),
+        record,
+        referenceImages: { calligraphyCandidate: result.pngPath }
+      }));
+    } catch (error) {
+      const publicResult = { status: "needs_review", issues: ["inspection_failed"] };
+      record.calligraphy_verification = publicResult;
+      throw calligraphyTextUnverified(publicResult, error?.diagnostics);
+    }
+
+    const assessment = assessCalligraphyVerification({
+      expectedText,
+      result: verificationResult,
+      minimumConfidence: Number(verificationConfig.minimumConfidence) || 0.8
+    });
+    record.calligraphy_verification = assessment.publicResult;
+    if (!assessment.verified) throw calligraphyTextUnverified(assessment.publicResult);
+    return artworkMetadata;
   }
 
   function createLegacyJob(stage, recordId = "", fields = {}) {
@@ -683,7 +866,8 @@ function createJobManager({ config, storage, runner }) {
     conversationNotes = "",
     sourcePhotoPath = "",
     recommendedArtworkSize = null,
-    generationComplexity = "medium"
+    generationComplexity,
+    generationComplexityExplicit = generationComplexity != null
   }) {
     const ownerId = normalizeUserId(userId);
     return runLegacyLocked("artwork", async () => {
@@ -711,6 +895,7 @@ function createJobManager({ config, storage, runner }) {
         conversation_notes: conversationNotes,
         source_photo_path: ownedSourcePhotoPath,
         generation_complexity: normalizedGenerationComplexity,
+        generation_complexity_explicit: generationComplexityExplicit,
         resolved_orientation: resolvedOrientation.orientation,
         orientation_source: resolvedOrientation.source,
         recommended_artwork_size: recommendedArtworkSize,
@@ -720,7 +905,8 @@ function createJobManager({ config, storage, runner }) {
         diagnostics: null,
         generation_profile: generationProfile
       };
-      await estimateArtworkRecordFromEnvironment(record, generationProfile);
+      const artworkTuple = resolveFinalArtworkTuple(record);
+      await estimateArtworkRecordFromEnvironment(record, artworkTuple.canvas, generationProfile);
       const job = createLegacyJob("artwork", recordId, { type, title });
       job.generation_profile = generationProfile;
 
@@ -739,13 +925,23 @@ function createJobManager({ config, storage, runner }) {
             config
           })
           : "";
+        const referenceImages = await classicArtworkReferenceImages(config, record.answers);
         const result = await measureProfileStage(generationProfile, "codex_artwork", () => runRunnerWithRetry({
           stage: "artwork",
           prompt,
           record,
-          outputPngPath: pngPath
+          canvas: artworkTuple.canvas,
+          outputPngPath: pngPath,
+          validateResult: (runnerResult) => validateArtworkResult({
+            result: runnerResult,
+            targetCanvas: artworkTuple.canvas,
+            type,
+            record,
+            profile: generationProfile
+          }),
+          ...(referenceImages ? { referenceImages } : {})
         }, generationProfile));
-        await updateArtworkRecommendationFromPng(record, result.pngPath);
+        updateArtworkRecommendationFromPng(record, result.artworkMetadata);
         await measureProfileStage(generationProfile, "webp_conversion", () => convertPngToWebp(result.pngPath, path.join(storage.dataDir, artworkPath), qualityFromConfig(config)));
         record.status = "succeeded";
         record.diagnostics = result.diagnostics || null;
@@ -855,12 +1051,16 @@ function createJobManager({ config, storage, runner }) {
 
     try {
       if (task.stage === "artwork") {
-        await estimateArtworkRecordFromEnvironment(task.record, profile);
+        await estimateArtworkRecordFromEnvironment(task.record, task.artworkCanvas, profile);
       } else {
         await estimateFusionRecordFromEnvironment(task.record, profile);
       }
       await saveRecordProfiled(task.record, task.userId);
       flushWaiters();
+
+      const artworkReferenceImages = task.stage === "artwork"
+        ? await classicArtworkReferenceImages(config, task.record.answers)
+        : undefined;
 
       const result = task.stage === "artwork"
         ? await measureProfileStage(profile, "codex_artwork", () => runRunnerWithRetry({
@@ -877,12 +1077,21 @@ function createJobManager({ config, storage, runner }) {
             })
             : "",
           record: task.record,
-          outputPngPath: task.outputPngPath
+          canvas: task.artworkCanvas,
+          outputPngPath: task.outputPngPath,
+          validateResult: (runnerResult) => validateArtworkResult({
+            result: runnerResult,
+            targetCanvas: task.artworkCanvas,
+            type: task.type,
+            record: task.record,
+            profile
+          }),
+          ...(artworkReferenceImages ? { referenceImages: artworkReferenceImages } : {})
         }, profile))
         : await runFusionRender(task.record, task.outputPngPath);
 
       if (task.stage === "artwork") {
-        await updateArtworkRecommendationFromPng(task.record, result.pngPath);
+        updateArtworkRecommendationFromPng(task.record, result.artworkMetadata);
       }
 
       await measureProfileStage(profile, "webp_conversion", () => convertPngToWebp(
@@ -943,13 +1152,17 @@ function createJobManager({ config, storage, runner }) {
     conversationNotes = "",
     sourcePhotoPath = "",
     recommendedArtworkSize = null,
-    generationComplexity = "medium",
+    generationComplexity,
+    generationComplexityExplicit,
     originTab = "studio",
     operation = "create"
   }) {
     const ownerId = normalizeUserId(userId);
     const normalizedOriginTab = normalizeOriginTab(originTab);
     const normalizedOperation = normalizeOperation(operation);
+    const resolvedGenerationComplexityExplicit = typeof generationComplexityExplicit === "boolean"
+      ? generationComplexityExplicit
+      : generationComplexity != null;
     const normalizedGenerationComplexity = normalizeGenerationComplexity(generationComplexity);
     const resolvedOrientation = resolveOrientation({ answers, conversationNotes });
     const profileStartedAt = performance.now();
@@ -962,7 +1175,8 @@ function createJobManager({ config, storage, runner }) {
         conversationNotes,
         sourcePhotoPath,
         recommendedArtworkSize,
-        generationComplexity: normalizedGenerationComplexity
+        generationComplexity: normalizedGenerationComplexity,
+        generationComplexityExplicit: resolvedGenerationComplexityExplicit
       });
     }
     const reservation = reserveActiveSlot(ownerId, normalizedOriginTab);
@@ -1001,6 +1215,7 @@ function createJobManager({ config, storage, runner }) {
       conversation_notes: conversationNotes,
       source_photo_path: ownedSourcePhotoPath,
       generation_complexity: normalizedGenerationComplexity,
+      generation_complexity_explicit: resolvedGenerationComplexityExplicit,
       resolved_orientation: resolvedOrientation.orientation,
       orientation_source: resolvedOrientation.source,
       recommended_artwork_size: recommendedArtworkSize,
@@ -1010,6 +1225,7 @@ function createJobManager({ config, storage, runner }) {
       diagnostics: null,
       generation_profile: generationProfile
     };
+    const artworkTuple = resolveFinalArtworkTuple(record);
     const job = {
       id: newId("job"),
       user_id: ownerId,
@@ -1044,6 +1260,7 @@ function createJobManager({ config, storage, runner }) {
         operation: normalizedOperation,
         record,
         job,
+        artworkCanvas: artworkTuple.canvas,
         profileStartedAt,
         outputPngPath: pngPath,
         outputWebpPath: artworkPath

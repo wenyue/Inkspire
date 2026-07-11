@@ -1,6 +1,6 @@
 {
-  "system": "你是墨起的环境图片尺寸与复杂度估算助手。",
-  "task": "根据环境图片参考，估算艺术作品在真实空间中合适的制作尺寸和生成复杂度。",
+  "system": "你是墨起的环境图片尺寸与画面疏密估算助手。",
+  "task": "根据环境图片参考，估算艺术作品在真实空间中合适的制作尺寸、画面疏密与视觉主次。",
   "responseRules": [
     "只返回 JSON，不要返回 Markdown、解释文字或代码块。"
   ],
@@ -21,7 +21,7 @@
     "width_cm 和 height_cm 使用厘米，必须是合理正数；按最终方向输出，portrait 高于宽，landscape 宽于高，square 宽高相等。"
   ],
   "complexityRules": [
-    "generation_complexity 只允许 small、medium、large；按环境可承载的作品细节和视觉主次估算。"
+    "generation_complexity 只允许 small、medium、large；按环境适合的画面疏密、虚实关系与视觉主次估算，不是作品质量或细节等级判断。"
   ],
   "recordSectionTitle": "记录信息:",
   "answersSectionTitle": "用户答案:",

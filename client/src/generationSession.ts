@@ -1,5 +1,6 @@
 import type { GenerationComplexity, GenerationOperation, GenerationRecord, OriginTab } from "./api";
 import type { Answers, WorkType } from "./domain";
+import type { GenerationFailureKind } from "./generationFailure";
 
 const STORAGE_KEY = "inkspire.generationSessions.v1";
 const ORIGIN_TABS: OriginTab[] = ["studio", "library", "experts"];
@@ -38,6 +39,7 @@ export interface GenerationSession {
   status: GenerationSessionStatus;
   payload: GenerationSessionPayload;
   error?: string;
+  failureKind?: GenerationFailureKind;
 }
 
 export type GenerationSessionMap = Partial<Record<OriginTab, GenerationSession>>;
@@ -76,6 +78,10 @@ function isWorkType(value: unknown): value is WorkType {
 
 function optionalStringIsValid(value: unknown): value is string | undefined {
   return value === undefined || isString(value);
+}
+
+function isGenerationFailureKind(value: unknown): value is GenerationFailureKind {
+  return value === "classic_reference_unavailable" || value === "calligraphy_text_unverified";
 }
 
 function parseArtworkSize(value: unknown): GenerationRecord["recommended_artwork_size"] | undefined {
@@ -156,6 +162,7 @@ function parseGenerationSession(tab: OriginTab, value: unknown): GenerationSessi
     || !optionalStringIsValid(value.sourceRecordId)
     || !optionalStringIsValid(value.resultRecordId)
     || !optionalStringIsValid(value.error)
+    || (value.failureKind !== undefined && !isGenerationFailureKind(value.failureKind))
   ) {
     return null;
   }
@@ -182,6 +189,9 @@ function parseGenerationSession(tab: OriginTab, value: unknown): GenerationSessi
   }
   if (value.error !== undefined) {
     session.error = value.error;
+  }
+  if (value.failureKind !== undefined) {
+    session.failureKind = value.failureKind;
   }
 
   return session;

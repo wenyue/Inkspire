@@ -27,6 +27,148 @@ async function addPhotoAndContinue(page, entry: "album" | "camera" = "album") {
   await expect(page.getByRole("button", { name: "生成", exact: true })).toBeVisible();
 }
 
+async function continueToNotesWithoutPhoto(page) {
+  await page.getByRole("button", { name: "不需要效果图，直接生成" }).click();
+  await page.getByRole("button", { name: "均衡" }).click();
+  await expect(page.getByRole("heading", { name: "也可以补一句想法" })).toBeVisible();
+}
+
+async function expectFullyAboveBottomTabs(page, action) {
+  await expect(action).toBeVisible();
+  const actionBox = await action.boundingBox();
+  const navBox = await page.locator(".bottom-tabs").boundingBox();
+
+  expect(actionBox).not.toBeNull();
+  expect(navBox).not.toBeNull();
+  expect(actionBox!.y + actionBox!.height).toBeLessThanOrEqual(navBox!.y);
+}
+
+test("compact phone keeps creation actions above the bottom navigation", async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 568 });
+  await page.goto("/");
+
+  await completePaintingFlow(page);
+  await addPhotoAndContinue(page);
+  const generateButton = page.getByRole("button", { name: "生成", exact: true });
+  await expectFullyAboveBottomTabs(page, generateButton);
+  await generateButton.click();
+
+  const makeButton = page.getByRole("button", { name: "制作作品" });
+  await expect(makeButton).toBeVisible({ timeout: 30_000 });
+  await expectFullyAboveBottomTabs(page, makeButton);
+  await makeButton.click();
+
+  const confirmButton = page.getByRole("button", { name: "确认制作意向" });
+  await expectFullyAboveBottomTabs(page, confirmButton);
+});
+
+for (const viewport of [
+  { width: 320, height: 568 },
+  { width: 390, height: 844 }
+]) {
+  test(`${viewport.width}px phone keeps every notes suggestion above the generate action`, async ({ page }) => {
+    await page.setViewportSize(viewport);
+    await page.goto("/");
+
+    await completePaintingFlow(page);
+    await continueToNotesWithoutPhoto(page);
+
+    const finalSuggestion = page.getByRole("button", { name: "减少装饰性效果" });
+    const generateButton = page.getByRole("button", { name: "生成", exact: true });
+    await finalSuggestion.scrollIntoViewIfNeeded();
+
+    const suggestionBox = await finalSuggestion.boundingBox();
+    const actionBox = await generateButton.boundingBox();
+    const navBox = await page.locator(".bottom-tabs").boundingBox();
+    expect(suggestionBox).not.toBeNull();
+    expect(actionBox).not.toBeNull();
+    expect(navBox).not.toBeNull();
+    expect(suggestionBox!.y + suggestionBox!.height).toBeLessThanOrEqual(actionBox!.y);
+    expect(actionBox!.y + actionBox!.height).toBeLessThanOrEqual(navBox!.y);
+
+    await finalSuggestion.click();
+    const notes = page.getByLabel("也可以补一句想法");
+    await expect(notes).toHaveValue("减少装饰性效果");
+    await page.getByRole("button", { name: "清除想法" }).click();
+    await expect(notes).toHaveValue("");
+    await expect(notes).toBeFocused();
+    const focusedNotesBox = await notes.boundingBox();
+    const focusedActionBox = await generateButton.boundingBox();
+    expect(focusedNotesBox).not.toBeNull();
+    expect(focusedActionBox).not.toBeNull();
+    expect(focusedNotesBox!.y + focusedNotesBox!.height).toBeLessThanOrEqual(focusedActionBox!.y);
+
+    expect(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)).toBe(false);
+  });
+}
+
+test("compact phone keeps classic failure recovery visible and opens the picker without retrying", async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 568 });
+  await page.addInitScript(() => {
+    window.localStorage.setItem("inkspire.generationSessions.v1", JSON.stringify({
+      studio: {
+        originTab: "studio",
+        operation: "create",
+        jobId: "job-compact-classic",
+        startedAt: Date.now(),
+        status: "running",
+        payload: {
+          type: "painting",
+          answers: {
+            work_type: "painting",
+            creation_mode: "classic_reference",
+            classic_artwork_id: "missing-classic"
+          }
+        }
+      }
+    }));
+  });
+  let generationRequests = 0;
+  await page.route("**/api/jobs/active", (route) => route.fulfill({
+    contentType: "application/json",
+    body: JSON.stringify({
+      jobs: [{
+        id: "job-compact-classic",
+        recordId: "record-compact-classic",
+        stage: "artwork",
+        origin_tab: "studio",
+        operation: "create",
+        status: "running"
+      }]
+    })
+  }));
+  await page.route("**/api/jobs/job-compact-classic", (route) => route.fulfill({
+    contentType: "application/json",
+    body: JSON.stringify({
+      id: "job-compact-classic",
+      recordId: "record-compact-classic",
+      stage: "artwork",
+      origin_tab: "studio",
+      operation: "create",
+      status: "failed",
+      error: "private filesystem detail",
+      diagnostics: { reason: "classic_reference_unavailable" }
+    })
+  }));
+  await page.route("**/api/generations", async (route) => {
+    generationRequests += 1;
+    await route.continue();
+  });
+
+  await page.goto("/studio");
+
+  await expect(page.getByRole("heading", { name: "所选名作暂不可用" })).toBeVisible({ timeout: 5_000 });
+  await expect(page.getByText("private filesystem detail")).toBeHidden();
+  const recovery = page.getByRole("button", { name: "重新选择名作" });
+  await expectFullyAboveBottomTabs(page, recovery);
+  await recovery.click();
+
+  await expect(page).toHaveURL(/\/studio\?step=classic$/);
+  await expect(page.getByRole("heading", { name: "选择古代名作" })).toBeVisible();
+  await expect(page.locator(".classic-card").first()).toBeVisible();
+  expect(generationRequests).toBe(0);
+});
+
 test("mobile user can complete Inkspire creation flow with mocked generation", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");

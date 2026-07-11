@@ -20,14 +20,14 @@ const CLIENT_OVERRIDES: Dictionaries = {
       photoUploaded: "已选照片",
       selectedPhotoPreview: "已选照片预览",
       removePhoto: "移除照片",
-      complexityTitle: "想让作品丰富到什么程度？",
-      complexityHint: "没有环境照片时，用复杂度帮助墨起估算作品尺寸与细节。",
-      complexitySmall: "简洁",
-      complexitySmallHint: "构图清爽，笔墨留白更多。",
+      complexityTitle: "希望画面如何安排疏密？",
+      complexityHint: "没有环境照片时，疏密与虚实会帮助墨起估算画面信息量和制作尺寸。",
+      complexitySmall: "疏朗",
+      complexitySmallHint: "主体集中，虚处充分，保留清楚气口。",
       complexityMedium: "均衡",
-      complexityMediumHint: "细节和留白适中，适合多数空间。",
-      complexityLarge: "丰富",
-      complexityLargeHint: "层次更满，细节和气势更强。",
+      complexityMediumHint: "主次明确，疏密相间。",
+      complexityLarge: "繁密",
+      complexityLargeHint: "层次丰富但仍保留虚处，不填满画面。",
       notesPlaceholder: "也可以补一句想法",
       clearNotes: "清除想法",
       iterationHint: "将基于上次的主题、风格和选择继续生成，可补一句新想法。",
@@ -68,7 +68,24 @@ const CLIENT_OVERRIDES: Dictionaries = {
         adjustDetails: "艺术家正在修整细节"
       }
     },
-    suggestions: ["可以开始生成", "更雅", "留白多些", "更适合客厅", "更适合送礼", "更有诗意", "墨色淡些", "层次更丰富", "更安静", "更有气韵"],
+    generationFailure: {
+      retryError: "暂时无法重新生成，请检查网络后再试。",
+      classicReference: {
+        title: "所选名作暂不可用",
+        hint: "所选参考图目前无法读取，因此没有生成脱离原作参考的新作品。",
+        action: "重新选择名作"
+      },
+      calligraphyReview: {
+        title: "书法文字需要重新核验",
+        hint: "系统未能确认每个字都准确，因此没有接受这张图片。",
+        status: "逐字核验：需要重新生成",
+        action: "重新生成书法"
+      }
+    },
+    suggestions: {
+      painting: ["可以开始生成", "主次更明确", "留白再多些", "干湿层次更清楚", "气口更通透", "设色更克制", "节奏更从容", "按墙面陈设调整幅式比例", "减少装饰性效果"],
+      calligraphy: ["可以开始生成", "正文更醒目", "行气更贯通", "结字更从容", "调整字距与行距", "提按更分明", "枯润变化更克制", "章法更稳定", "按陈设尺寸调整行列"]
+    },
     errors: {
       generic: "暂时无法完成，请稍后再试。",
       photoTooLarge: "照片过大，请选择较小图片或先压缩。",
@@ -175,14 +192,14 @@ const CLIENT_OVERRIDES: Dictionaries = {
       photoUploaded: "已選照片",
       selectedPhotoPreview: "已選照片預覽",
       removePhoto: "移除照片",
-      complexityTitle: "想讓作品豐富到什麼程度？",
-      complexityHint: "沒有環境照片時，用複雜度幫助墨起估算作品尺寸與細節。",
-      complexitySmall: "簡潔",
-      complexitySmallHint: "構圖清爽，筆墨留白更多。",
+      complexityTitle: "希望畫面如何安排疏密？",
+      complexityHint: "沒有環境照片時，疏密與虛實會幫助墨起估算畫面資訊量和製作尺寸。",
+      complexitySmall: "疏朗",
+      complexitySmallHint: "主體集中，虛處充分，保留清楚氣口。",
       complexityMedium: "均衡",
-      complexityMediumHint: "細節和留白適中，適合多數空間。",
-      complexityLarge: "豐富",
-      complexityLargeHint: "層次更滿，細節和氣勢更強。",
+      complexityMediumHint: "主次明確，疏密相間。",
+      complexityLarge: "繁密",
+      complexityLargeHint: "層次豐富但仍保留虛處，不填滿畫面。",
       notesPlaceholder: "也可以補一句想法",
       clearNotes: "清除想法",
       iterationHint: "將基於上次的主題、風格和選擇繼續生成，可補一句新想法。",
@@ -223,7 +240,24 @@ const CLIENT_OVERRIDES: Dictionaries = {
         adjustDetails: "藝術家正在修整細節"
       }
     },
-    suggestions: ["可以開始生成", "更雅", "留白多些", "更適合客廳", "更適合送禮", "更有詩意", "墨色淡些", "層次更豐富", "更安靜", "更有氣韻"],
+    generationFailure: {
+      retryError: "暫時無法重新生成，請檢查網路後再試。",
+      classicReference: {
+        title: "所選名作暫不可用",
+        hint: "所選參考圖目前無法讀取，因此沒有生成脫離原作參考的新作品。",
+        action: "重新選擇名作"
+      },
+      calligraphyReview: {
+        title: "書法文字需要重新核驗",
+        hint: "系統未能確認每個字都準確，因此沒有接受這張圖片。",
+        status: "逐字核驗：需要重新生成",
+        action: "重新生成書法"
+      }
+    },
+    suggestions: {
+      painting: ["可以開始生成", "主次更明確", "留白再多些", "乾濕層次更清楚", "氣口更通透", "設色更克制", "節奏更從容", "按牆面陳設調整幅式比例", "減少裝飾性效果"],
+      calligraphy: ["可以開始生成", "正文更醒目", "行氣更貫通", "結字更從容", "調整字距與行距", "提按更分明", "枯潤變化更克制", "章法更穩定", "按陳設尺寸調整行列"]
+    },
     errors: {
       generic: "暫時無法完成，請稍後再試。",
       photoTooLarge: "照片過大，請選擇較小圖片或先壓縮。",
@@ -329,14 +363,14 @@ const CLIENT_OVERRIDES: Dictionaries = {
       photoUploaded: "Selected photo",
       selectedPhotoPreview: "Selected photo preview",
       removePhoto: "Remove photo",
-      complexityTitle: "How detailed should the artwork be?",
-      complexityHint: "Without a placement photo, this helps Inkspire estimate size and detail.",
-      complexitySmall: "Simple",
-      complexitySmallHint: "Clean composition with more open space.",
+      complexityTitle: "How should density and openness be balanced?",
+      complexityHint: "Without a placement photo, the balance between dense detail and open space helps Inkspire estimate visual information and production size.",
+      complexitySmall: "Open",
+      complexitySmallHint: "The subject stays focused, with generous open space and clear breathing room.",
       complexityMedium: "Balanced",
-      complexityMediumHint: "Moderate detail and space for most rooms.",
-      complexityLarge: "Rich",
-      complexityLargeHint: "Fuller layers with stronger detail and presence.",
+      complexityMediumHint: "A clear hierarchy alternates dense passages with open space.",
+      complexityLarge: "Dense",
+      complexityLargeHint: "Rich layers preserve open passages rather than filling the entire composition.",
       notesPlaceholder: "Add one more direction",
       clearNotes: "Clear notes",
       iterationHint: "Generate from your last subject, style, and choices. Add one new direction if needed.",
@@ -377,7 +411,24 @@ const CLIENT_OVERRIDES: Dictionaries = {
         adjustDetails: "The artist is refining the new draft"
       }
     },
-    suggestions: ["Start generating", "More refined", "More blank space", "For living room", "For gifting", "More poetic", "Lighter ink", "Richer layers", "Calmer", "More lively energy"],
+    generationFailure: {
+      retryError: "Unable to regenerate right now. Check your connection and try again.",
+      classicReference: {
+        title: "Reference artwork unavailable",
+        hint: "The selected reference image is unavailable, so no artwork without that reference was generated.",
+        action: "Choose another classic"
+      },
+      calligraphyReview: {
+        title: "Calligraphy needs another draft",
+        hint: "The system could not confirm every character, so this image was not accepted.",
+        status: "Character verification needs review",
+        action: "Generate calligraphy again"
+      }
+    },
+    suggestions: {
+      painting: ["Start generating", "Clarify the focal hierarchy", "Leave more open space", "Clarify wet-dry ink layers", "Open up the breathing space", "Restrain the color palette", "Use a more measured rhythm", "Adjust the format to the wall", "Reduce decorative effects"],
+      calligraphy: ["Start generating", "Make the main text more prominent", "Strengthen the flow between lines", "Use more composed character structures", "Refine character and line spacing", "Clarify pressure modulation", "Restrain dry-wet variation", "Stabilize the overall layout", "Adjust rows and columns to display size"]
+    },
     errors: {
       generic: "Unable to complete this right now. Please try again.",
       photoTooLarge: "Photo is too large. Choose a smaller image or compress it first.",

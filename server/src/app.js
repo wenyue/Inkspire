@@ -7,7 +7,7 @@ const path = require("node:path");
 const { PNG } = require("pngjs");
 const sharp = require("sharp");
 const { loadConfig, publicConfig, productionAvailable } = require("./config");
-const { runCodexImageGeneration, runCodexJsonEstimation } = require("./codexRunner");
+const { runCodexImageGeneration, runCodexJsonEstimation, runCodexJsonInspection } = require("./codexRunner");
 const { archiveSourcePhoto } = require("./imagePipeline");
 const { createJobManager } = require("./jobs");
 const { normalizeGenerationComplexity } = require("./sizeEstimation");
@@ -274,7 +274,7 @@ async function checkWebpAvailable() {
   }
 }
 
-async function runDeterministicImageGeneration({ outputPngPath, stage }) {
+async function runDeterministicImageGeneration({ outputPngPath, stage, canvas }) {
   if (stage === "size_estimation") {
     return {
       json: {
@@ -290,7 +290,22 @@ async function runDeterministicImageGeneration({ outputPngPath, stage }) {
     };
   }
 
-  const png = new PNG({ width: 64, height: 96 });
+  if (stage === "calligraphy_verification") {
+    throw new Error("Deterministic verification requires the artwork record");
+  }
+
+  const canvasWidth = Number(canvas?.width);
+  const canvasHeight = Number(canvas?.height);
+  const artworkScale = stage === "artwork"
+    && Number.isFinite(canvasWidth)
+    && canvasWidth > 0
+    && Number.isFinite(canvasHeight)
+    && canvasHeight > 0
+    ? 96 / Math.max(canvasWidth, canvasHeight)
+    : 0;
+  const width = artworkScale ? Math.max(1, Math.round(canvasWidth * artworkScale)) : 64;
+  const height = artworkScale ? Math.max(1, Math.round(canvasHeight * artworkScale)) : 96;
+  const png = new PNG({ width, height });
   const seed = stage === "fusion_render" ? [124, 46, 40] : [38, 92, 73];
   for (let y = 0; y < png.height; y += 1) {
     for (let x = 0; x < png.width; x += 1) {
@@ -307,27 +322,62 @@ async function runDeterministicImageGeneration({ outputPngPath, stage }) {
   return { pngPath: outputPngPath, diagnostics: { reason: "deterministic_e2e_runner" } };
 }
 
+function createCodexRunnerDispatch({
+  projectRoot,
+  dataDir,
+  config,
+  runImage = runCodexImageGeneration,
+  runEstimation = runCodexJsonEstimation,
+  runInspection = runCodexJsonInspection
+}) {
+  return (runnerOptions) => {
+    const baseOptions = {
+      ...runnerOptions,
+      config,
+      generatedImagesRoot: configuredGeneratedImagesRoot(projectRoot, config)
+    };
+    const recordDir = path.join(dataDir, "records", runnerOptions.record?.id || "analysis");
+    if (runnerOptions.stage === "size_estimation") {
+      return runEstimation({
+        ...baseOptions,
+        jobDir: runnerOptions.jobDir || path.join(recordDir, "size-estimation")
+      });
+    }
+    if (runnerOptions.stage === "calligraphy_verification") {
+      return runInspection({
+        ...baseOptions,
+        jobDir: runnerOptions.jobDir || path.join(recordDir, "calligraphy-verification")
+      });
+    }
+    return runImage(baseOptions);
+  };
+}
+
 function createApp(options = {}) {
   const projectRoot = options.projectRoot || path.resolve(__dirname, "../..");
   const dataDir = options.dataDir || path.join(projectRoot, "data");
   const config = options.config || loadConfig(projectRoot);
   const storage = options.storage || createStorage(dataDir);
   const runner = options.runner || (shouldUseDeterministicRunner()
-    ? runDeterministicImageGeneration
-    : ((runnerOptions) => {
-      const baseOptions = {
-        ...runnerOptions,
-        config,
-        generatedImagesRoot: configuredGeneratedImagesRoot(projectRoot, config)
-      };
-      if (runnerOptions.stage === "size_estimation") {
-        return runCodexJsonEstimation({
-          ...baseOptions,
-          jobDir: runnerOptions.jobDir || path.join(dataDir, "records", runnerOptions.record?.id || "size-estimation", "size-estimation")
+    ? (runnerOptions) => {
+      if (runnerOptions.stage === "calligraphy_verification") {
+        const expectedText = typeof runnerOptions.record?.answers?.text === "string"
+          ? runnerOptions.record.answers.text
+          : "";
+        return Promise.resolve({
+          json: {
+            detected_text: expectedText,
+            no_extra_text: true,
+            legible: true,
+            confidence: 1,
+            decision: "verified",
+            issues: []
+          }
         });
       }
-      return runCodexImageGeneration(baseOptions);
-    }));
+      return runDeterministicImageGeneration(runnerOptions);
+    }
+    : createCodexRunnerDispatch({ projectRoot, dataDir, config }));
   const jobs = options.jobs || createJobManager({ config, storage, runner });
   const upload = createUploadMiddleware(dataDir, config);
   const app = express();
@@ -437,6 +487,7 @@ function createApp(options = {}) {
       sourcePhotoPath,
       recommendedArtworkSize: req.body.recommended_artwork_size || null,
       generationComplexity: req.body.generation_complexity,
+      generationComplexityExplicit: Object.prototype.hasOwnProperty.call(req.body, "generation_complexity"),
       originTab: req.body.origin_tab || req.body.originTab || "studio",
       operation: req.body.operation || "create"
     });
@@ -462,6 +513,10 @@ function createApp(options = {}) {
 
   app.post("/api/records/:id/regenerate", asyncHandler(async (req, res) => {
     const current = await storage.getRecordForUser(req.params.id, req.userId);
+    const requestHasDensity = Object.prototype.hasOwnProperty.call(req.body, "generation_complexity");
+    const currentDensityIsExplicit = typeof current.generation_complexity_explicit === "boolean"
+      ? current.generation_complexity_explicit
+      : !current.source_photo_path;
     const result = await jobs.createArtwork({
       userId: req.userId,
       type: current.type,
@@ -469,7 +524,8 @@ function createApp(options = {}) {
       conversationNotes: req.body.conversationNotes || current.conversation_notes || "",
       sourcePhotoPath: current.source_photo_path || "",
       recommendedArtworkSize: current.recommended_artwork_size || null,
-      generationComplexity: req.body.generation_complexity || current.generation_complexity,
+      generationComplexity: requestHasDensity ? req.body.generation_complexity : current.generation_complexity,
+      generationComplexityExplicit: requestHasDensity ? true : currentDensityIsExplicit,
       originTab: req.body.origin_tab || req.body.originTab || "studio",
       operation: req.body.operation || "adjust"
     });
@@ -587,4 +643,4 @@ function createApp(options = {}) {
   return app;
 }
 
-module.exports = { createApp };
+module.exports = { createApp, createCodexRunnerDispatch };

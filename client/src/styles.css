@@ -527,7 +527,7 @@ button:disabled {
   resize: none;
   border: 1px solid rgba(54, 84, 73, 0.2);
   border-radius: 8px;
-  padding: 12px;
+  padding: 12px 56px 56px 12px;
   background: rgba(255, 255, 255, 0.62);
   color: #1f2f2a;
 }
@@ -538,13 +538,12 @@ button:disabled {
 
 .conversation-note-clear {
   position: absolute;
-  right: 10px;
-  bottom: 10px;
+  right: 4px;
+  bottom: 4px;
   display: grid;
   place-items: center;
-  width: 30px;
-  height: 30px;
-  min-height: 0;
+  width: 44px;
+  height: 44px;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.62);
   color: #52695f;
@@ -591,6 +590,10 @@ button:disabled {
 .conversation-actions {
   display: grid;
   gap: 8px;
+}
+
+.mobile-action-surface {
+  margin-inline: -1px;
 }
 
 .primary-action {
@@ -1404,14 +1407,32 @@ button:disabled {
   background: rgba(25, 38, 33, 0.28);
 }
 
+.production-dialog-layer {
+  padding-bottom: calc(82px + env(safe-area-inset-bottom));
+}
+
 .production-dialog {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
   width: min(100%, 520px);
-  max-height: calc(100vh - 32px);
-  overflow: auto;
+  max-height: 100%;
+  overflow: hidden;
   padding: 16px;
   border-radius: 8px;
   background: #fffaf0;
   box-shadow: 0 24px 70px rgba(24, 39, 33, 0.28);
+}
+
+.production-dialog-body {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.production-dialog-footer {
+  padding-top: 10px;
+  padding-bottom: calc(2px + env(safe-area-inset-bottom));
+  background: #fffaf0;
 }
 
 .confirm-dialog {
@@ -1809,6 +1830,19 @@ button:disabled {
 }
 
 @media (max-width: 520px) {
+  .mobile-action-surface {
+    position: sticky;
+    bottom: 0;
+    z-index: 3;
+    padding: 10px 1px calc(2px + env(safe-area-inset-bottom));
+    background: linear-gradient(180deg, rgba(255, 250, 240, 0), #fffaf0 28%);
+  }
+
+  .notes-suggestion-row button,
+  .conversation-note-shell textarea {
+    scroll-margin-block-end: calc(64px + env(safe-area-inset-bottom));
+  }
+
   .language-select {
     gap: 4px;
     min-height: 40px;

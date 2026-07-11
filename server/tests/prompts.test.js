@@ -44,7 +44,151 @@ test("calligraphy prompt contains 书法, selected answers, and user notes", () 
   assert.match(prompt, /落款保持含蓄/);
 });
 
-test("artwork prompt includes generation complexity before user notes and final direction", () => {
+test("calligraphy prompt labels the selected scroll format as 形制", () => {
+  const prompt = buildArtworkPrompt({
+    type: "calligraphy",
+    answers: {
+      text: "明月松间照",
+      calligraphy_layout: "立轴"
+    },
+    config: loadConfig(root)
+  });
+
+  assert.match(prompt, /形制=立轴/);
+  assert.doesNotMatch(prompt, /章法=立轴/);
+});
+
+test("painting prompt requires disciplined composition and rejects unmotivated decorative effects", () => {
+  const prompt = buildArtworkPrompt({
+    type: "painting",
+    answers: {
+      painting_subject: "山水",
+      painting_brushwork: "写意",
+      painting_palette: "青绿",
+      painting_mood: "清旷",
+      painting_format: "横幅"
+    },
+    config: loadConfig(root)
+  });
+
+  assert.match(prompt, /构图经营/);
+  assert.match(prompt, /题材/);
+  assert.match(prompt, /空间秩序/);
+  assert.match(prompt, /留白/);
+  assert.match(prompt, /焦点层级/);
+  assert.match(prompt, /统一暖色仿古滤镜/);
+  assert.match(prompt, /电影式舞台灯光/);
+  assert.match(prompt, /伪三维或浮雕质感/);
+  assert.match(prompt, /无意义的装饰性墨汁飞溅/);
+  assert.match(prompt, /素材化的雾气叠加/);
+  assert.match(prompt, /机械重复的纹理/);
+  assert.match(prompt, /装饰性红印或伪造落款/);
+  assert.match(prompt, /泼墨、烟云、古色、金碧/);
+  assert.match(prompt, /并非一律禁用/);
+  assert.match(prompt, /伪题识、伪文字、水印、品牌标识/);
+  assert.match(prompt, /不得仿作具体在世艺术家/);
+  assert.doesNotMatch(prompt, /落款等按用户选择/);
+});
+
+test("calligraphy prompt preserves the exact main text and requires real brush-written structure", () => {
+  const prompt = buildArtworkPrompt({
+    type: "calligraphy",
+    answers: {
+      text: "明月松间照",
+      calligraphy_script: "行书",
+      calligraphy_spirit: "清劲",
+      calligraphy_layout: "立轴",
+      calligraphy_material: "素宣"
+    },
+    config: loadConfig(root)
+  });
+
+  assert.match(prompt, /正文必须逐字准确再现用户提供的“明月松间照”/);
+  assert.match(prompt, /不增、不删、不替换、不调换顺序/);
+  assert.match(prompt, /英文字母、阿拉伯数字、伪字或臆造内容/);
+  assert.match(prompt, /起收、提按、转折、行气/);
+  assert.match(prompt, /字间与行间关系/);
+  assert.match(prompt, /墨色变化/);
+  assert.match(prompt, /书体与形制/);
+  assert.match(prompt, /电脑字体贴图/);
+  assert.match(prompt, /仿毛笔滤镜/);
+  assert.match(prompt, /装饰性难辨字形/);
+  assert.match(prompt, /正文是视觉主体/);
+  assert.match(prompt, /书法章法/);
+  assert.match(prompt, /形制=立轴/);
+  assert.doesNotMatch(prompt, /落款等按用户选择/);
+});
+
+test("artwork prompts keep inscriptions closed even when free-text notes request them", () => {
+  const config = loadConfig(root);
+  const prompts = [
+    buildArtworkPrompt({
+      type: "painting",
+      answers: { painting_subject: "山水" },
+      conversationNotes: "请题款署名并钤一枚印章",
+      config
+    }),
+    buildArtworkPrompt({
+      type: "calligraphy",
+      answers: { text: "明月松间照" },
+      conversationNotes: "请题款署名并钤一枚印章",
+      config
+    })
+  ];
+
+  for (const prompt of prompts) {
+    assert.match(prompt, /当前版本.*无论补充说明如何.*不得添加题识、题款、落款、签名或印章/);
+    assert.match(prompt, /专用结构化功能/);
+    assert.doesNotMatch(prompt, /只有用户.*明确要求时才可加入/);
+    assert.ok(prompt.lastIndexOf("用户补充:") < prompt.lastIndexOf("无论补充说明如何"));
+  }
+});
+
+test("calligraphy prompt makes the submitted text the only text in the image", () => {
+  const prompt = buildArtworkPrompt({
+    type: "calligraphy",
+    answers: { text: "明月松间照" },
+    config: loadConfig(root)
+  });
+
+  assert.match(prompt, /“明月松间照”是画面中的唯一正文/);
+  assert.match(prompt, /画面不得出现任何其他文字/);
+  assert.match(prompt, /现成诗句/);
+});
+
+test("calligraphy prompt constrains expressive effects to real brush logic", () => {
+  const prompt = buildArtworkPrompt({
+    type: "calligraphy",
+    answers: {
+      text: "明月松间照",
+      calligraphy_script: "行书"
+    },
+    config: loadConfig(root)
+  });
+
+  assert.doesNotMatch(prompt, /强调书法章法、笔势、墨色、飞白/);
+  assert.match(prompt, /均匀描边/);
+  assert.match(prompt, /过度飞白/);
+  assert.match(prompt, /无控制涨墨/);
+  assert.match(prompt, /夸张连笔/);
+  assert.match(prompt, /服从提按、书写节奏、所选书体与可读性/);
+});
+
+test("painting prompt selects traditional techniques instead of requiring a technique soup", () => {
+  const prompt = buildArtworkPrompt({
+    type: "painting",
+    answers: {
+      painting_subject: "花鸟",
+      painting_brushwork: "工笔"
+    },
+    config: loadConfig(root)
+  });
+
+  assert.match(prompt, /勾、皴、擦、点、染.*根据题材、画法与物象结构择其所需，不求齐备/);
+  assert.match(prompt, /所用技法.*服务于物象结构/);
+});
+
+test("artwork prompt describes generation density before user notes and final direction", () => {
   const prompt = buildArtworkPrompt({
     type: "painting",
     answers: {
@@ -60,19 +204,64 @@ test("artwork prompt includes generation complexity before user notes and final 
     config: loadConfig(root)
   });
 
-  const complexityIndex = prompt.indexOf("画面复杂度:");
+  const complexityIndex = prompt.indexOf("画面疏密与虚实倾向:");
   const directionIndex = prompt.indexOf("最终方向:");
   const notesIndex = prompt.indexOf("用户补充:");
 
   assert.notEqual(complexityIndex, -1);
+  assert.doesNotMatch(prompt, /画面复杂度:/);
   assert.notEqual(directionIndex, -1);
   assert.notEqual(notesIndex, -1);
   assert.ok(complexityIndex < notesIndex);
   assert.ok(directionIndex < notesIndex);
-  assert.match(prompt, /丰富：层次更充分，细节承载更多，适合主视觉作品。/);
+  assert.match(prompt, /繁密：密处交织有序，虚处仍留气口与呼吸。/);
+  assert.doesNotMatch(prompt, /信息量较低|层次丰富但仍有虚处/);
   assert.match(prompt, /portrait/);
   assert.match(prompt, /environment-image/);
   assert.match(prompt, /必须覆盖此前构图选择与环境图片判断/);
+});
+
+test("artwork prompt maps every generation density choice to artistic guidance", () => {
+  const config = loadConfig(root);
+  const cases = [
+    ["small", "疏朗：主体集中，虚处充足，气口舒展。"],
+    ["medium", "均衡：疏密相间，虚实相生，主次清楚。"],
+    ["large", "繁密：密处交织有序，虚处仍留气口与呼吸。"]
+  ];
+
+  for (const [generationComplexity, expectedCopy] of cases) {
+    const prompt = buildArtworkPrompt({
+      type: "painting",
+      generationComplexity,
+      config
+    });
+
+    assert.match(prompt, new RegExp(expectedCopy));
+    assert.doesNotMatch(prompt, /信息量较低|层次丰富但仍有虚处/);
+  }
+});
+
+test("prompt config uses format and rubbing texture terminology for calligraphy", () => {
+  const config = loadConfig(root);
+  const textQuestion = config.questions.calligraphy.find(({ id }) => id === "text");
+  const formatQuestion = config.questions.calligraphy.find(({ id }) => id === "calligraphy_layout");
+  const materialQuestion = config.questions.calligraphy.find(({ id }) => id === "calligraphy_material");
+
+  assert.deepEqual(textQuestion.helper_text, {
+    "zh-Hans": "这会作为书法正文进入生成；后面再选择书体、气息、形制和纸墨。",
+    "zh-Hant": "這會作為書法正文進入生成；後面再選擇書體、氣息、形制和紙墨。",
+    en: "This becomes the calligraphy wording; script, spirit, format, and material come next."
+  });
+  assert.equal(formatQuestion.preview_prompt, "书法形制，立轴横幅斗方手卷册页");
+  assert.deepEqual(formatQuestion.title, {
+    "zh-Hans": "想要哪种形制？",
+    "zh-Hant": "想要哪種形制？",
+    en: "Which format should it take?"
+  });
+  assert.equal(materialQuestion.preview_prompt, "书法纸墨质感，素宣仿古洒金碑拓肌理");
+  assert.equal(materialQuestion.options["zh-Hans"].at(-1), "碑拓肌理");
+  assert.equal(materialQuestion.options["zh-Hant"].at(-1), "碑拓肌理");
+  assert.equal(materialQuestion.options.en.at(-1), "Rubbing Texture");
 });
 
 test("artwork prompt includes recommended production size when available", () => {
@@ -187,6 +376,9 @@ test("size estimation prompt asks for JSON only with final orientation, answers,
   assert.match(prompt, /环境图片不能改变/);
   assert.match(prompt, /painting_subject/);
   assert.match(prompt, /希望竖幅挂在玄关/);
+  assert.match(prompt, /画面疏密、虚实关系与视觉主次/);
+  assert.match(prompt, /不是作品质量或细节等级判断/);
+  assert.doesNotMatch(prompt, /环境可承载的作品细节/);
 });
 
 test("size estimation prompt renders rules and schema from config", () => {

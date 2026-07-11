@@ -9,6 +9,13 @@ const copy: Record<string, string> = {
   "generationLoading.retry": "Try again",
   "generationLoading.failedTitle": "Generation did not finish",
   "generationLoading.failedHint": "Try again, or switch to another page first.",
+  "generationFailure.classicReference.title": "Reference artwork unavailable",
+  "generationFailure.classicReference.hint": "The selected reference image is unavailable, so no artwork without that reference was generated.",
+  "generationFailure.classicReference.action": "Choose another classic",
+  "generationFailure.calligraphyReview.title": "Calligraphy needs another draft",
+  "generationFailure.calligraphyReview.hint": "The system could not confirm every character, so this image was not accepted.",
+  "generationFailure.calligraphyReview.status": "Character verification needs review",
+  "generationFailure.calligraphyReview.action": "Generate calligraphy again",
   "generationLoading.create.painting": "The artist is painting",
   "generationLoading.adjust.adjustDetails": "The artist is refining the new draft"
 };
@@ -90,6 +97,67 @@ describe("GeneratingView", () => {
     expect(screen.getByText("Timed out")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Try again" }));
+
+    expect(onRetry).toHaveBeenCalledOnce();
+  });
+
+  it("offers classic selection instead of retrying an unavailable reference", async () => {
+    const user = userEvent.setup();
+    const onRetry = vi.fn();
+    const onSelectClassic = vi.fn();
+
+    render(
+      <GeneratingView
+        originTab="studio"
+        operation="create"
+        jobId="job-classic"
+        startedAt={Date.now()}
+        status="failed"
+        error="technical runner detail"
+        locale="en"
+        t={t}
+        onRetry={onRetry}
+        failureKind="classic_reference_unavailable"
+        onSelectClassic={onSelectClassic}
+      />
+    );
+
+    expect(screen.getByRole("heading", { name: "Reference artwork unavailable" })).toBeInTheDocument();
+    expect(screen.getByText("The selected reference image is unavailable, so no artwork without that reference was generated.")).toBeInTheDocument();
+    expect(screen.queryByText("technical runner detail")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Try again" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Choose another classic" }));
+
+    expect(onSelectClassic).toHaveBeenCalledOnce();
+    expect(onRetry).not.toHaveBeenCalled();
+  });
+
+  it("makes calligraphy verification review explicit and allows a new candidate", async () => {
+    const user = userEvent.setup();
+    const onRetry = vi.fn();
+
+    render(
+      <GeneratingView
+        originTab="studio"
+        operation="create"
+        jobId="job-calligraphy"
+        startedAt={Date.now()}
+        status="failed"
+        error="detected_text mismatch"
+        locale="en"
+        t={t}
+        onRetry={onRetry}
+        failureKind="calligraphy_text_unverified"
+      />
+    );
+
+    expect(screen.getByRole("heading", { name: "Calligraphy needs another draft" })).toBeInTheDocument();
+    expect(screen.getByText("The system could not confirm every character, so this image was not accepted.")).toBeInTheDocument();
+    expect(screen.getByText("Character verification needs review")).toBeInTheDocument();
+    expect(screen.queryByText("detected_text mismatch")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Generate calligraphy again" }));
 
     expect(onRetry).toHaveBeenCalledOnce();
   });

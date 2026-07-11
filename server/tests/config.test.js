@@ -8,6 +8,7 @@ const root = path.resolve(__dirname, "../..");
 
 test("loads required Inkspire configuration", () => {
   const config = loadConfig(root);
+  assert.equal(config._projectRoot, root);
   assert.equal(config.app.name, "墨起");
   assert.equal(config.app.defaultLocale, "zh-Hans");
   assert.equal(config.app.runtime.codexCommand, "codex");
@@ -58,7 +59,16 @@ test("loads required Inkspire configuration", () => {
   assert.ok(Array.isArray(config.prompts.calligraphy.sections));
   assert.match(config.prompts.fusion.brief, /真实摆放效果图/);
   assert.ok(Array.isArray(config.prompts.fusion.sections));
-  assert.equal(config.prompts.sizeEstimationPrompt.system, "你是墨起的环境图片尺寸与复杂度估算助手。");
+  assert.ok(config.prompts.calligraphyVerification);
+  assert.match(config.prompts.calligraphyVerification.system, /书法/);
+  assert.match(config.prompts.calligraphyVerification.brief, /issues/);
+  assert.equal(config.prompts.calligraphyVerification.minimumConfidence, 0.8);
+  assert.equal(config.prompts.sizeEstimationPrompt.system, "你是墨起的环境图片尺寸与画面疏密估算助手。");
+  assert.match(config.prompts.sizeEstimationPrompt.task, /疏密与视觉主次/);
+  assert.doesNotMatch(config.prompts.sizeEstimationPrompt.task, /复杂度/);
+  assert.match(config.prompts.sizeEstimationPrompt.complexityRules[0], /画面疏密、虚实关系与视觉主次/);
+  assert.match(config.prompts.sizeEstimationPrompt.complexityRules[0], /不是作品质量或细节等级判断/);
+  assert.doesNotMatch(config.prompts.sizeEstimationPrompt.complexityRules[0], /作品细节/);
   assert.match(config.prompts.sizeEstimationPrompt.responseRules[0], /只返回 JSON/);
   assert.equal(config.prompts.sizeEstimationPrompt.schema.generation_complexity, "small | medium | large");
 });
@@ -101,6 +111,7 @@ test("public config exposes only UI-safe fields", () => {
   assert.equal(Object.hasOwn(exposed, "codexReasoningEffort"), false);
   assert.equal(Object.hasOwn(exposed, "generatedImagesRoot"), false);
   assert.equal(Object.hasOwn(exposed, "generationCanvas"), false);
+  assert.equal(Object.hasOwn(exposed, "_projectRoot"), false);
 });
 
 test("classic artworks config contains exactly 100 complete painting records", () => {

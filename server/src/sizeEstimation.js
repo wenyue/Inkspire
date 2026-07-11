@@ -1,10 +1,22 @@
+const { orientationForArtworkFormat } = require("./artworkFormat");
+
 const COMPLEXITIES = new Set(["small", "medium", "large"]);
 const TARGET_AREAS = { small: 30 * 45, medium: 45 * 68, large: 60 * 90 };
-const LABELS = { small: "简洁参考尺寸", medium: "均衡参考尺寸", large: "丰富参考尺寸" };
+const LABELS = { small: "疏朗参考尺寸", medium: "均衡参考尺寸", large: "繁密参考尺寸" };
 const REASONS = {
-  small: "按作品复杂度和画面比例估算，适合作为简洁作品制作参考。",
-  medium: "按作品复杂度和画面比例估算，适合作为均衡作品制作参考。",
-  large: "按作品复杂度和画面比例估算，适合作为丰富作品制作参考。"
+  small: "按画面疏密与比例估算，适合作为疏朗布局制作参考。",
+  medium: "按画面疏密、虚实与比例估算，适合作为均衡布局制作参考。",
+  large: "按画面疏密与比例估算，层次繁密但仍保留清楚气口与虚处。"
+};
+const ENVIRONMENT_REASONS = {
+  small: "根据所提供环境图片的可用墙面或陈设比例估算尺寸，并结合疏朗布局与作品幅式。",
+  medium: "根据所提供环境图片的可用墙面或陈设比例估算尺寸，并结合均衡疏密与作品幅式。",
+  large: "根据所提供环境图片的可用墙面或陈设比例估算尺寸，并结合繁密布局与作品幅式，同时保留清楚气口与虚处。"
+};
+const FALLBACK_REASONS = {
+  small: "环境图片尺寸估算不可用，按疏朗布局与作品幅式提供备用参考。",
+  medium: "环境图片尺寸估算不可用，按均衡疏密与作品幅式提供备用参考。",
+  large: "环境图片尺寸估算不可用，按繁密布局与作品幅式提供备用参考，同时保留清楚气口与虚处。"
 };
 const ORIENTATIONS = new Set(["portrait", "landscape", "square"]);
 const DEFAULT_SIZE = {
@@ -12,11 +24,29 @@ const DEFAULT_SIZE = {
   label: "环境估算备用尺寸",
   width_cm: 45,
   height_cm: 70,
-  reason: "环境图片 AI 尺寸估算不可用时使用的均衡竖幅备用尺寸。"
+  reason: "环境图片 AI 尺寸估算不可用时，按均衡疏密与竖幅比例提供备用参考。"
 };
 
 function normalizeGenerationComplexity(value) {
   return COMPLEXITIES.has(value) ? value : "medium";
+}
+
+function stampGeneratedArtworkSize(size, generationComplexity, source = "environment_estimate", orientation = "") {
+  const complexity = normalizeGenerationComplexity(generationComplexity);
+  const orientationSuffix = source === "environment_fallback" && ORIENTATIONS.has(orientation)
+    ? `_${orientation}`
+    : "";
+  const reasons = source === "environment_estimate"
+    ? ENVIRONMENT_REASONS
+    : source === "environment_fallback"
+      ? FALLBACK_REASONS
+      : REASONS;
+  return {
+    ...size,
+    preset_id: `${source}_${complexity}${orientationSuffix}`,
+    label: LABELS[complexity],
+    reason: reasons[complexity]
+  };
 }
 
 function hasNegationNear(text, index) {
@@ -59,20 +89,6 @@ function orientationFromAnswerValue(value) {
   return normalizeOrientationValue(value);
 }
 
-function legacyPaintingCompositionOrientation(value) {
-  if (["横幅", "橫幅", "Horizontal", "手卷", "Handscroll", "扇面", "Fan"].includes(value)) return "landscape";
-  if (["竖幅", "豎幅", "Vertical", "立轴", "立軸", "Hanging Scroll"].includes(value)) return "portrait";
-  if (["斗方", "Square"].includes(value)) return "square";
-  return "unknown";
-}
-
-function legacyCalligraphyLayoutOrientation(value) {
-  if (["竖排", "豎排", "Vertical", "立轴", "立軸", "Hanging Scroll"].includes(value)) return "portrait";
-  if (["横排", "橫排", "Horizontal", "匾额", "匾額", "Plaque", "手卷", "Handscroll", "册页", "冊頁", "Album"].includes(value)) return "landscape";
-  if (["斗方", "Square"].includes(value)) return "square";
-  return "unknown";
-}
-
 function answerOrientation(answers = {}) {
   if (answers.work_type === "painting") {
     const stableOrientation = orientationFromAnswerValue(answers.painting_composition_orientation);
@@ -81,8 +97,10 @@ function answerOrientation(answers = {}) {
     const objectOrientation = orientationFromAnswerValue(answers.painting_format || answers.painting_composition);
     if (objectOrientation !== "unknown") return objectOrientation;
 
-    const legacyOrientation = legacyPaintingCompositionOrientation(answers.painting_format || answers.painting_composition);
-    if (legacyOrientation !== "unknown") return legacyOrientation;
+    const artworkFormat = answers.painting_format || answers.painting_composition;
+    if (typeof artworkFormat === "string" && artworkFormat.trim()) {
+      return orientationForArtworkFormat(artworkFormat);
+    }
     return "unknown";
   }
 
@@ -93,8 +111,9 @@ function answerOrientation(answers = {}) {
     const objectOrientation = orientationFromAnswerValue(answers.calligraphy_layout);
     if (objectOrientation !== "unknown") return objectOrientation;
 
-    const legacyOrientation = legacyCalligraphyLayoutOrientation(answers.calligraphy_layout);
-    if (legacyOrientation !== "unknown") return legacyOrientation;
+    if (typeof answers.calligraphy_layout === "string" && answers.calligraphy_layout.trim()) {
+      return orientationForArtworkFormat(answers.calligraphy_layout);
+    }
   }
 
   return "unknown";
@@ -185,7 +204,7 @@ function sizeFromComplexityAndAspectRatio({
   };
 }
 
-function normalizeArtworkSizeCandidate(value, orientation = "unknown") {
+function normalizeArtworkSizeCandidate(value, orientation = "unknown", targetAspectRatio = 0) {
   if (!value || typeof value !== "object") return null;
 
   const width = Number(value.width_cm);
@@ -203,10 +222,11 @@ function normalizeArtworkSizeCandidate(value, orientation = "unknown") {
   };
 
   const oriented = enforceArtworkSizeOrientation(normalized, orientation);
-  if (!oriented || oriented.width_cm <= 0 || oriented.height_cm <= 0 || oriented.width_cm > 300 || oriented.height_cm > 300) {
+  const aspectAdjusted = enforceArtworkSizeAspectRatio(oriented, targetAspectRatio);
+  if (!aspectAdjusted || aspectAdjusted.width_cm <= 0 || aspectAdjusted.height_cm <= 0 || aspectAdjusted.width_cm > 300 || aspectAdjusted.height_cm > 300) {
     return null;
   }
-  return oriented;
+  return aspectAdjusted;
 }
 
 function normalizeArtworkSize(value) {
@@ -236,6 +256,29 @@ function enforceArtworkSizeOrientation(size, orientation) {
   return next;
 }
 
+function enforceArtworkSizeAspectRatio(size, aspectRatio) {
+  const ratio = Number(aspectRatio);
+  if (!size || !Number.isFinite(ratio) || ratio <= 0) return size;
+
+  const area = size.width_cm * size.height_cm;
+  let widthCm = roundToFive(Math.sqrt(area * ratio));
+  let heightCm = roundToFive(Math.sqrt(area / ratio));
+  if (Math.max(widthCm, heightCm) > 300) {
+    const scale = 300 / Math.max(widthCm, heightCm);
+    widthCm = roundToFive(widthCm * scale);
+    heightCm = roundToFive(heightCm * scale);
+  }
+  return { ...size, width_cm: widthCm, height_cm: heightCm };
+}
+
+function aspectRatioFromCanvas(canvas) {
+  const width = Number(canvas?.width);
+  const height = Number(canvas?.height);
+  return Number.isFinite(width) && width > 0 && Number.isFinite(height) && height > 0
+    ? width / height
+    : 0;
+}
+
 function parseEstimationPayload(result) {
   if (result?.json && typeof result.json === "object") return result.json;
   const rawText = typeof result?.json === "string" ? result.json : result?.text;
@@ -259,6 +302,7 @@ async function estimateFromEnvironment({
   record,
   prompt = "",
   resolvedOrientation = { orientation: "portrait", source: "default" },
+  targetCanvas = null,
   fallbackSize = null,
   referenceImages = {},
   fallbackComplexity = "medium"
@@ -269,19 +313,36 @@ async function estimateFromEnvironment({
     const generationComplexity = normalizeGenerationComplexity(payload.generation_complexity);
     const recommendedArtworkSize = normalizeArtworkSizeCandidate(
       payload.recommended_artwork_size,
-      resolvedOrientation.orientation
+      resolvedOrientation.orientation,
+      aspectRatioFromCanvas(targetCanvas)
     );
     if (!recommendedArtworkSize) {
       throw new Error("Invalid recommended artwork size");
     }
     return {
       generation_complexity: generationComplexity,
-      recommended_artwork_size: recommendedArtworkSize
+      recommended_artwork_size: stampGeneratedArtworkSize(recommendedArtworkSize, generationComplexity)
     };
   } catch (error) {
+    const fallbackArtworkSize = fallbackSize || { ...DEFAULT_SIZE };
+    const targetAspectRatio = aspectRatioFromCanvas(targetCanvas);
+    const normalizedFallbackSize = targetAspectRatio > 0
+      ? normalizeArtworkSizeCandidate(
+        fallbackArtworkSize,
+        resolvedOrientation.orientation,
+        targetAspectRatio
+      ) || fallbackArtworkSize
+      : fallbackArtworkSize;
     return {
       generation_complexity: normalizeGenerationComplexity(fallbackComplexity),
-      recommended_artwork_size: fallbackSize || { ...DEFAULT_SIZE }
+      recommended_artwork_size: fallbackSize
+        ? normalizedFallbackSize
+        : stampGeneratedArtworkSize(
+          normalizedFallbackSize,
+          fallbackComplexity,
+          "environment_fallback",
+          resolvedOrientation.orientation
+        )
     };
   }
 }
@@ -289,6 +350,7 @@ async function estimateFromEnvironment({
 module.exports = {
   DEFAULT_SIZE,
   normalizeGenerationComplexity,
+  stampGeneratedArtworkSize,
   resolveOrientation,
   resolveOrientationIntent,
   sizeFromComplexityAndAspectRatio,

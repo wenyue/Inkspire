@@ -80,6 +80,22 @@ function buildJsonEstimationPrompt({ prompt, referenceImages = {} }) {
   ].filter((line, index, lines) => line !== "" || lines[index - 1] !== "").join("\n");
 }
 
+function buildJsonInspectionPrompt({ prompt, referenceImages = {} }) {
+  const references = referenceImageLines(referenceImages);
+  return [
+    "You are the Inkspire calligraphy text verification worker.",
+    "",
+    "Inspect the referenced local candidate image and return exactly one JSON object.",
+    "Do not generate or modify an image. Do not return Markdown.",
+    references.length > 0 ? "" : "",
+    references.length > 0 ? "Reference images are available at these trusted local file paths:" : "",
+    ...references,
+    "",
+    "Use this exact Chinese verification brief:",
+    prompt || ""
+  ].filter((line, index, lines) => line !== "" || lines[index - 1] !== "").join("\n");
+}
+
 function isPngBuffer(buffer) {
   return Buffer.isBuffer(buffer)
     && buffer.length > pngSignature.length
@@ -257,6 +273,7 @@ function runCodexProcess({ command, args, cwd, eventsPath, outputPath, spawnImpl
       if (code !== 0) {
         const error = new Error(`Codex exited with code ${code}`);
         error.codexProcessMs = codexProcessMs;
+        error.exitCode = code;
         reject(error);
         return;
       }
@@ -279,7 +296,7 @@ async function runCodexImageGeneration(options) {
     reasoningEffort: runtime.codexReasoningEffort,
     prompt: buildImageGenerationPrompt({
       prompt: options.prompt || "",
-      canvas: runtime.generationCanvas,
+      canvas: options.canvas || runtime.generationCanvas,
       referenceImages: options.referenceImages
     })
   });
@@ -361,11 +378,78 @@ async function runCodexJsonEstimation(options) {
   };
 }
 
+async function runCodexJsonInspection(options) {
+  const runtime = runtimeConfig(options.config);
+  const jobDir = options.jobDir || path.join(os.tmpdir(), `inkspire-calligraphy-verification-${Date.now()}`);
+  const eventsPath = options.eventsPath || path.join(jobDir, "codex-inspection-events.jsonl");
+  const outputPath = options.outputPath || path.join(jobDir, "codex-inspection-stderr.log");
+  const command = runtime.codexCommand || "codex";
+  const args = buildCodexArgs({
+    model: runtime.codexModel,
+    reasoningEffort: runtime.codexReasoningEffort,
+    enableImageGeneration: false,
+    prompt: buildJsonInspectionPrompt({
+      prompt: options.prompt || "",
+      referenceImages: options.referenceImages
+    })
+  });
+
+  let processResult;
+  try {
+    processResult = await runCodexProcess({
+      command,
+      args,
+      cwd: jobDir,
+      eventsPath,
+      outputPath,
+      spawnImpl: options.spawnImpl || spawn
+    });
+  } catch (error) {
+    const stderr = outputPath && fs.existsSync(outputPath) ? fs.readFileSync(outputPath, "utf8") : "";
+    error.diagnostics = {
+      reason: "codex_process_failed",
+      status: "process_error",
+      ...(Number.isInteger(error.exitCode) ? { exit_code: error.exitCode } : {}),
+      ...(Number.isFinite(error.codexProcessMs) ? { codex_process_ms: error.codexProcessMs } : {}),
+      possible_safety_block: safetyPattern.test(stderr)
+    };
+    throw error;
+  }
+
+  const text = readJsonLines(eventsPath).map(eventText).filter(Boolean).join("\n");
+  let json;
+  try {
+    json = parseJsonObjectFromText(text);
+  } catch (error) {
+    const stderr = outputPath && fs.existsSync(outputPath) ? fs.readFileSync(outputPath, "utf8") : "";
+    error.diagnostics = {
+      reason: "json_parse_failed",
+      status: "invalid_json",
+      codex_process_ms: processResult.codexProcessMs,
+      possible_safety_block: safetyPattern.test(`${text}\n${stderr}`)
+    };
+    throw error;
+  }
+  return {
+    text,
+    json,
+    diagnostics: {
+      reason: "json_calligraphy_inspection",
+      codex_process_ms: processResult.codexProcessMs,
+      stderr_tail: outputPath && fs.existsSync(outputPath)
+        ? fs.readFileSync(outputPath, "utf8").split(/\r?\n/).filter(Boolean).slice(-20).join("\n")
+        : ""
+    }
+  };
+}
+
 module.exports = {
   buildCodexArgs,
   buildImageGenerationPrompt,
+  buildJsonInspectionPrompt,
   buildJsonEstimationPrompt,
   diagnoseCodexImageGeneration,
   runCodexImageGeneration,
-  runCodexJsonEstimation
+  runCodexJsonEstimation,
+  runCodexJsonInspection
 };
