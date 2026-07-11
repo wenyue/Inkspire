@@ -188,6 +188,80 @@ test("painting prompt selects traditional techniques instead of requiring a tech
   assert.match(prompt, /所用技法.*服务于物象结构/);
 });
 
+test("painting prompt translates every mood into observable composition and brushwork", () => {
+  const config = loadConfig(root);
+  const expectations = {
+    "清雅": /墨色清润克制.*设色少而有层次/,
+    "空灵": /主体疏朗.*气口开阔.*不是素材化雾气/,
+    "雄浑": /山体或主体结构完整.*笔墨厚实.*不靠舞台光效/,
+    "古拙": /线质朴厚.*造型简劲.*不等于泛黄做旧/,
+    "明丽": /色相清洁.*明度关系清楚.*不使用荧光高饱和/
+  };
+
+  for (const [paintingMood, expectation] of Object.entries(expectations)) {
+    const prompt = buildArtworkPrompt({
+      type: "painting",
+      answers: { painting_subject: "山水", painting_mood: paintingMood },
+      config
+    });
+    assert.match(prompt, /气质的可观察落实:/);
+    assert.match(prompt, expectation, paintingMood);
+  }
+});
+
+test("painting prompt resolves brushwork and palette as primary, support, and conflicts", () => {
+  const config = loadConfig(root);
+  const cases = [
+    { brushwork: "工笔", palette: "水墨", primary: /以严谨勾线与分染塑造结构/, support: /墨分五色/, avoid: /不得把工笔处理成均匀矢量描边/ },
+    { brushwork: "写意", palette: "重彩", primary: /以概括用笔与墨色节奏统摄造型/, support: /重彩服从笔墨结构/, avoid: /不得堆叠不受笔势约束的装饰性色块/ },
+    { brushwork: "白描", palette: "青绿", primary: /以线为唯一造型骨架/, support: /青绿只作极少量关键部位点醒/, avoid: /不得大面积平涂青绿而破坏白描主导/ },
+    { brushwork: "没骨", palette: "浅绛", primary: /以色墨直接塑形，不另加硬质轮廓线/, support: /浅绛以淡赭与水墨层次辅助体积/, avoid: /不得补上工笔式封闭勾线/ }
+  ];
+
+  for (const item of cases) {
+    const prompt = buildArtworkPrompt({
+      type: "painting",
+      answers: {
+        painting_subject: "花鸟",
+        painting_brushwork: item.brushwork,
+        painting_palette: item.palette
+      },
+      config
+    });
+    assert.match(prompt, /技法与设色兼容方案:/);
+    assert.match(prompt, new RegExp(`主导技法:.*${item.brushwork}`));
+    assert.match(prompt, item.primary);
+    assert.match(prompt, new RegExp(`辅助设色:.*${item.palette}`));
+    assert.match(prompt, item.support);
+    assert.match(prompt, /禁用冲突效果:/);
+    assert.match(prompt, item.avoid);
+    assert.doesNotMatch(prompt, /undefined|技法与设色等权叠加/);
+  }
+});
+
+test("painting compatibility resolver covers every configured brushwork and palette pair", () => {
+  const config = loadConfig(root);
+  const brushworks = ["工笔", "写意", "白描", "没骨"];
+  const palettes = ["水墨", "青绿", "浅绛", "重彩"];
+
+  for (const paintingBrushwork of brushworks) {
+    for (const paintingPalette of palettes) {
+      const prompt = buildArtworkPrompt({
+        type: "painting",
+        answers: {
+          painting_subject: "花鸟",
+          painting_brushwork: paintingBrushwork,
+          painting_palette: paintingPalette
+        },
+        config
+      });
+      assert.match(prompt, /主导技法:/, `${paintingBrushwork} + ${paintingPalette}`);
+      assert.match(prompt, /辅助设色:/, `${paintingBrushwork} + ${paintingPalette}`);
+      assert.match(prompt, /禁用冲突效果:/, `${paintingBrushwork} + ${paintingPalette}`);
+    }
+  }
+});
+
 test("artwork prompt describes generation density before user notes and final direction", () => {
   const prompt = buildArtworkPrompt({
     type: "painting",
@@ -327,12 +401,46 @@ test("classic reference prompt asks for a new painting without frames or direct 
     config: loadConfig(root)
   });
 
-  assert.match(prompt, /古代名作参考/);
+  assert.match(prompt, /东亚历代绘画参考/);
   assert.match(prompt, /溪山行旅图/);
   assert.match(prompt, /范宽/);
   assert.match(prompt, /生成一幅新的/);
   assert.match(prompt, /不直接复制原作/);
   assert.match(prompt, /不要画框、展墙、相框、博物馆陈列背景/);
+});
+
+test("classic references preserve Japanese and Korean painting traditions instead of defaulting to Chinese ink", () => {
+  const config = loadConfig(root);
+  const cases = [
+    {
+      region: "日本",
+      expected: /日本绘画传统边界:.*保留原作所属日本绘画传统的构图、线描、设色与材质关系.*不得自动改写为中国水墨画/
+    },
+    {
+      region: "韩国",
+      expected: /朝鲜半岛绘画传统边界:.*保留原作所属朝鲜半岛绘画传统的构图、笔墨、设色与材质关系.*不得自动改写为中国水墨画/
+    }
+  ];
+
+  for (const item of cases) {
+    const prompt = buildArtworkPrompt({
+      type: "painting",
+      answers: {
+        work_type: "painting",
+        creation_mode: "classic_reference",
+        classic_artwork_id: `classic-${item.region}`,
+        classic_artwork_title: "馆藏作品",
+        classic_artwork_region: item.region,
+        classic_artwork_category: "山水"
+      },
+      config
+    });
+    assert.match(prompt, /东亚历代绘画参考:/);
+    assert.match(prompt, item.expected);
+    assert.match(prompt, /不得强行套用中国画技法清单/);
+    assert.doesNotMatch(prompt, /生成一幅新的 Inkspire 中国画或东亚绘画作品/);
+    assert.doesNotMatch(prompt, /中国画生成提示词助手|创作一幅中国画/);
+  }
 });
 
 test("artwork prompt renders configured sections instead of hardcoded rule blocks", () => {
