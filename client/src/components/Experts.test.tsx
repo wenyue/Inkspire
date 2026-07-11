@@ -1,32 +1,48 @@
-import { render, screen } from "@testing-library/react";
-import { describe, expect, test } from "vitest";
+import { cleanup, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, test } from "vitest";
 import Experts from "./Experts";
 
+afterEach(cleanup);
+
 describe("Experts", () => {
-  test("labels reference images and unverified profile boundaries explicitly", () => {
+  test("shows Wu Jiayin's verified profile and authorized works without attribution labels", () => {
     render(<Experts
       experts={[{
-        id: "one", name: "某艺术家", region: "广东", bio: "未经核验履历", credentials: ["未经核验资质"],
-        sampleImages: ["/sample.webp"], services: []
+        id: "wu_jiayin",
+        name: { "zh-Hans": "吴嘉茵", "zh-Hant": "吳嘉茵", en: "Wu Jiayin" },
+        region: { "zh-Hans": "广东省", "zh-Hant": "廣東省", en: "Guangdong, China" },
+        bio: {
+          "zh-Hans": "中山大学哲学博士，中国书法家协会会员。",
+          "zh-Hant": "中山大學哲學博士，中國書法家協會會員。",
+          en: "PhD in Philosophy from Sun Yat-sen University and member of the China Calligraphers Association."
+        },
+        credentials: [{
+          "zh-Hans": "中国书法家协会会员",
+          "zh-Hant": "中國書法家協會會員",
+          en: "China Calligraphers Association member"
+        }],
+        sampleImages: ["/one.webp", "/two.webp", "/three.webp"], services: []
       }]}
       title="雅匠" locale="zh-Hans" serviceHeading="可咨询方向" extraServiceName="装裱咨询"
-      extraServiceDescription="说明" expectationLabel="按需评估" sampleHeading="参考方向（非专家作品）"
-      profileNotice="身份、履历与档期需在咨询前另行确认。" serviceBoundary="服务范围、费用与交付以双方确认为准。"
+      extraServiceDescription="说明" expectationLabel="专业资历" sampleHeading="代表作品"
+      profileNotice="吴嘉茵为平台已入驻专家。" serviceBoundary="服务范围、费用与交付以双方确认为准。"
     />);
-    expect(screen.getByText("参考方向（非专家作品）")).toBeInTheDocument();
-    expect(screen.getByText("身份、履历与档期需在咨询前另行确认。")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "吴嘉茵" })).toBeInTheDocument();
+    expect(screen.getByText("广东省")).toBeInTheDocument();
+    expect(screen.getByText(/中山大学哲学博士/)).toBeInTheDocument();
+    expect(screen.getByText("中国书法家协会会员")).toBeInTheDocument();
+    expect(screen.getAllByRole("img", { name: /代表作品/ })).toHaveLength(3);
     expect(screen.getByText("服务范围、费用与交付以双方确认为准。")).toBeInTheDocument();
-    expect(screen.queryByText("未经核验履历")).not.toBeInTheDocument();
-    expect(screen.queryByText("未经核验资质")).not.toBeInTheDocument();
+    expect(screen.queryByText(/非专家作品|承接人待确认|媒体来源|授权/)).not.toBeInTheDocument();
   });
 
-  test("localizes the platform matching profile", () => {
+  test("localizes Wu Jiayin's onboarded profile", () => {
     render(<Experts
       experts={[{
-        id: "platform_artisan_match",
-        name: { "zh-Hans": "平台合作雅匠", en: "Platform artisan matching" },
-        region: { "zh-Hans": "承接人待确认", en: "Artisan to be confirmed" },
-        bio: {},
+        id: "wu_jiayin",
+        name: { "zh-Hans": "吴嘉茵", en: "Wu Jiayin" },
+        region: { "zh-Hans": "广东省", en: "Guangdong, China" },
+        bio: { "zh-Hans": "书法家", en: "Calligrapher" },
         services: []
       }]}
       title="Artisans" locale="en" serviceHeading="Consultation" extraServiceName="Mounting"
@@ -34,8 +50,9 @@ describe("Experts", () => {
       profileNotice="Identity confirmed later." serviceBoundary="Final scope is confirmed separately."
     />);
 
-    expect(screen.getByRole("heading", { name: "Platform artisan matching" })).toBeInTheDocument();
-    expect(screen.getByText("Artisan to be confirmed")).toBeInTheDocument();
-    expect(screen.queryByText("承接人待确认")).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Wu Jiayin" })).toBeInTheDocument();
+    expect(screen.getByText("Guangdong, China")).toBeInTheDocument();
+    expect(screen.getByText("Calligrapher")).toBeInTheDocument();
+    expect(screen.queryByText("广东省")).not.toBeInTheDocument();
   });
 });

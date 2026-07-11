@@ -22,10 +22,18 @@ test("loads required Inkspire configuration", () => {
   });
   assert.equal(config.app.image.outputFormat, "webp");
   assert.equal(config.app.image.webpQuality, 82);
-  assert.equal(config.experts[0].id, "platform_artisan_match");
-  assert.equal(config.experts[0].name["zh-Hans"], "平台合作雅匠");
-  assert.equal(config.experts[0].name.en, "Platform artisan matching");
-  assert.equal(config.experts[0].region["zh-Hant"], "承接人待確認");
+  assert.equal(config.experts[0].id, "wu_jiayin");
+  assert.equal(config.experts[0].name["zh-Hans"], "吴嘉茵");
+  assert.equal(config.experts[0].name.en, "Wu Jiayin");
+  assert.equal(config.experts[0].region["zh-Hant"], "廣東省");
+  assert.deepEqual(config.experts[0].sampleImages, [
+    "/experts/wu-jiayin-listen-to-rain.webp",
+    "/experts/wu-jiayin-lotus.webp",
+    "/experts/wu-jiayin-long-joy.webp"
+  ]);
+  for (const image of config.experts[0].sampleImages) {
+    assert.ok(fs.existsSync(path.join(root, "client/public", image)));
+  }
   assert.deepEqual(config.experts[0].services.map((service) => service.id), [
     "expert_custom",
     "expert_guided"
@@ -120,7 +128,7 @@ test("public config exposes only UI-safe fields", () => {
   const exposed = publicConfig(loadConfig(root));
   assert.equal(exposed.name, "墨起");
   assert.equal(exposed.defaultLocale, "zh-Hans");
-  assert.equal(exposed.experts[0].name["zh-Hans"], "平台合作雅匠");
+  assert.equal(exposed.experts[0].name["zh-Hans"], "吴嘉茵");
   assert.equal(exposed.experts[0].services[0].id, "expert_custom");
   assert.equal(Object.hasOwn(exposed, "codex"), false);
   assert.equal(Object.hasOwn(exposed, "runtime"), false);

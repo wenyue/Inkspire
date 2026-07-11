@@ -158,8 +158,8 @@ const CLIENT_OVERRIDES: Dictionaries = {
       extraServiceName: "装裱与落地咨询",
       extraServiceDescription: "确认尺寸、材质和制作路径，适合送礼或空间陈设。",
       expectation: "价格按需求评估",
-      sampleHeading: "参考方向（非专家作品）",
-      profileNotice: "此页展示平台可协助对接的方向；具体承接人的身份、履历与档期需在咨询后确认。",
+      sampleHeading: "代表作品",
+      profileNotice: "吴嘉茵为平台已入驻专家，具体档期与交付安排将在咨询后确认。",
       serviceBoundary: "页面金额仅作平台估算，不构成报价；服务范围、费用、修改轮次与交付时间均以承接确认单为准。",
       productionUnavailable: "暂未开放制作咨询"
     },
@@ -339,8 +339,8 @@ const CLIENT_OVERRIDES: Dictionaries = {
       extraServiceName: "裝裱與落地諮詢",
       extraServiceDescription: "確認尺寸、材質和製作路徑，適合送禮或空間陳設。",
       expectation: "價格按需求評估",
-      sampleHeading: "參考方向（非專家作品）",
-      profileNotice: "此頁展示平台可協助對接的方向；具體承接人的身份、履歷與檔期需在諮詢後確認。",
+      sampleHeading: "代表作品",
+      profileNotice: "吳嘉茵為平台已入駐專家，具體檔期與交付安排將在諮詢後確認。",
       serviceBoundary: "頁面金額僅作平台估算，不構成報價；服務範圍、費用、修改輪次與交付時間均以承接確認單為準。",
       productionUnavailable: "暫未開放製作諮詢"
     },
@@ -519,8 +519,8 @@ const CLIENT_OVERRIDES: Dictionaries = {
       extraServiceName: "Framing and production advice",
       extraServiceDescription: "Clarify size, material, and production path for gifting or interiors.",
       expectation: "Pricing is assessed by request",
-      sampleHeading: "Reference directions (not the artisan's work)",
-      profileNotice: "This page shows directions the platform can help match. The assigned artisan's identity, credentials, and availability are confirmed after consultation.",
+      sampleHeading: "Selected works",
+      profileNotice: "Wu Jiayin is an onboarded expert. Availability and delivery arrangements are confirmed after consultation.",
       serviceBoundary: "Displayed amounts are platform estimates, not quotations. Scope, fees, revisions, and delivery are set in the final engagement confirmation.",
       productionUnavailable: "Production consultation is not open yet"
     },

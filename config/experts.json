@@ -1,40 +1,52 @@
 [
   {
-    "id": "platform_artisan_match",
+    "id": "wu_jiayin",
     "name": {
-      "zh-Hans": "平台合作雅匠",
-      "zh-Hant": "平台合作雅匠",
-      "en": "Platform artisan matching"
+      "zh-Hans": "吴嘉茵",
+      "zh-Hant": "吳嘉茵",
+      "en": "Wu Jiayin"
     },
     "region": {
-      "zh-Hans": "承接人待确认",
-      "zh-Hant": "承接人待確認",
-      "en": "Artisan to be confirmed"
+      "zh-Hans": "广东省",
+      "zh-Hant": "廣東省",
+      "en": "Guangdong, China"
     },
     "bio": {
-      "zh-Hans": "提供书画创作与落地咨询方向；具体承接人的身份、履历、档期及服务能力需在咨询前另行确认。",
-      "zh-Hant": "提供書畫創作與落地諮詢方向；具體承接人的身份、履歷、檔期及服務能力需在諮詢前另行確認。",
-      "en": "Provides matching directions for artwork creation and production. The assigned artisan's identity, credentials, availability, and service scope are confirmed before engagement."
+      "zh-Hans": "中山大学哲学博士，中国书法家协会会员，现为广东技术师范大学教师，长期从事书法理论、创作与美育实践。",
+      "zh-Hant": "中山大學哲學博士，中國書法家協會會員，現為廣東技術師範大學教師，長期從事書法理論、創作與美育實踐。",
+      "en": "PhD in Philosophy from Sun Yat-sen University, member of the China Calligraphers Association, and faculty member at Guangdong Polytechnic Normal University, working across calligraphy theory, practice, and arts education."
     },
     "phone": "",
     "wechat": "",
-    "credentials": [],
+    "credentials": [
+      {
+        "zh-Hans": "中国书法家协会会员",
+        "zh-Hant": "中國書法家協會會員",
+        "en": "China Calligraphers Association member"
+      },
+      {
+        "zh-Hans": "中山大学哲学博士",
+        "zh-Hant": "中山大學哲學博士",
+        "en": "PhD, Sun Yat-sen University"
+      }
+    ],
     "sampleImages": [
-      "/classic-artworks/中国-han-gan-night-shining-white-39901-thumb.webp",
-      "/classic-artworks/中国-ni-zan-woods-and-valleys-of-mount-yu-45636-thumb.webp"
+      "/experts/wu-jiayin-listen-to-rain.webp",
+      "/experts/wu-jiayin-lotus.webp",
+      "/experts/wu-jiayin-long-joy.webp"
     ],
     "services": [
       {
         "id": "expert_custom",
         "name": {
-          "zh-Hans": "定制创作咨询",
-          "zh-Hant": "定製創作諮詢",
-          "en": "Custom artwork consultation"
+          "zh-Hans": "专家定制",
+          "zh-Hant": "專家定製",
+          "en": "Expert Custom"
         },
         "description": {
-          "zh-Hans": "确认承接雅匠后，由其直接创作或深度主导；当前金额仅作平台估算。",
-          "zh-Hant": "確認承接雅匠後，由其直接創作或深度主導；目前金額僅作平台估算。",
-          "en": "After an artisan is confirmed, they create or lead the work closely. Current amounts are platform estimates only."
+          "zh-Hans": "由吴嘉茵直接创作或深度主导；当前金额仅作平台估算。",
+          "zh-Hant": "由吳嘉茵直接創作或深度主導；目前金額僅作平台估算。",
+          "en": "Wu Jiayin creates or closely leads the work. Current amounts are platform estimates only."
         },
         "priceEstimate": {
           "base": 1800,
@@ -45,14 +57,14 @@
       {
         "id": "expert_guided",
         "name": {
-          "zh-Hans": "创作指导咨询",
-          "zh-Hant": "創作指導諮詢",
-          "en": "Creative guidance consultation"
+          "zh-Hans": "专家指导",
+          "zh-Hant": "專家指導",
+          "en": "Expert Guided"
         },
         "description": {
-          "zh-Hans": "确认承接雅匠后，由其提供方向、修改意见或把关；当前金额仅作平台估算。",
-          "zh-Hant": "確認承接雅匠後，由其提供方向、修改意見或把關；目前金額僅作平台估算。",
-          "en": "After an artisan is confirmed, they provide direction or review. Current amounts are platform estimates only."
+          "zh-Hans": "由吴嘉茵提供创作方向、修改意见或把关；当前金额仅作平台估算。",
+          "zh-Hant": "由吳嘉茵提供創作方向、修改意見或把關；目前金額僅作平台估算。",
+          "en": "Wu Jiayin provides creative direction, revision notes, or review. Current amounts are platform estimates only."
         },
         "priceEstimate": {
           "base": 600,

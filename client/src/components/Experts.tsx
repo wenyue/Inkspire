@@ -44,6 +44,15 @@ export default function Experts({
               <span className="expert-pricing-note">{expectationLabel}</span>
             </div>
           </div>
+          <p className="expert-bio">{localizedText(expert.bio, locale)}</p>
+          {expert.credentials?.length ? (
+            <div className="expert-credentials" aria-label={expectationLabel}>
+              {expert.credentials.map((credential) => {
+                const label = localizedText(credential, locale);
+                return <span key={label}>{label}</span>;
+              })}
+            </div>
+          ) : null}
           <p className="expert-profile-notice">{profileNotice}</p>
           {expert.sampleImages?.length ? (
             <div className="expert-samples">

@@ -115,7 +115,7 @@ const publicConfig: PublicConfig = {
   classicArtworks: classicArtworkSample,
   experts: [
     {
-      id: "platform_artisan_match",
+      id: "wu_jiayin",
       name: "吴嘉茵",
       region: "广东省",
       bio: "中国书法家协会会员，中山大学中国美学博士，岭南书画领域青年艺术家。",
@@ -123,8 +123,9 @@ const publicConfig: PublicConfig = {
       wechat: "",
       credentials: ["中国书法家协会会员", "中山大学中国美学博士"],
       sampleImages: [
-        "/classic-artworks/中国-han-gan-night-shining-white-39901-thumb.webp",
-        "/previews/options/painting-subject-0-landscape.webp"
+        "/experts/wu-jiayin-listen-to-rain.webp",
+        "/experts/wu-jiayin-lotus.webp",
+        "/experts/wu-jiayin-long-joy.webp"
       ],
       services: [
         {
@@ -444,7 +445,7 @@ describe("App", () => {
         const body = init?.body ? JSON.parse(String(init.body)) : {};
         const multiplier = body.size === "large" ? 1.5 : body.size === "small" ? 0.75 : 1;
         return Response.json({
-          expert_id: "platform_artisan_match",
+          expert_id: "wu_jiayin",
           size: body.size || "medium",
           estimates: {
             expert_custom: { amount: Math.round(1800 * multiplier), currency: "CNY", rule: "按尺寸、复杂度和交付周期估算" },
@@ -2558,7 +2559,7 @@ describe("App", () => {
         "/api/records/record-1/production-estimate",
         expect.objectContaining({
           method: "POST",
-          body: JSON.stringify({ expertId: "platform_artisan_match", size: "large" })
+          body: JSON.stringify({ expertId: "wu_jiayin", size: "large" })
         })
       );
     });
@@ -2590,7 +2591,7 @@ describe("App", () => {
         "/api/records/record-1/production-estimate",
         expect.objectContaining({
           method: "POST",
-          body: JSON.stringify({ expertId: "platform_artisan_match", size: "medium" })
+          body: JSON.stringify({ expertId: "wu_jiayin", size: "medium" })
         })
       );
     });
@@ -2702,7 +2703,7 @@ describe("App", () => {
         "/api/records/record-1/production-estimate",
         expect.objectContaining({
           method: "POST",
-          body: JSON.stringify({ expertId: "platform_artisan_match", size: "large" })
+          body: JSON.stringify({ expertId: "wu_jiayin", size: "large" })
         })
       );
     });
@@ -2792,7 +2793,7 @@ describe("App", () => {
         expect.objectContaining({
           method: "POST",
           body: JSON.stringify({
-            expertId: "platform_artisan_match",
+            expertId: "wu_jiayin",
             serviceId: "expert_custom",
             size: {
               preset_id: "custom",
@@ -3127,12 +3128,14 @@ describe("App", () => {
     expect(screen.getByText("专家定制")).toBeInTheDocument();
     expect(screen.getByText("专家指导")).toBeInTheDocument();
     expect(screen.getByText("装裱与落地咨询")).toBeInTheDocument();
-    expect(screen.queryByText("中国书法家协会会员")).not.toBeInTheDocument();
-    expect(screen.queryByText("中山大学中国美学博士")).not.toBeInTheDocument();
-    expect(screen.getByText("参考方向（非专家作品）")).toBeInTheDocument();
-    expect(screen.getByText("此页展示平台可协助对接的方向；具体承接人的身份、履历与档期需在咨询后确认。")).toBeInTheDocument();
+    expect(screen.getByText("中国书法家协会会员")).toBeInTheDocument();
+    expect(screen.getByText("中山大学中国美学博士")).toBeInTheDocument();
+    expect(screen.getByText(/岭南书画领域青年艺术家/)).toBeInTheDocument();
+    expect(screen.getByText("代表作品")).toBeInTheDocument();
+    expect(screen.getByText("吴嘉茵为平台已入驻专家，具体档期与交付安排将在咨询后确认。")).toBeInTheDocument();
     expect(screen.getByText("页面金额仅作平台估算，不构成报价；服务范围、费用、修改轮次与交付时间均以承接确认单为准。")).toBeInTheDocument();
-    expect(screen.getAllByRole("img", { name: /参考方向（非专家作品）/ })).toHaveLength(2);
+    expect(screen.getAllByRole("img", { name: /代表作品/ })).toHaveLength(3);
+    expect(screen.queryByText(/媒体来源|授权/)).not.toBeInTheDocument();
     expect(container.querySelectorAll(".expert-sample-fallback")).toHaveLength(0);
     expect(screen.queryByText("联系方式待确认")).not.toBeInTheDocument();
   });

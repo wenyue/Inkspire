@@ -155,7 +155,7 @@ test("GET /api/config/public returns tabs/questions/experts without codex intern
 
     assert.equal(response.body.i18n["zh-Hans"].tabs.studio, "画案");
     assert.ok(response.body.questions.painting.length > 0);
-    assert.equal(response.body.experts[0].id, "platform_artisan_match");
+    assert.equal(response.body.experts[0].id, "wu_jiayin");
     assert.equal(typeof response.body.productionAvailable, "boolean");
     assert.equal(Object.hasOwn(response.body, "runtime"), false);
     assert.equal(Object.hasOwn(response.body, "codexCommand"), false);
@@ -848,7 +848,7 @@ test("POST /api/records/:id/production-estimate returns expert_custom > expert_g
 
     const response = await agent
       .post(`/api/records/${created.body.record.id}/production-estimate`)
-      .send({ expertId: "platform_artisan_match" })
+      .send({ expertId: "wu_jiayin" })
       .expect(200);
 
     assert.ok(response.body.estimates.expert_custom.amount > response.body.estimates.expert_guided.amount);
@@ -867,7 +867,7 @@ test("POST /api/records/:id/production-estimate scales estimates by selected siz
 
     const response = await agent
       .post(`/api/records/${created.body.record.id}/production-estimate`)
-      .send({ expertId: "platform_artisan_match", size: "large" })
+      .send({ expertId: "wu_jiayin", size: "large" })
       .expect(200);
 
     assert.equal(response.body.size, "large");
@@ -887,7 +887,7 @@ test("POST /api/records/:id/production-estimate scales estimates by generation c
 
     const response = await agent
       .post(`/api/records/${created.body.record.id}/production-estimate`)
-      .send({ expertId: "platform_artisan_match", size: "medium" })
+      .send({ expertId: "wu_jiayin", size: "medium" })
       .expect(200);
 
     assert.equal(response.body.estimates.expert_custom.amount, 2250);
@@ -906,7 +906,7 @@ test("POST /api/records/:id/production-orders rejects orders while production co
 
     const response = await agent
       .post(`/api/records/${created.body.record.id}/production-orders`)
-      .send({ expertId: "platform_artisan_match", serviceId: "expert_custom", referenceLevel: 3 })
+      .send({ expertId: "wu_jiayin", serviceId: "expert_custom", referenceLevel: 3 })
       .expect(409);
 
     assert.equal(response.body.code, "production_unavailable");
@@ -946,7 +946,7 @@ test("POST /api/records/:id/production-orders creates retrievable order with siz
     const response = await agent
       .post(`/api/records/${created.body.record.id}/production-orders`)
       .send({
-        expertId: "platform_artisan_match",
+        expertId: "wu_jiayin",
         serviceId: "expert_custom",
         size: { preset_id: "custom", label: "自定义尺寸", width_cm: 42, height_cm: 66 },
         referenceLevel: 3
@@ -977,14 +977,14 @@ test("POST /api/records/:id/production-orders creates retrievable order with siz
       const stored = JSON.parse(db.prepare("SELECT order_json FROM production_orders WHERE id = ?")
         .get(response.body.order.id).order_json);
       db.prepare("UPDATE production_orders SET order_json = ? WHERE id = ?")
-        .run(JSON.stringify({ ...stored, expert_id: "wu_jiayin" }), response.body.order.id);
+        .run(JSON.stringify({ ...stored, expert_id: "platform_artisan_match" }), response.body.order.id);
     } finally {
       db.close();
     }
     const legacyLookup = await agent
       .get(`/api/production-orders/${response.body.order.id}`)
       .expect(200);
-    assert.equal(legacyLookup.body.order.expert_id, "platform_artisan_match");
+    assert.equal(legacyLookup.body.order.expert_id, "wu_jiayin");
   }, {
     configure: (config) => {
       config.app.productionContact = { phone: "020-12345678", wechat: "" };
@@ -1007,7 +1007,7 @@ test("POST /api/records/:id/production-orders retries when a short order id alre
 
     const response = await agent
       .post(`/api/records/${created.body.record.id}/production-orders`)
-      .send({ expertId: "platform_artisan_match", serviceId: "expert_custom", referenceLevel: 3 })
+      .send({ expertId: "wu_jiayin", serviceId: "expert_custom", referenceLevel: 3 })
       .expect(201);
 
     assert.equal(response.body.order.id, "ord-bbbbbbbb");

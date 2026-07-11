@@ -66,6 +66,23 @@ for (const viewport of [
   { width: 320, height: 568 },
   { width: 390, height: 844 }
 ]) {
+  test(`${viewport.width}px phone shows Wu Jiayin's authorized works without overflow`, async ({ page }) => {
+    await page.setViewportSize(viewport);
+    await page.goto("/");
+    await page.getByRole("button", { name: "雅匠" }).click();
+
+    await expect(page.getByRole("heading", { name: "吴嘉茵" })).toBeVisible();
+    await expect(page.getByText("代表作品")).toBeVisible();
+    const works = page.getByRole("img", { name: /代表作品/ });
+    await expect(works).toHaveCount(3);
+    await expect(page.getByText(/非专家作品|承接人待确认|媒体来源|授权/)).toHaveCount(0);
+    expect(await works.first().evaluate((image) => window.getComputedStyle(image).objectFit)).toBe("contain");
+    const artworkFrame = await works.first().locator("..").boundingBox();
+    expect(artworkFrame).not.toBeNull();
+    expect(artworkFrame!.height).toBeGreaterThan(artworkFrame!.width);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)).toBe(false);
+  });
+
   test(`${viewport.width}px phone keeps verified classic references and script sources trustworthy`, async ({ page }) => {
     await page.setViewportSize(viewport);
     await page.goto("/");

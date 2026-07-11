@@ -30,7 +30,7 @@ export interface Expert {
   bio: string | Record<string, string>;
   phone?: string;
   wechat?: string;
-  credentials?: string[];
+  credentials?: Array<string | Record<string, string>>;
   sampleImages?: string[];
   services: ExpertService[];
 }
