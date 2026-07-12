@@ -125,6 +125,7 @@ Create `client/src/components/BackgroundMusic.test.tsx`:
 
 ```tsx
 import { fireEvent, render, waitFor } from "@testing-library/react";
+import { StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import BackgroundMusic from "./BackgroundMusic";
 
@@ -139,9 +140,14 @@ class FakeAudio extends EventTarget {
   src: string;
   preload = "";
   volume = 1;
-  play = vi.fn<() => Promise<void>>(() => Promise.resolve());
-  pause = vi.fn<() => void>();
-  load = vi.fn<() => void>();
+  play = vi.fn<[], Promise<void>>(() => Promise.resolve());
+  pause = vi.fn<[], void>();
+  load = vi.fn<[], void>();
+  removeAttribute = vi.fn<[string], void>((name) => {
+    if (name === "src") {
+      this.src = "";
+    }
+  });
 
   constructor(src = "") {
     super();
@@ -177,6 +183,8 @@ describe("BackgroundMusic", () => {
 
     expect(instances).toHaveLength(0);
     fireEvent.pointerDown(document.body);
+    expect(instances).toHaveLength(0);
+    fireEvent.click(document.body);
 
     await waitFor(() => expect(instances).toHaveLength(1));
     expect(instances[0].src).toBe(TRACKS[0]);
@@ -192,36 +200,45 @@ describe("BackgroundMusic", () => {
     render(<BackgroundMusic />);
     fireEvent.keyDown(document.body, { key: "Enter" });
     await waitFor(() => expect(instances).toHaveLength(1));
+    expect(instances[0].play).toHaveBeenCalledTimes(1);
 
     instances[0].dispatchEvent(new Event("ended"));
     await waitFor(() => expect(instances).toHaveLength(2));
     expect(instances[1].initialSrc).toBe(TRACKS[1]);
+    expect(instances[1].play).toHaveBeenCalledTimes(1);
 
     instances[1].dispatchEvent(new Event("ended"));
     await waitFor(() => expect(instances).toHaveLength(3));
     expect(instances[2].initialSrc).toBe(TRACKS[2]);
+    expect(instances[2].play).toHaveBeenCalledTimes(1);
 
     instances[2].dispatchEvent(new Event("ended"));
     await waitFor(() => expect(instances).toHaveLength(4));
     expect(instances[3].initialSrc).toBe(TRACKS[0]);
+    expect(instances[3].play).toHaveBeenCalledTimes(1);
   });
 
   it("skips rejected or failed tracks and stops after one failed pass", async () => {
-    playResults.push("reject", "reject", "reject");
+    playResults.push("reject", "resolve", "reject");
     render(<BackgroundMusic />);
-    fireEvent.pointerDown(document.body);
+    fireEvent.click(document.body);
+
+    await waitFor(() => expect(instances).toHaveLength(2));
+    instances[1].dispatchEvent(new Event("error"));
 
     await waitFor(() => expect(instances).toHaveLength(3));
     expect(instances.map((audio) => audio.initialSrc)).toEqual(TRACKS);
-
-    instances[2].dispatchEvent(new Event("error"));
-    await Promise.resolve();
-    expect(instances).toHaveLength(3);
+    await waitFor(() => {
+      expect(instances).toHaveLength(3);
+      expect(instances[2].pause).toHaveBeenCalledTimes(1);
+      expect(instances[2].removeAttribute).toHaveBeenCalledWith("src");
+      expect(instances[2].load).toHaveBeenCalledTimes(1);
+    });
   });
 
   it("skips a track that errors during playback", async () => {
     render(<BackgroundMusic />);
-    fireEvent.pointerDown(document.body);
+    fireEvent.click(document.body);
     await waitFor(() => expect(instances).toHaveLength(1));
 
     instances[0].dispatchEvent(new Event("error"));
@@ -229,17 +246,51 @@ describe("BackgroundMusic", () => {
     expect(instances[1].initialSrc).toBe(TRACKS[1]);
   });
 
-  it("removes interaction listeners and releases current audio on unmount", async () => {
-    const view = render(<BackgroundMusic />);
-    fireEvent.pointerDown(document.body);
+  it("ignores events from a released prior track", async () => {
+    render(<BackgroundMusic />);
+    fireEvent.click(document.body);
     await waitFor(() => expect(instances).toHaveLength(1));
 
-    view.unmount();
+    instances[0].dispatchEvent(new Event("ended"));
+    await waitFor(() => expect(instances).toHaveLength(2));
+
+    instances[0].dispatchEvent(new Event("error"));
+    instances[0].dispatchEvent(new Event("ended"));
+    expect(instances).toHaveLength(2);
+  });
+
+  it("starts only one audio instance in StrictMode", async () => {
+    render(
+      <StrictMode>
+        <BackgroundMusic />
+      </StrictMode>
+    );
+
+    fireEvent.click(document.body);
+
+    await waitFor(() => expect(instances).toHaveLength(1));
+    expect(instances[0].play).toHaveBeenCalledTimes(1);
+  });
+
+  it("removes interaction listeners and releases current audio on unmount", async () => {
+    const preInteractionView = render(<BackgroundMusic />);
+    preInteractionView.unmount();
+
+    fireEvent.click(document.body);
+    fireEvent.keyDown(document.body, { key: "Enter" });
+    expect(instances).toHaveLength(0);
+
+    const playbackView = render(<BackgroundMusic />);
+    fireEvent.click(document.body);
+    await waitFor(() => expect(instances).toHaveLength(1));
+
+    playbackView.unmount();
 
     expect(instances[0].pause).toHaveBeenCalledTimes(1);
-    expect(instances[0].src).toBe("");
+    expect(instances[0].removeAttribute).toHaveBeenCalledWith("src");
     expect(instances[0].load).toHaveBeenCalledTimes(1);
-    fireEvent.pointerDown(document.body);
+    fireEvent.click(document.body);
+    fireEvent.keyDown(document.body, { key: "Enter" });
     expect(instances).toHaveLength(1);
   });
 });
@@ -286,7 +337,11 @@ const BACKGROUND_MUSIC_VOLUME = 0.12;
 
 export default function BackgroundMusic() {
   useEffect(() => {
-    let currentAudio: HTMLAudioElement | null = null;
+    let currentAudio: {
+      audio: HTMLAudioElement;
+      onEnded: () => void;
+      onError: () => void;
+    } | null = null;
     let disposed = false;
     let started = false;
 
@@ -294,20 +349,26 @@ export default function BackgroundMusic() {
       if (!currentAudio) {
         return;
       }
-      currentAudio.pause();
-      currentAudio.src = "";
-      currentAudio.load();
+      const { audio, onEnded, onError } = currentAudio;
       currentAudio = null;
+      audio.removeEventListener("ended", onEnded);
+      audio.removeEventListener("error", onError);
+      audio.pause();
+      audio.removeAttribute("src");
+      audio.load();
     };
 
     const playTrack = (trackIndex: number, failedTrackCount: number) => {
-      if (disposed || failedTrackCount >= BACKGROUND_MUSIC_TRACKS.length) {
+      if (disposed) {
+        return;
+      }
+      if (failedTrackCount >= BACKGROUND_MUSIC_TRACKS.length) {
+        releaseCurrentAudio();
         return;
       }
 
       releaseCurrentAudio();
       const audio = new Audio(BACKGROUND_MUSIC_TRACKS[trackIndex]);
-      currentAudio = audio;
       audio.preload = "auto";
       audio.volume = BACKGROUND_MUSIC_VOLUME;
       let trackFinished = false;
@@ -321,17 +382,16 @@ export default function BackgroundMusic() {
       };
 
       const nextTrackIndex = (trackIndex + 1) % BACKGROUND_MUSIC_TRACKS.length;
-      audio.addEventListener("ended", () => moveToTrack(nextTrackIndex, 0), { once: true });
-      audio.addEventListener(
-        "error",
-        () => moveToTrack(nextTrackIndex, failedTrackCount + 1),
-        { once: true }
-      );
+      const onEnded = () => moveToTrack(nextTrackIndex, 0);
+      const onError = () => moveToTrack(nextTrackIndex, failedTrackCount + 1);
+      currentAudio = { audio, onEnded, onError };
+      audio.addEventListener("ended", onEnded, { once: true });
+      audio.addEventListener("error", onError, { once: true });
       void audio.play().catch(() => moveToTrack(nextTrackIndex, failedTrackCount + 1));
     };
 
     const removeStartListeners = () => {
-      window.removeEventListener("pointerdown", startPlayback);
+      window.removeEventListener("click", startPlayback);
       window.removeEventListener("keydown", startPlayback);
     };
 
@@ -344,7 +404,7 @@ export default function BackgroundMusic() {
       playTrack(0, 0);
     };
 
-    window.addEventListener("pointerdown", startPlayback, { passive: true });
+    window.addEventListener("click", startPlayback);
     window.addEventListener("keydown", startPlayback);
 
     return () => {
@@ -366,7 +426,7 @@ Run:
 npm run test --workspace client -- src/components/BackgroundMusic.test.tsx
 ```
 
-Expected: 5 tests PASS.
+Expected: 7 tests PASS.
 
 - [ ] **Step 3: Run the client type checker**
 

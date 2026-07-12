@@ -1,0 +1,275 @@
+import OpenCC from "opencc-js";
+import { newArtworkTitlesByObjectId } from "./classic-artwork-titles.mjs";
+
+const toTraditional = OpenCC.Converter({ from: "cn", to: "tw" });
+
+const focusByCategory = {
+  "山水": "画面可重点观察山势开合、虚实层次、皴染关系与行旅尺度。",
+  "花鸟": "画面可重点观察物象取势、线墨浓淡、设色呼应与留白节奏。",
+  "人物": "画面可重点观察人物姿态、衣纹组织、主次关系与叙事节奏。",
+  "佛道": "画面可重点观察法相塑造、线描秩序、空间层级与庄严气氛。",
+  "宫廷/风俗": "画面可重点观察场景调度、人物物象、空间层次与叙事节奏。",
+  "日本绘画": "画面可重点观察章法取舍、线描节奏、墨色层次与装饰意味。",
+  "朝鲜绘画": "画面可重点观察构图经营、笔墨层次、景物关系与时代气息。"
+};
+
+export function referenceFocusForCategory(category) {
+  const base = category === "日本绘画" || category === "朝鲜绘画"
+    ? "参考其画面章法、线描节奏、设色关系和东亚绘画气韵"
+    : `参考其${category}题材的构图、笔墨、设色和气韵`;
+  return `${base}，生成新的绘画作品，不直接复制原作。`;
+}
+
+const records = [
+  ["51777", "花卉折枝", "清 · 余省", "清代", "花鸟", "折枝花卉由舒展枝干串联疏密花叶，淡彩与墨线相互映衬，呈现清雅而轻盈的案头意趣"],
+  ["72710", "山水图", "僧介", "1599 年或 1659 年", "山水", "层峦沿纵向逐步抬升，溪岸、林木与远峰在烟岚中相接，以疏密变化营造幽深可游的山居境界"],
+  ["49131", "为渔翁作山水册", "清 · 樊圻", "1673 年", "山水", "册页以多段山水小景回应渔隐主题，近岸树石与远山水面交替展开，笔墨清润而富于观看节奏"],
+  ["39901", "照夜白图", "传 唐 · 韩幹", "约 750 年", "宫廷/风俗", "画家以克制而富弹性的线条刻画名马照夜白，昂首嘶鸣的姿态与系柱细节共同强化紧张生命力"],
+  ["40055", "明皇幸蜀图", "南宋 · 佚名", "12 世纪中叶", "山水", "青绿层峦间穿插栈道与行旅队伍，山石、云气和人物尺度彼此映照，将历史叙事融入险峻山水"],
+  ["39915", "夏山图", "传 北宋 · 屈鼎", "约 1050 年", "山水", "长卷以连绵峰峦、云气与水岸铺陈盛夏山景，主峰高耸而近岸细密，形成雄浑又可游可居的空间"],
+  ["36000", "江山图", "清 · 庄炯生", "清代", "山水", "江岸树石与远山隔水相望，淡墨层层推开空间，局部屋舍和舟影为开阔景致加入安静的人间气息"],
+  ["44510", "十王图", "南宋 · 金处士", "1195 年以前", "佛道", "十殿阎王及其眷属按等级分区铺陈，人物表情、服饰与案前仪仗细密，营造审判场面的肃穆秩序"],
+  ["41191", "寒梅图", "元 · 倪敬", "14 世纪", "花鸟", "老梅从画面一侧斜出，曲折枝干托起疏落花蕾，枯润墨色对照凸显寒中生意与清峭品格"],
+  ["45636", "虞山林壑图", "元 · 倪瓒", "1372 年", "山水", "隔岸式构图以疏林、平坡和远山分列水面两端，干笔淡墨与大片留白共同写出萧散澄明的虞山秋意"],
+  ["48948", "十六罗汉图", "明 · 吴彬", "1591 年", "佛道", "十六罗汉被置于奇石古木之间，夸张形貌与曲折衣纹相互呼应，在怪奇想象中保持宗教叙事的庄重"],
+  ["40081", "王羲之观鹅图", "元 · 钱选", "约 1295 年", "人物", "王羲之临水观鹅的雅事被安置于疏林坡岸之间，人物与白鹅相互顾盼，展现文人逸事的清幽情境"],
+  ["39668", "古木平远图", "北宋 · 郭熙", "约 1080 年", "山水", "古木盘曲于近岸，河谷与远山向水平方向徐徐延伸，浓淡墨色和寒林节奏构成平远山水的开阔气象"],
+  ["62739", "远谷瀑声深林图", "清 · 刘宇", "1678 年", "山水", "深林夹峙的山谷中瀑泉层层跌落，密树与危崖围合出幽邃空间，使观者仿佛循水声进入山中"],
+  ["49132", "寒山图", "清 · 龚贤", "约 1679 至 1689 年", "山水", "积墨山体在寒林与空水之间沉稳展开，反复皴染形成厚重层次，静寂景象中仍保留清晰的气脉走向"],
+  ["854002", "豳风七月图", "清 · 费晴湖", "18 世纪末至 19 世纪初", "宫廷/风俗", "画卷依《诗经·七月》铺陈四时农事与乡村生活，人物劳作、屋舍田畴和节令物候组成连续叙事"],
+  ["39936", "竹雀图", "北宋 · 宋徽宗", "12 世纪初", "花鸟", "数只雀鸟栖止于斜出的竹枝，羽毛刻画精微，竹叶转折轻健，动静相间中显出院体花鸟的清丽格调"],
+  ["40020", "幽谷泉声图", "清初 · 弘仁", "1661 年", "山水", "峭直山石与清瘦林木围合幽谷，泉流成为贯通上下的细线，简洁冷峻的笔墨传达遗民画家的孤高气质"],
+  ["36453", "雾谷闲步图", "清 · 梅清", "1649 年", "山水", "高士缓行于云雾缭绕的山谷，湿润墨色让峰石若隐若现，人物虽小却成为引导视线深入画境的关键"],
+  ["41488", "天台异松图", "清 · 戴本孝", "1687 年", "山水", "天台山奇松以盘曲枝干占据画面主体，山石与云气退居其后，苍劲线条突出古木历经风霜的生命感"],
+  ["735059", "金陵怀古图", "清 · 王概", "1686 年", "山水", "画家借金陵旧迹寄托怀古之思，城郭、江岸与山林在层叠空间中展开，清晰地貌与淡远气氛并存"],
+  ["72263", "山水册", "清 · 樊圻", "1646 年", "山水", "各开册页以不同山石、林木与水岸组合成独立小景，构图变化丰富，连续翻阅时又形成完整的四时游观"],
+  ["39557", "暮色林山图", "清 · 髡残", "1666 年", "山水", "暮色笼罩的山体以繁密皴擦层层积成，林木屋舍嵌入坡谷，苍茫墨色中透出顽强而内敛的精神力量"],
+  ["73159", "李香君小像", "清 · 崔鹤", "1817 年", "人物", "李香君被描绘为端坐的文雅女性，面容、衣饰与手中物件处理细致，背景留白强化人物安静自持的气质"],
+  ["39548", "松石山水图", "元 · 张逊", "1346 年以前", "山水", "嶙峋山石与高松在近景形成坚实骨架，远峰以淡墨后退，苍劲笔线和高低错落共同建立幽深山径"],
+  ["49549", "雨夜泊舟图", "明 · 沈周", "1477 年", "山水", "夜雨中的泊舟、岸树与远山被湿墨连成朦胧整体，微弱屋舍和水面留白传达旅途中清寂含蓄的诗意"],
+  ["49133", "云山幽居图", "清 · 龚贤", "17 世纪", "山水", "层层积墨塑造云山体量，林木屋舍隐现于山坳，黑白对照让厚重峰峦与流动云气保持清楚呼吸"],
+  ["49179", "山水册", "清 · 石涛", "约 1690 年", "山水", "册页以奔放笔触重组峰峦、溪岸和林木，每开章法皆有变化，体现从自然感受出发的鲜活创造力"],
+  ["39536", "高士幽居图", "明 · 文徵明", "1543 年", "山水", "高士居所被安置于层林与坡石之间，细密笔墨经营出可居空间，清雅设景寄托远离尘嚣的文人理想"],
+  ["733847", "列女图", "清 · 改琦", "1799 年", "人物", "历代女性形象以清秀线描和含蓄姿态逐一呈现，衣纹轻柔流畅，人物之间的变化体现画家对典故与风神的提炼"],
+  ["36095", "四季山水图", "明 · 魏之克", "1635 年", "山水", "春夏秋冬通过树木荣枯、烟云明晦和设色冷暖加以区分，连续景页既各自成章又呈现时间流转"],
+  ["65620", "山水册", "清 · 龚贤", "1680 年代", "山水", "龚贤以积墨、留白和重复皴点探索多种山水结构，黑密山体与明净水天对照，形成沉静深厚的册页气息"],
+  ["49130", "江上独钓图", "清 · 查士标", "清代", "山水", "孤舟老者置于开阔江面，岸石与疏树集中一隅，大片空白强化水天寂寥，也凸显独钓者的超然心境"],
+  ["49162", "仿宋元诸家山水册", "清 · 恽寿平", "1667 年", "山水", "画家借不同笔法追摹宋元名家，山石结构与树法随页转换，既展示传统谱系，也保留个人温润清逸的气息"],
+  ["48934", "仿黄公望山水图", "明 · 莫是龙", "1581 年", "山水", "坡岸与峰峦以松动披麻皴层层连接，林木屋舍散布其间，画面借黄公望笔意营造平淡天真的文人山水"],
+  ["51695", "婴戏图", "明 · 佚名", "明代", "人物", "儿童成群嬉戏于庭院空间，动作、玩具与彼此呼应细节丰富，热闹场面中保留清晰主次和生活观察"],
+  ["36436", "山水册", "清 · 张风", "1644 年", "山水", "张风以简练而富变化的笔墨组织山石林泉，册页在疏放与细密之间转换，呈现明清之际个性鲜明的山水面貌"],
+  ["49454", "山水图", "清 · 胡远", "1885 年", "山水", "近岸林木、坡石和远山以清晰层次铺开，晚清笔墨兼具传统程式与写景趣味，整体气息平稳而疏朗"],
+  ["36089", "秋山图册页", "明 · 项圣谟", "1654 年", "山水", "秋林与坡石以干润相间的墨色描绘，树叶疏落、远山淡出，方寸册页凝聚出季节转凉后的清旷气息"],
+  ["51395", "秋光图", "宋 · 龚菊甫", "宋代", "山水", "秋山、寒林和水岸在柔和色调中依次展开，景物疏密得宜，既呈现季节物候，也保持宋画细致含蓄的空间感"],
+  ["53568", "西王母与凤凰图", "明 · 蒋凤", "明代", "人物", "西王母与凤凰构成祥瑞主题，人物仪态、华美衣饰和神鸟羽翼相互映衬，画面兼具神话叙事与吉祥意味"],
+  ["44521", "山水册", "清 · 叶欣", "1652 年", "山水", "叶欣以精谨细笔描写溪桥、村舍和层林，景物在有限册页中井然展开，呈现金陵画派清秀繁密的面貌"],
+  ["65075", "仿古山水册", "清 · 王翚", "1692 年", "山水", "画家逐页化用古代山水名家的典型笔法，峰峦树石变化多端，在系统追摹传统中显示娴熟的综合能力"],
+  ["35977", "仿董源山水图", "明末清初 · 陆克正", "1591 年或 1651 年", "山水", "绵延山体以披麻皴和湿润墨色塑成，洲渚林木平缓铺展，追求董源江南山水温厚苍茫的整体气象"],
+  ["36146", "赵孟頫像摹本", "清 · 佚名", "19 世纪", "人物", "赵孟頫端坐像以工整线描表现面容、冠服和姿态，摹本重在保存名贤仪容，也反映后世对其文化身份的敬仰"],
+  ["48932", "兰石图", "明 · 马守真", "1572 年", "花鸟", "幽兰从坡石旁舒展，细长叶片以流畅墨线写成，兰花与石块一柔一刚，寄托清雅坚贞的文人品格"],
+  ["42716", "药师佛图", "元 · 佚名", "约 1319 年", "佛道", "药师佛端坐于庄严法会中心，胁侍与供养形象分列周围，色彩和对称秩序共同强化礼拜空间的神圣感"],
+  ["35994", "渔隐山水图", "明 · 祁豸佳", "1643 年", "山水", "渔者与舟楫点缀于溪山之间，近景林石和远峰相互呼应，清润笔墨将隐逸理想融入可游山水"],
+  ["49448", "杏花图", "清 · 吴熙载", "19 世纪", "花鸟", "杏枝横斜伸展，花瓣以淡色轻染，枝干墨线苍润，疏密相间的花朵传达早春清新而含蓄的生机"],
+  ["935509", "诸神降临图", "南宋 · 佚名", "13 世纪初", "佛道", "神祇队列自天界降临，云气、仪仗和人物衣纹形成连续动势，严整队伍中仍可辨识丰富身份与表情"],
+  ["754013", "红莲游鱼图", "清 · 汤光", "清代", "花鸟", "红莲与水中游鱼上下呼应，花叶舒卷、鱼群穿行，鲜明设色和水墨晕染共同营造夏日池塘的活泼生意"],
+  ["35992", "秋江落日图", "明末清初 · 潘云雨", "1604 年或 1664 年", "山水", "落日余晖笼罩秋江与远岸，舟影、林木和淡远峰峦层层退去，宁静色调中含有日暮旅思"],
+  ["49453", "赵之谦像", "清 · 王远", "1871 年", "人物", "赵之谦肖像着重面部神态与端整坐姿，衣冠线条简洁克制，通过细微表情传达晚清文人的沉静气质"],
+  ["40507", "人马图", "元 · 赵孟頫", "1296 年及 1359 年", "人物", "马匹与侍从以古雅线描塑造，人物牵引、回望和驻足形成节奏，体现赵氏复古观念对人马题材的重构"],
+  ["41481", "仿古山水册", "清 · 王翚", "1674 年及 1677 年", "山水", "册页跨年完成，以多种古法经营峰峦林泉，精熟皴法与清晰空间显示画家融汇南北宗传统的能力"],
+  ["41471", "秋塘鹭鸭图", "明 · 吕纪", "15 世纪末", "花鸟", "白鹭与野鸭活动于秋塘芦苇之间，禽鸟姿态各异，水岸植物和设色层次呈现院体花鸟的精整与生动"],
+  ["36166", "花鸟图", "清 · 张熊", "1878 年", "花鸟", "花枝与禽鸟相互顾盼，没骨设色和勾线并用，明快色彩配合疏密枝叶，展现晚清海派花鸟的雅俗共赏"],
+  ["35968", "热兰遮城与普罗民遮城及台南府城图", "清 · 佚名", "19 世纪", "宫廷/风俗", "画面以俯瞰方式记录城郭、堡垒、道路与海岸，各类建筑和地貌细节兼具地图功能与历史图像价值"],
+  ["40102", "货郎图", "宋元 · 佚名", "13 至 15 世纪", "人物", "货郎挑担携带琳琅器物，儿童围拢观看，密集商品与鲜活动作构成市井叙事，也保存日常生活的物质细节"],
+  ["40508", "双松平远图", "元 · 赵孟頫", "约 1310 年", "山水", "双松挺立近岸，远山隔水淡出，古拙树法与简净平远构图相结合，体现以书入画和复古求新的文人理念"],
+  ["40106", "秋山佛寺图", "元明 · 佚名", "14 至 15 世纪", "山水", "佛寺隐现于秋山层林之间，路径、屋宇和峰谷形成可循空间，暖色秋叶与淡墨山体共同营造幽静禅境"],
+  ["48947", "忠孝图", "明 · 王尚恭", "1593 年", "人物", "画卷选取忠臣孝子故事分段描绘，人物动作与建筑环境交代情节，图像以清晰叙事承担伦理教化功能"],
+  ["45659", "龙松图", "元末明初 · 吴伯理", "14 世纪末至 15 世纪初", "花鸟", "古松枝干屈曲如龙，苍劲墨线与盘旋姿态占据画面，树皮皴擦和伸展松针共同强化历久不衰的象征"],
+  ["36041", "仕女图", "元 · 佚名", "14 世纪", "人物", "仕女以端静姿态呈现，面容、发饰和衣纹均细致勾勒，克制背景让观者集中体察人物仪态与时代服饰"],
+  ["49240", "山水花卉册", "清 · 汪士慎", "1745 年", "花鸟", "册页交替描绘山水与花卉，枯笔淡墨贯穿不同题材，梅兰竹石和小景共同呈现扬州画家清冷简逸的趣味"],
+  ["41910", "山水图", "清 · 胡璋", "1887 年", "山水", "晚清山水以传统峰峦、林木和屋舍组织画面，墨色层次分明，稳健笔法在程式中保留清楚的空间秩序"],
+  ["36165", "灵石图", "清 · 张熊", "1858 年", "宫廷/风俗", "一方奇石成为画面主体，孔洞、皱褶和轮廓由浓淡墨色塑造，孤立陈设突显文人赏石的形态想象与清供意味"],
+  ["37395", "杂画册", "明 · 陈洪绶", "1619 年", "宫廷/风俗", "册页汇集人物、花木与器物等多样题材，夸张造型和遒劲线条贯穿其间，显出画家古拙奇崛的个人风格"],
+  ["49226", "亭畔群鹊图", "清 · 佚名", "清代", "花鸟", "群鹊聚集于亭边树丛，飞鸣、栖止和回望姿态各异，繁密枝叶与建筑一角共同构成热闹吉祥的庭园景象"],
+  ["51644", "袖珍山水图", "明 · 佚名", "明代", "山水", "方寸画面浓缩峰峦、树石和水岸，细小景物仍保持远近层次，体现微型山水在有限尺度中的精巧经营"],
+  ["49249", "御前侍卫占音保像", "清 · 佚名", "1760 年", "人物", "侍卫占音保身着官服端坐，面容写实、服饰等级清楚，严整姿态与细密设色共同彰显清代功臣肖像的纪念功能"],
+  ["40051", "晋文公复国图", "南宋 · 李唐", "12 世纪中叶", "人物", "画卷以连续场景讲述晋文公流亡与复国，人物队列、车马和山川转换推动情节，历史叙事紧凑而层次分明"],
+  ["646992", "阮元十景图", "清 · 王俊", "1883 年", "山水", "与阮元相关的十处胜迹被分景描绘，建筑、碑刻与山水环境相互印证，兼具纪游、纪念和地方文献价值"],
+  ["36130", "十二月山水图", "清 · 龚贤", "约 1685 年", "山水", "十二开景页以气候、物候与墨色变化标识月份，积墨山体和留白水天贯穿始终，形成完整的岁时观看序列"],
+  ["51604", "石上草虫图", "明 · 文良", "15 世纪", "花鸟", "草虫停驻于石面，细小触须、翅翼和肢足刻画谨细，粗粝石块与轻巧昆虫形成尺度、质感和动静对照"],
+  ["49456", "芍药图", "清 · 胡远", "清代", "花鸟", "芍药花头丰润饱满，枝叶以浓淡墨色承托，设色不失清雅，花叶向背变化使单一题材呈现蓬勃层次"],
+  ["51709", "八骏图", "传 元 · 赵孟頫", "明代", "宫廷/风俗", "八匹骏马以卧、立、回首和缓行等姿态展开，线描与淡设色区分体态，群马组合兼具秩序和自然生气"],
+  ["36100", "仿黄公望山水图", "清 · 王鉴", "1657 年", "山水", "画家以层叠坡峦、披麻皴和淡墨设色追摹黄公望，结构严谨而气息松秀，显示清初正统派的师古方法"],
+  ["49173", "归去来图", "清 · 石涛", "约 1695 年", "人物", "陶渊明归隐主题通过人物、柴门和田园山水展开，笔墨简放而情境明确，将文学典故转化为自由鲜活的画面"],
+  ["49074", "山水花鸟册", "明 · 项圣谟", "1639 年", "山水", "册页兼收山水与花鸟，各题材均以精谨观察和清润笔墨处理，翻页之间形成宏观景致与微观物象的转换"],
+  ["57329", "漆绘小景", "日本 · 柴田是真", "19 世纪", "日本绘画", "画家以近似漆艺的精炼造型和材质感处理小景，有限物象配合大片留白，呈现简洁机敏而富装饰性的视觉趣味"],
+  ["910555", "三十六歌仙图", "日本 · 狩野孝信工房", "17 世纪初", "日本绘画", "三十六位歌仙依次列坐，人物肖像与和歌传统相连，工整线描、服饰色彩和序列布局营造典雅宫廷气氛"],
+  ["45627", "罗汉图", "日本 · 住吉庆恩", "15 世纪", "日本绘画", "罗汉以凝神姿态安坐，面貌、衣纹和持物由细线刻画，简化背景集中突出修行者的内在定力与庄严气息"],
+  ["735202", "竹林图", "日本 · 佚名", "17 世纪后半叶", "日本绘画", "修竹成片向上生长，竹竿疏密错落、叶组随风转折，墨色浓淡与空白共同营造清凉幽深的林间空间"],
+  ["53441", "宽文美人图", "日本 · 佚名", "17 世纪末", "日本绘画", "宽文时代美人以修长身姿和华丽衣纹呈现，人物独立于简净背景，服饰图案与含蓄动作共同塑造时代风尚"],
+  ["49083", "竹笋图", "日本 · 蜀山人（大田南亩）", "1820 年", "日本绘画", "新生竹笋以简练墨笔突出外壳层次和向上姿态，题材朴素而富机趣，文人题意与日常观察在小幅中相遇"],
+  ["670929", "寒山拾得图", "日本 · 伊藤若冲", "18 世纪末", "日本绘画", "寒山与拾得以夸张神情和简劲衣纹相对而立，人物似笑非笑，幽默外表下保留禅宗机锋与超脱意味"],
+  ["841644", "十六罗汉合作图", "日本 · 铃木百年等", "19 世纪 70 年代末至 80 年代初", "日本绘画", "多位画家合作描绘十六罗汉，人物形貌和笔法各有变化，统一题材将不同个人风格组织成完整宗教群像"],
+  ["916565", "雨山图", "日本 · 谷文晁", "1831 年", "日本绘画", "雨意笼罩层山与林木，湿墨和淡色让远近景物相互渗化，斜向山势与留白水气传达天气变化中的幽深感"],
+  ["53010", "地藏菩萨吹笛图", "日本 · 狩野探幽", "17 世纪中叶", "日本绘画", "地藏菩萨被赋予吹笛的闲适姿态，宗教形象与世俗雅趣结合，简洁线描和空白使画面显得亲切而清寂"],
+  ["40354", "水边山茶图", "日本 · 尾形乾山", "1741 年", "日本绘画", "山茶临水斜出，花叶以概括色块和流畅轮廓组织，平面化构图配合题写，呈现琳派雅致而明快的装饰感"],
+  ["892108", "弥勒菩萨来迎图", "日本 · 佚名", "14 世纪初", "日本绘画", "弥勒菩萨乘云来迎，莲台、云气和随侍形象构成向下的动势，细密设色营造庄严而充满希望的净土想象"],
+  ["49004", "驮载鰤鱼的骑马鱼商", "日本 · 谷文晁", "1814 年", "日本绘画", "鱼商骑马运送成串鰤鱼，人物、马匹和货物关系交代清楚，轻快笔墨将沿途所见转化为生动风俗小品"],
+  ["853210", "淡彩山水图", "日本 · 青木夙夜", "1799 年", "日本绘画", "峰峦、树石和屋舍以淡彩与水墨层层铺开，色泽清润而结构分明，体现日本南画吸收中国文人山水后的转化"],
+  ["902226", "秋谷幽居图", "日本 · 谷文晁", "1821 年", "日本绘画", "幽居屋舍藏于秋谷层林，山径与溪流引导视线深入，淡雅设色和疏密树法共同营造远离尘嚣的宁静境界"],
+  ["77205", "群龟图", "日本 · 伊藤若冲", "1789 年", "日本绘画", "群龟在水中与岸边交叠爬行，甲壳纹理和不同姿态刻画细致，密集排列中充满观察自然所得的诙谐生气"],
+  ["895426", "宇治制茶图", "日本 · 斋藤基贤", "1803 年", "日本绘画", "画卷分段记录宇治茶从采摘到加工的工序，人物劳动、器具和场所交代详实，兼具风俗叙事与生产史价值"],
+  ["897121", "秋景山水图", "日本 · 池大雅", "1750 至 1758 年", "日本绘画", "秋山以松动笔墨和淡雅设色铺陈，林木、溪岸与远峰相互穿插，显出池大雅南画自由洒脱的书写性"],
+  ["50897", "烟寺晚钟与洞庭秋月图", "朝鲜 · 安坚", "约 1450 至 1500 年", "朝鲜绘画", "左右两景分别表现暮烟寺钟与洞庭秋月，山水在明暗、远近和声意想象中并置，凝练呈现潇湘八景诗境"],
+  ["656430", "尹东暹肖像", "朝鲜 · 佚名", "约 1790 至 1805 年", "朝鲜绘画", "尹东暹身着官服端坐，面部皱纹与眼神刻画入微，衣冠的严整对称衬托人物沉着内省的士大夫气质"]
+];
+
+const englishNotes = [
+  "Flowering branches link blossoms and leaves in a light, asymmetrical arrangement. Fine ink outlines and pale color washes create an elegant, intimate study.",
+  "Ridges rise through the vertical composition while streams, wooded banks, and distant peaks meet in mist, creating a secluded landscape meant for imagined wandering.",
+  "These album leaves answer a theme of fishing and retreat through varied waterside scenes. Near trees, distant hills, and open water establish a measured viewing rhythm.",
+  "Restrained yet elastic lines describe the celebrated horse Night-Shining White. Its raised head, tense body, and tethering post intensify the animal's contained vitality.",
+  "Blue-and-green peaks frame a traveling procession along steep paths. Mountains, clouds, and tiny figures turn a historical episode into a dramatic landscape narrative.",
+  "A long panorama unfolds through summer peaks, mist, and riverbanks. Monumental mountains and detailed foreground passages create a landscape that feels both grand and inhabitable.",
+  "Trees and rocks on the riverbank face distant mountains across open water. Pale ink layers deepen the space, while cottages and boats add a quiet human presence.",
+  "The Ten Kings of Hell and their attendants occupy clearly ranked sections. Detailed faces, robes, desks, and ritual objects give the judgment scene a solemn order.",
+  "An aged plum branch bends across the composition and carries sparse winter blossoms. Contrasts between dry and moist ink express resilient life and austere refinement.",
+  "Sparse trees, low banks, and distant hills are separated by an expanse of water. Dry brushwork and generous blank space evoke Mount Yu with lucid, solitary calm.",
+  "Sixteen arhats appear among fantastic rocks and old trees. Exaggerated bodies and twisting robes combine imaginative strangeness with the gravity of Buddhist representation.",
+  "Wang Xizhi watches geese beside a quiet bank, turning a famous literati anecdote into an intimate exchange of glances between scholar, birds, and landscape.",
+  "Gnarled trees anchor the near bank as a river valley and distant hills extend laterally. Varied ink tones give the level-distance landscape a wintry breadth.",
+  "Waterfalls descend through a valley enclosed by dense forest and steep cliffs. Layered trees and rocks invite the viewer to follow the sound of water inward.",
+  "Accumulated ink builds weighty winter mountains between bare trees and open water. Repeated texture strokes create depth while preserving a clear movement through the composition.",
+  "Episodes from the Seventh Month ode unfold through seasonal farm work and village life. Laboring figures, fields, houses, and natural signs form a continuous rural narrative.",
+  "Finches perch on an angled bamboo branch in varied poses. Precise plumage, supple leaves, and balanced movement exemplify the polished clarity of court bird-and-flower painting.",
+  "Sheer rocks and spare trees enclose a narrow valley crossed by a thin stream. The cool, disciplined brushwork conveys the solitary integrity associated with Hongren.",
+  "A scholar walks through a valley veiled in mist. Moist ink lets peaks appear and disappear, while the small figure guides the eye deeper into the landscape.",
+  "A contorted pine from Mount Tiantai dominates the composition, with rocks and clouds set behind it. Forceful lines emphasize the old tree's endurance and singular form.",
+  "Sites around historic Nanjing are arranged as a landscape of remembrance. Riverbanks, hills, and settlement details balance topographical clarity with a distant, reflective atmosphere.",
+  "Each album leaf combines rocks, trees, and water into a distinct scene. Shifts in composition and density create a varied journey across the sequence.",
+  "Dense texture strokes build wooded mountains under gathering dusk. Houses nestle among dark slopes, and the heavy ink carries a restrained but tenacious spiritual force.",
+  "Li Xiangjun appears as a poised, cultivated woman. Careful attention to her face, clothing, and attributes, together with an open background, emphasizes quiet self-possession.",
+  "Angular rocks and tall pines establish a strong foreground structure, while pale distant peaks recede behind them. Vigorous lines open a deep path through the mountains.",
+  "Wet ink joins a moored boat, bank trees, and distant hills in a rainy night atmosphere. Sparse lights and open water suggest the inward poetry of travel.",
+  "Layered ink gives the cloud-wrapped mountains substantial weight, while cottages emerge within the valleys. Strong dark-light contrasts let peaks and mist breathe together.",
+  "Energetic brushwork reorganizes peaks, streams, banks, and trees from leaf to leaf. The changing compositions reveal Shitao's inventive response to observed nature.",
+  "A scholar's retreat is sheltered by layered woods and rocky slopes. Meticulous brushwork makes the site feel inhabitable while expressing the literati wish for seclusion.",
+  "Exemplary women from history are rendered with graceful outlines, restrained gestures, and flowing robes. Subtle differences in pose evoke both literary stories and individual character.",
+  "Spring, summer, autumn, and winter are distinguished through foliage, atmosphere, and shifts of color. The separate scenes form a coherent meditation on seasonal change.",
+  "Gong Xian explores varied landscape structures through accumulated ink, repeated dots, and blank space. Dense mountains contrast with luminous water and sky across the album.",
+  "A lone elderly fisherman sits on an open river while rocks and sparse trees gather at one edge. Expansive blank space intensifies solitude and detachment.",
+  "Different leaves reinterpret the brush idioms of Song and Yuan masters. Changing rock and tree methods trace artistic lineage while retaining Yun Shouping's gentle refinement.",
+  "Layered slopes, soft hemp-fiber strokes, trees, and cottages recall Huang Gongwang. The relaxed structure seeks the unforced naturalness prized in literati landscape.",
+  "Groups of children play throughout a courtyard, surrounded by toys and lively exchanges. Dense everyday detail remains organized through clear narrative focus and hierarchy.",
+  "Concise yet varied brushwork organizes rocks, forests, and streams. Alternating loose and detailed passages give the album a distinctive personality from the Ming-Qing transition.",
+  "Foreground trees and rocks lead toward distant hills in a clearly ordered late Qing landscape. Traditional formulas are enlivened by direct, readable scenery.",
+  "Dry and moist ink describe autumn trees, rocks, and fading hills. Sparse foliage and pale distance condense the cool openness of the season into a small album leaf.",
+  "Autumn hills, bare woods, and riverbanks unfold in restrained color. Balanced density and subtle spatial transitions preserve the quiet precision associated with Song painting.",
+  "The Queen Mother of the West appears with a phoenix in an auspicious scene. Regal bearing, elaborate dress, and brilliant plumage unite mythic narrative with blessing imagery.",
+  "Fine brushwork describes bridges, villages, streams, and layered woods. Compact yet orderly scenery reflects the detailed elegance associated with the Nanjing school.",
+  "Each leaf adopts a characteristic method from an earlier landscape master. Shifting peaks, rocks, and trees display Wang Hui's command of historical styles.",
+  "Long, soft texture strokes and moist ink form rolling mountains, islets, and woods. The work pursues the warm, atmospheric character associated with Dong Yuan.",
+  "This later copy preserves Zhao Mengfu's seated likeness through disciplined outlines, facial detail, and official dress, reflecting continued reverence for his cultural authority.",
+  "Long orchid leaves sweep outward beside a firm rock. Fluid ink lines and the contrast of softness and hardness express cultivated purity and resilience.",
+  "The Medicine Buddha presides over a formal assembly with attendants and donors arranged around him. Symmetry, color, and hierarchy construct a sacred space for devotion.",
+  "A fisherman and boat appear within streams and mountains. Responsive foreground trees and distant peaks turn the ideal of reclusion into an inviting landscape.",
+  "Apricot blossoms open along an angled branch. Pale color, varied ink, and alternating clusters convey the fresh but understated vitality of early spring.",
+  "Deities descend in an ordered procession through clouds. Ritual objects, flowing robes, and varied faces create movement while preserving the ceremony's solemn hierarchy.",
+  "Red lotuses rise above fish moving through the water. Curving leaves, bright color, and soft ink washes fill the summer pond with lively visual exchange.",
+  "The setting sun settles over an autumn river, distant banks, and small boats. Receding forms and quiet color turn evening light into a mood of travel and reflection.",
+  "Zhao Zhiqian is shown in a composed seated pose with careful attention to his face and restrained clothing lines, conveying the inward gravity of a late Qing scholar.",
+  "Horses and grooms are modeled with archaizing lines and pale color. Gestures of leading, turning, and pausing transform historical horse imagery through Zhao Mengfu's revivalist vision.",
+  "Completed across several years, the album employs diverse old-master methods for peaks, forests, and streams. Precise structure demonstrates Wang Hui's synthesis of landscape traditions.",
+  "Egrets and ducks gather among reeds at an autumn pond. Varied poses, layered vegetation, and controlled color combine courtly finish with close observation.",
+  "Birds and flowering branches answer one another through pose and direction. Outline, boneless color, and bright accents reveal the accessible elegance of late Qing Shanghai painting.",
+  "A bird's-eye view records forts, city walls, roads, and the coast around Tainan. Architectural and geographic detail gives the image both cartographic and historical value.",
+  "A traveling peddler carries a dense display of goods as children gather around. Objects, gestures, and expressions preserve vivid evidence of everyday material life.",
+  "Two pines anchor the near shore while pale hills recede across water. Archaic tree forms and spare level-distance composition embody Zhao Mengfu's calligraphic revivalism.",
+  "Buddhist temples emerge within layered autumn woods. Paths, buildings, and peaks create a traversable space, while warm foliage and pale ink sustain a contemplative atmosphere.",
+  "Episodes of loyalty and filial devotion unfold in successive scenes. Figures and architectural settings clarify each story, giving the handscroll an explicit ethical purpose.",
+  "An ancient pine twists like a dragon across the picture. Powerful contours, rough bark, and spreading needles turn the tree into an emblem of endurance.",
+  "A lady is presented with quiet posture and carefully drawn face, hair ornaments, and robes. The restrained setting concentrates attention on bearing and period costume.",
+  "Landscape and floral subjects alternate across the album, joined by dry brush and pale ink. Plum, orchid, bamboo, rocks, and small vistas share a cool, spare sensibility.",
+  "Traditional peaks, forests, and houses are arranged with legible depth. Stable brushwork brings spatial order to a late Qing interpretation of established landscape conventions.",
+  "A single scholar's rock fills the composition. Holes, folds, and rugged contours are modeled in varied ink, turning an object of display into a field of imaginative form.",
+  "Figures, plants, and objects appear across a varied album. Exaggerated shapes and forceful lines unify the subjects through Chen Hongshou's archaic and eccentric manner.",
+  "Magpies gather, fly, call, and perch among trees beside a pavilion. Dense foliage and a fragment of architecture create an animated, auspicious garden scene.",
+  "Mountains, trees, rocks, and water are compressed into a miniature format without losing depth. Tiny motifs demonstrate precise control within a restricted scale.",
+  "The imperial guard Zhanyinbao sits frontally in official dress. Realistic facial detail, symmetrical posture, and rank-specific costume serve the commemorative function of Qing portraiture.",
+  "Successive episodes narrate Duke Wen of Jin's exile and restoration. Processions, horses, buildings, and changing terrain drive a compact but layered historical story.",
+  "Ten sites connected with Ruan Yuan are documented through buildings, inscriptions, and their surrounding landscapes, combining travel record, commemoration, and local history.",
+  "Twelve landscapes mark the months through weather, vegetation, and tonal change. Gong Xian's accumulated ink and luminous blank space bind the sequence into a full annual cycle.",
+  "A small insect rests on a rock, its antennae, wings, and legs precisely observed. The fragile creature contrasts with the rock's rough mass and stillness.",
+  "Full peony blossoms are supported by leaves in varied ink. Restrained color, turning petals, and layered foliage give the single subject richness without losing elegance.",
+  "Eight horses recline, stand, turn, and walk in an ordered group. Line and pale color distinguish their bodies while preserving the natural energy of the herd.",
+  "Layered slopes, hemp-fiber strokes, and pale color reinterpret Huang Gongwang. Rigorous structure and relaxed atmosphere exemplify the early Qing Orthodox approach to old masters.",
+  "The theme of Tao Yuanming's return is staged through the poet, a rustic gate, and rural landscape. Shitao's loose brushwork makes the literary story immediate and alive.",
+  "Landscape and bird-and-flower subjects alternate across the album. Precise observation and clear brushwork create a measured shift between broad scenery and intimate natural detail.",
+  "A compact scene is treated with the polished surfaces and economical forms associated with lacquer art. Few motifs and broad blank areas create witty decorative clarity.",
+  "The Thirty-Six Poetic Immortals appear in sequence, linking portraiture with the classical poetry canon. Refined outlines, court dress, and measured spacing establish ceremonial elegance.",
+  "An arhat sits in concentrated stillness, defined through facial features, robes, and attributes. The simplified background strengthens the figure's disciplined, sacred presence.",
+  "Bamboo stalks rise in uneven clusters while leaves turn as if in wind. Variations of ink and open space create a cool, immersive grove.",
+  "A Kanbun-era beauty stands alone with elongated posture and richly patterned robes. Decorative clothing and restrained gesture preserve the fashionable ideal of the period.",
+  "A newly emerged bamboo shoot is described with concise ink that emphasizes layered sheaths and upward growth, joining literati wit with close observation of an ordinary subject.",
+  "Hanshan and Shide face one another with exaggerated expressions and briskly drawn robes. Their humorous appearance carries the elusive insight and freedom of Chan tradition.",
+  "Several artists contributed to this set of sixteen arhats. Differences in physiognomy and brushwork remain visible while the shared subject creates a coherent sacred assembly.",
+  "Rain veils layered mountains and forests. Wet ink and pale color merge near and far forms, while slanting ridges and watery blank space convey changing weather.",
+  "Jizō is shown playing a flute, joining a Buddhist figure with the ease of a cultivated pastime. Spare lines and open space make the scene intimate and serene.",
+  "Camellias extend beside water in broad color shapes and flowing contours. Flat composition and inscription combine in the bright, elegant decorative language of Rinpa.",
+  "Maitreya descends on clouds above a lotus pedestal with attendants. The downward movement and detailed color create a solemn yet hopeful vision of welcome.",
+  "A fish merchant rides with strings of yellowtail loaded on the horse. Clear relations among figure, animal, and cargo turn a passing observation into lively genre painting.",
+  "Mountains, trees, and dwellings unfold in pale color and ink. Clear structure and gentle washes show Japanese Nanga artists transforming Chinese literati landscape conventions.",
+  "A secluded dwelling rests among autumn woods and a mountain valley. Paths and streams draw the eye inward as delicate color establishes a peaceful retreat.",
+  "Turtles overlap in water and on the bank, each shell and posture closely observed. Their dense arrangement conveys both natural curiosity and playful humor.",
+  "Sequential scenes document Uji tea production from gathering leaves to processing them. Workers, tools, and sites provide a detailed record of labor and material culture.",
+  "Autumn mountains are set down with loose brushwork and restrained color. Interwoven woods, banks, and distant peaks display Ike no Taiga's free, calligraphic Nanga style.",
+  "Two scenes evoke Evening Bell from a Mist-Shrouded Temple and Autumn Moon over Lake Dongting. Light, distance, and imagined sound condense the poetry of the Eight Views.",
+  "Yun Dongseom sits frontally in official robes. Minute attention to wrinkles and gaze, balanced by symmetrical costume, conveys the introspective dignity of a Joseon scholar-official."
+];
+
+const englishFocusByCategory = {
+  "山水": "Look closely at spatial recession, mountain structure, voids, texture strokes, and the scale of human movement.",
+  "花鸟": "Look closely at the direction of forms, tonal ink, color relationships, and the rhythm of open space.",
+  "人物": "Look closely at gesture, drapery, visual hierarchy, and the pacing of the narrative.",
+  "佛道": "Look closely at sacred presence, line order, spatial hierarchy, and ceremonial atmosphere.",
+  "宫廷/风俗": "Look closely at scene arrangement, figures and objects, spatial layers, and narrative rhythm.",
+  "日本绘画": "Look closely at compositional economy, line rhythm, ink layers, color, and decorative effect.",
+  "朝鲜绘画": "Look closely at composition, brushwork, spatial relationships, and the work's historical character."
+};
+
+const englishArtistOverrides = new Map([
+  ["841644", "Suzuki Hyakunen and collaborators"]
+]);
+
+if (englishNotes.length !== records.length) {
+  throw new Error(`Expected ${records.length} English notes, found ${englishNotes.length}`);
+}
+
+export const curationByObjectId = new Map(records.map(([objectId, title, artist, period, category, note], index) => {
+  const description = `${note}。${focusByCategory[category]}`;
+  const newArtworkTitles = newArtworkTitlesByObjectId.get(objectId);
+  if (!Array.isArray(newArtworkTitles) || newArtworkTitles.length !== 5) {
+    throw new Error(`Expected 5 new artwork titles for object ${objectId}`);
+  }
+  return [objectId, {
+    title,
+    titleHant: toTraditional(title),
+    artist,
+    artistHant: toTraditional(artist),
+    artistEn: englishArtistOverrides.get(objectId),
+    period,
+    periodHant: toTraditional(period),
+    category,
+    description,
+    descriptionHant: toTraditional(description),
+    descriptionEn: `${englishNotes[index]} ${englishFocusByCategory[category]}`,
+    newArtworkTitles
+  }];
+}));
+
+if (newArtworkTitlesByObjectId.size !== 100) {
+  throw new Error(`Expected 100 curated title groups, found ${newArtworkTitlesByObjectId.size}`);
+}
+
+if (curationByObjectId.size !== 100) {
+  throw new Error(`Expected 100 curated artworks, found ${curationByObjectId.size}`);
+}

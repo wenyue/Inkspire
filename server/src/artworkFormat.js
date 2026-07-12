@@ -9,6 +9,7 @@ const FORMAT_ORIENTATIONS = new Map([
   ["立轴", "portrait"],
   ["立軸", "portrait"],
   ["hanging scroll", "portrait"],
+  ["掛軸", "portrait"],
   ["竖幅", "portrait"],
   ["豎幅", "portrait"],
   ["竖排", "portrait"],
@@ -17,6 +18,7 @@ const FORMAT_ORIENTATIONS = new Map([
   ["横幅", "landscape"],
   ["橫幅", "landscape"],
   ["horizontal", "landscape"],
+  ["横長", "landscape"],
   ["横排", "landscape"],
   ["橫排", "landscape"],
   ["匾额", "landscape"],
@@ -24,16 +26,19 @@ const FORMAT_ORIENTATIONS = new Map([
   ["plaque", "landscape"],
   ["斗方", "square"],
   ["square", "square"],
+  ["方形", "square"],
   ["手卷", "landscape"],
   ["handscroll", "landscape"],
+  ["手巻", "landscape"],
   ["扇面", "landscape"],
   ["fan", "landscape"],
   ["册页", "square"],
   ["冊頁", "square"],
-  ["album", "square"]
+  ["album", "square"],
+  ["画冊", "square"]
 ]);
 
-const HANDSCROLL_FORMATS = new Set(["手卷", "handscroll"]);
+const HANDSCROLL_FORMATS = new Set(["手卷", "handscroll", "手巻"]);
 
 function normalizeFormat(value) {
   if (typeof value !== "string") return "";

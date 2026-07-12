@@ -1,9 +1,12 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import Experts from "./Experts";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+});
 
 describe("Experts", () => {
   test("shows Wu Jiayin's verified profile and authorized works without attribution labels", () => {
@@ -57,13 +60,39 @@ describe("Experts", () => {
       title="雅匠" locale="zh-Hans" serviceHeading="可咨询方向" extraServiceName="装裱咨询"
       extraServiceDescription="说明" credentialsLabel="专业资历" sampleHeading="代表作品"
       sampleHint="左右滑动查看更多作品" profileNotice="已入驻" serviceBoundary="确认后承接"
-      consultLabel="咨询吴嘉茵" consultHint="复制平台微信后发起咨询" copiedLabel="平台微信已复制"
+      consultLabel="咨询吴嘉茵" consultHint="复制平台微信后发起咨询" copiedLabel="已拷贝微信号"
       consultWechat="InkspireArt"
     />);
 
     await user.click(screen.getByRole("button", { name: "咨询吴嘉茵" }));
     expect(await navigator.clipboard.readText()).toBe("InkspireArt");
-    expect(screen.getByRole("status")).toHaveTextContent("平台微信已复制");
+    expect(screen.getByRole("status")).toHaveTextContent("已拷贝微信号");
+    expect(screen.getByRole("status")).toHaveClass("copy-toast");
+    expect(screen.getByRole("status")).toHaveClass("consult-copy-toast");
+  });
+
+  test("dismisses the consultation copy toast after the order toast duration", async () => {
+    vi.useFakeTimers();
+    render(<Experts
+      experts={[{
+        id: "wu_jiayin",
+        name: { "zh-Hans": "吴嘉茵" },
+        region: { "zh-Hans": "广东省" },
+        bio: { "zh-Hans": "书法家" },
+        services: []
+      }]}
+      title="雅匠" locale="zh-Hans" serviceHeading="可咨询方向" extraServiceName="装裱咨询"
+      extraServiceDescription="说明" credentialsLabel="专业资历" sampleHeading="代表作品"
+      sampleHint="左右滑动查看更多作品" profileNotice="已入驻" serviceBoundary="确认后承接"
+      consultLabel="咨询吴嘉茵" copiedLabel="已拷贝微信号" consultWechat="InkspireArt"
+    />);
+
+    fireEvent.click(screen.getByRole("button", { name: "咨询吴嘉茵" }));
+    await act(async () => {});
+    expect(screen.getByRole("status")).toHaveTextContent("已拷贝微信号");
+
+    act(() => vi.advanceTimersByTime(1600));
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
 
   test("falls back to selection-based copying in restricted webviews", async () => {

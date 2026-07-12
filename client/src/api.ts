@@ -1,6 +1,7 @@
 import appConfig from "../../config/app.json";
 import experts from "../../config/experts.json";
 import en from "../../config/i18n/en.json";
+import ja from "../../config/i18n/ja.json";
 import zhHans from "../../config/i18n/zh-Hans.json";
 import zhHant from "../../config/i18n/zh-Hant.json";
 import classicArtworks from "../../config/classic-artworks.json";
@@ -180,6 +181,7 @@ export const fallbackConfig: PublicConfig = {
   i18n: {
     "zh-Hans": zhHans,
     "zh-Hant": zhHant,
+    ja,
     en
   }
 };

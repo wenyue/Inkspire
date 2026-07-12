@@ -11,7 +11,6 @@ const labels = {
   removeFavorite: "移出藏卷",
   removeFavoriteShort: "移出",
   removeConfirmTitle: "从藏卷移出？",
-  removeConfirmHint: "作品记录不会删除。",
   removeConfirmCancel: "取消",
   removeConfirmAction: "移出"
 };
@@ -37,12 +36,14 @@ describe("Library", () => {
         locale="zh-Hans"
         emptyLabel="暂无作品"
         labels={labels}
+        onFavoriteToggle={vi.fn()}
       />
     );
 
     const image = screen.getByRole("img", { name: "山水" });
     expect(image).toHaveAttribute("src", "/api/records/record-1/images/artwork");
-    expect(screen.getByText("作品")).toBeInTheDocument();
+    expect(screen.queryByText("作品")).not.toBeInTheDocument();
+    expect(screen.getByText("国画")).toBeInTheDocument();
     expect(screen.queryByText("画")).not.toBeInTheDocument();
   });
 
@@ -69,7 +70,8 @@ describe("Library", () => {
       "src",
       "/api/records/record-2/images/artwork"
     );
-    expect(screen.getByText("作品与效果图")).toBeInTheDocument();
+    expect(screen.queryByText("作品与效果图")).not.toBeInTheDocument();
+    expect(screen.getByText("书法")).toBeInTheDocument();
   });
 
   it("shows a clear unavailable state when a saved thumbnail fails to load", () => {
@@ -113,11 +115,16 @@ describe("Library", () => {
         locale="zh-Hans"
         emptyLabel="暂无作品"
         labels={labels}
+        onFavoriteToggle={vi.fn()}
       />
     );
 
-    expect(screen.getByText(/作品 ·/)).toBeInTheDocument();
-    expect(screen.getByText(/2026/)).toBeInTheDocument();
+    const time = screen.getByText(/2026/);
+    expect(time).not.toHaveTextContent("作品");
+    expect(time.closest(".library-item")?.querySelector(".library-thumb")).toBeInTheDocument();
+    expect(time.closest(".library-footer")).toContainElement(
+      screen.queryByRole("button", { name: "移出藏卷" })
+    );
   });
 
   it("keeps the full calligraphy title in the rendered text", () => {
@@ -144,7 +151,7 @@ describe("Library", () => {
     expect(screen.getByRole("button", { name: new RegExp(longTitle) })).toBeInTheDocument();
   });
 
-  it("makes opening saved records visible on the card", () => {
+  it("keeps the card accessible without repeating a visible open label", () => {
     render(
       <Library
         records={[
@@ -162,8 +169,8 @@ describe("Library", () => {
       />
     );
 
-    expect(screen.getByText("查看作品")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /查看作品 明显可打开作品/ })).toHaveTextContent("查看作品");
+    expect(screen.queryByText("查看作品")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /查看作品 明显可打开作品/ })).toBeInTheDocument();
   });
 
   it("asks for confirmation before moving a work out of the library", async () => {
@@ -189,9 +196,11 @@ describe("Library", () => {
 
     await user.click(screen.getByRole("button", { name: "移出藏卷" }));
 
+    expect(screen.getByRole("button", { name: "移出藏卷" })).not.toHaveTextContent("移出");
+
     expect(onFavoriteToggle).not.toHaveBeenCalled();
     expect(screen.getByText("从藏卷移出？")).toBeInTheDocument();
-    expect(screen.getByText("作品记录不会删除。")).toBeInTheDocument();
+    expect(screen.queryByText("作品记录不会删除。")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "移出" }));
 
@@ -231,7 +240,7 @@ describe("Library", () => {
 
     expect(screen.queryByRole("img", { name: "失败记录" })).not.toBeInTheDocument();
     expect(screen.getByText("书")).toBeInTheDocument();
-    expect(screen.getByText("生成未完成")).toBeInTheDocument();
+    expect(screen.queryByText("生成未完成")).not.toBeInTheDocument();
   });
 
   it("opens a saved record from the library item", async () => {

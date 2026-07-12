@@ -70,7 +70,12 @@ test("saveRecord writes record JSON, updates library, and getRecord returns it",
       },
       favorite: true,
       status: "succeeded",
-      answers: { painting_subject: "山水" }
+      answers: {
+        painting_subject: "山水",
+        painting_brushwork: "工笔",
+        painting_palette: "水墨",
+        conversation_notes: "不要出现在藏卷摘要"
+      }
     };
 
     await storage.ensureStore();
@@ -79,6 +84,11 @@ test("saveRecord writes record JSON, updates library, and getRecord returns it",
     assert.deepEqual(await storage.getRecord("artwork-1"), record);
     const [summary] = await storage.listLibrary();
     assert.equal(Object.hasOwn(summary, "generation_profile"), false);
+    assert.deepEqual(summary.answers, {
+      painting_subject: "山水",
+      painting_brushwork: "工笔",
+      painting_palette: "水墨"
+    });
     const Database = require("better-sqlite3");
     const db = new Database(path.join(temp, "inkspire.db"), { readonly: true });
     try {
@@ -244,7 +254,7 @@ test("listLibrary returns spec summaries sorted newest first", async () => {
         has_fusion: true,
         favorite: true,
         status: "succeeded",
-        answers: { calligraphy_layout: "立轴" }
+        answers: { calligraphy_script: "行书", calligraphy_layout: "立轴" }
       },
       {
         id: "older",
@@ -255,7 +265,8 @@ test("listLibrary returns spec summaries sorted newest first", async () => {
         thumbnail_path: "records/older/artwork.webp",
         has_fusion: false,
         favorite: false,
-        status: "succeeded"
+        status: "succeeded",
+        answers: { painting_subject: "花鸟" }
       }
     ]);
   });

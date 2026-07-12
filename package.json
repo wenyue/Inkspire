@@ -5,7 +5,10 @@
   "engines": {
     "node": ">=20.0.0"
   },
-  "workspaces": ["client", "server"],
+  "workspaces": [
+    "client",
+    "server"
+  ],
   "scripts": {
     "dev": "concurrently \"npm run dev --workspace server\" \"npm run dev --workspace client\"",
     "start": "npm run start --workspace server",
@@ -14,10 +17,15 @@
     "test:client": "npm test --workspace client",
     "e2e": "node scripts/run-e2e.cjs",
     "verify:real": "node scripts/verify-real-generation.js",
-    "validate:classic-artworks": "node scripts/validate-classic-artworks.mjs"
+    "curate:classic-artworks": "node scripts/apply-classic-artwork-curation.mjs",
+    "validate:classic-artworks": "node scripts/validate-classic-artworks.mjs",
+    "test:selector-assets": "node --test scripts/selector-asset-contract.test.mjs",
+    "validate:selector-assets": "node scripts/validate-selector-assets.mjs",
+    "contact-sheet:selector-assets": "node scripts/build-selector-contact-sheet.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.45.0",
-    "concurrently": "^8.2.2"
+    "concurrently": "^8.2.2",
+    "opencc-js": "^1.4.0"
   }
 }

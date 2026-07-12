@@ -16,19 +16,39 @@ const labels = {
 };
 
 describe("Library", () => {
-  test("shows saved work type, format, and density without inventing absent metadata", () => {
+  test("shows the painting generation parameters in their creation order", () => {
     render(<Library records={[{
       id: "one",
       type: "painting",
       title: "松风",
       artwork_path: "art.webp",
-      answers: { painting_format: "竖幅" },
+      answers: {
+        painting_subject: "山水",
+        painting_brushwork: "工笔",
+        painting_palette: "水墨",
+        painting_format: "竖幅"
+      },
       generation_complexity: "small"
     }]} locale="zh-Hans" emptyLabel="空" labels={labels} />);
 
-    expect(screen.getByText(/国画/)).toBeInTheDocument();
-    expect(screen.getByText(/形制：竖幅/)).toBeInTheDocument();
-    expect(screen.getByText(/疏密：疏朗/)).toBeInTheDocument();
+    expect(screen.getByText("国画 · 山水 · 工笔 · 水墨")).toBeInTheDocument();
+    expect(screen.queryByText(/形制：/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/疏密：/)).not.toBeInTheDocument();
+  });
+
+  test("shows the referenced classic artwork in the generation parameters", () => {
+    render(<Library records={[{
+      id: "classic",
+      type: "painting",
+      title: "松风",
+      artwork_path: "art.webp",
+      answers: {
+        creation_mode: "classic_reference",
+        classic_artwork_title: "照夜白图"
+      }
+    }]} locale="zh-Hans" emptyLabel="空" labels={{ ...labels, classicReference: "仿名作" }} />);
+
+    expect(screen.getByText("国画 · 仿名作《照夜白图》")).toBeInTheDocument();
   });
 
   test("localizes a saved format to the current interface language", () => {
@@ -45,7 +65,7 @@ describe("Library", () => {
       format: "Format"
     }} />);
 
-    expect(screen.getByText(/Format：Hanging Scroll/)).toBeInTheDocument();
-    expect(screen.queryByText(/Format：立轴/)).not.toBeInTheDocument();
+    expect(screen.getByText("Calligraphy · Hanging Scroll")).toBeInTheDocument();
+    expect(screen.queryByText(/立轴/)).not.toBeInTheDocument();
   });
 });

@@ -634,6 +634,14 @@ class SyncPublicAgentAssetsTest(unittest.TestCase):
         self.assertIn('.agents/skills/worktree-environment-setup/SKILL.md', content)
         self.assertIn('blocker', content)
 
+    def test_setup_project_agents_requires_english_for_generated_project_assets(self):
+        content = (REPO_SKILL_ROOT / 'SKILL.md').read_text(encoding='utf-8')
+
+        self.assertIn(
+            'Write every generated or refreshed project-owned rule and skill in English.',
+            content,
+        )
+
     def test_setup_project_agents_regenerates_environment_skill(self):
         content = (REPO_SKILL_ROOT / 'SKILL.md').read_text(encoding='utf-8')
 

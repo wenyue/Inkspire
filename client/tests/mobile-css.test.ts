@@ -19,6 +19,15 @@ function expectNoRuleForClass(className: string): void {
 }
 
 describe("mobile touch targets", () => {
+  it("shows popular templates as two-column large image cards", () => {
+    expect(blockFor(".template-grid {")).toContain(
+      "grid-template-columns: repeat(2, minmax(0, 1fr))",
+    );
+    expect(blockFor(".template-preview-image {")).toContain("aspect-ratio: 4 / 3");
+    expect(blockFor(".template-preview-image {")).toContain("object-fit: cover");
+    expect(blockFor(".template-grid button {")).toContain("overflow: hidden");
+  });
+
   it("hides the main scrollbar without disabling scrolling", () => {
     expect(blockFor(".main-surface {")).toContain("scrollbar-width: none");
     expect(blockFor(".main-surface {")).toContain("overflow-y: auto");
@@ -63,6 +72,10 @@ describe("mobile touch targets", () => {
     expect(mobileActionSurface).toMatch(/linear-gradient\([^;]*rgba\(255, 250, 240, 0\)[^;]*#fffaf0/);
   });
 
+  it("keeps result actions out of the sticky mobile action surface", () => {
+    expect(cssWithoutComments).not.toMatch(/\.result-actions\.mobile-action-surface[^{}]*\{/);
+  });
+
   it("gives only notes controls mobile scroll clearance for the sticky action", () => {
     const mobileMediaStart = css.indexOf("@media (max-width: 520px)");
     const mobileNotesClearance = blockFor(
@@ -75,9 +88,9 @@ describe("mobile touch targets", () => {
     expect(mobileNotesClearance).not.toMatch(/padding-bottom|margin-bottom/);
   });
 
-  it("uses a fixed-header scroll-body safe-area-footer production dialog", () => {
-    const dialog = blockFor(".production-dialog {");
-    const body = blockFor(".production-dialog-body");
+  it("uses a fixed-header scroll-body safe-area-footer shared dialog", () => {
+    const dialog = blockFor(".shared-dialog {");
+    const body = blockFor(".shared-dialog-body");
     const footer = blockFor(".production-dialog-footer");
 
     expect(dialog).toContain("display: grid");
@@ -88,9 +101,9 @@ describe("mobile touch targets", () => {
     expect(footer).toMatch(/padding-bottom:\s*calc\([^;]*safe-area-inset-bottom/);
   });
 
-  it("lets production dialogs cover the mobile viewport and hides the bottom tabs", () => {
-    const layer = blockFor(".production-dialog-layer");
-    const hiddenTabs = blockFor(".production-dialog-open .bottom-tabs");
+  it("lets shared dialogs cover the mobile viewport and hides the bottom tabs", () => {
+    const layer = blockFor(".shared-dialog-layer");
+    const hiddenTabs = blockFor(".dialog-open .bottom-tabs");
 
     expect(layer).not.toMatch(/82px/);
     expect(layer).toMatch(/safe-area-inset-bottom/);
@@ -137,9 +150,28 @@ describe("mobile touch targets", () => {
   });
 
   it("tightens the question step on short phones so all choices are easier to discover", () => {
-    expect(css).toContain("@media (max-height: 640px) and (max-width: 520px)");
-    expect(css).toContain("aspect-ratio: 3 / 1");
-    expect(css).toContain("min-height: 56px");
+    const compactPhoneStart = css.indexOf("@media (max-height: 640px) and (max-width: 520px)");
+
+    expect(compactPhoneStart).not.toBe(-1);
+    expect(blockFor(".preview-ink", compactPhoneStart)).toContain("aspect-ratio: 3 / 1");
+    expect(blockFor(".option-grid", compactPhoneStart)).toContain("gap: 6px");
+    expect(blockFor(".option-grid button", compactPhoneStart)).toContain("padding: 6px");
+  });
+
+  it("keeps selector artwork at 100 by 75 pixels on every phone height", () => {
+    const baseOptionButton = blockFor(".option-grid button {");
+    const baseOptionPreview = blockFor(".option-preview-frame {");
+    const shortPhoneStart = css.indexOf("@media (max-height: 740px)");
+
+    expect(shortPhoneStart).not.toBe(-1);
+    expect(baseOptionButton).toContain("grid-template-columns: 100px minmax(0, 1fr)");
+    expect(baseOptionButton).toContain("gap: 12px");
+    expect(baseOptionButton).toContain("min-height: 92px");
+    expect(baseOptionPreview).toContain("width: 100px");
+    expect(baseOptionPreview).toContain("height: 75px");
+    const shortPhoneRules = css.slice(shortPhoneStart);
+    expect(shortPhoneRules).not.toMatch(/\.option-preview-frame\s*{[^}]*(?:width|height):/s);
+    expect(shortPhoneRules).not.toMatch(/\.option-grid button\s*{[^}]*grid-template-columns:/s);
   });
 
   it("gives the studio notes textarea a larger default height", () => {
@@ -162,15 +194,61 @@ describe("mobile touch targets", () => {
   });
 
   it("shows copy toasts fixed at the bottom center of the screen", () => {
-    expect(blockFor(".copy-toast")).toContain("position: fixed");
-    expect(blockFor(".copy-toast")).toContain("left: 50%");
-    expect(blockFor(".copy-toast")).toContain("transform: translateX(-50%)");
-    expect(blockFor(".copy-toast")).toContain("bottom: 24px");
-    expect(blockFor(".copy-toast")).toContain("pointer-events: none");
+    const copyToast = blockFor(".copy-toast");
+
+    expect(copyToast).toContain("position: fixed");
+    expect(copyToast).toContain("left: 50%");
+    expect(copyToast).toContain("transform: translateX(-50%)");
+    expect(copyToast).toContain("bottom: 24px");
+    expect(copyToast).toContain("background: #3f4542");
+    expect(copyToast).not.toContain("background: #315b4d");
+    expect(copyToast).toContain("pointer-events: none");
+  });
+
+  it("keeps consultation copy toasts above the bottom navigation", () => {
+    expect(blockFor(".consult-copy-toast")).toMatch(
+      /bottom:\s*calc\(24px \+ 54px \+ env\(safe-area-inset-bottom\)\)/
+    );
   });
 
   it("shows complete result artwork and preview images without cropping", () => {
     expect(blockFor(".result-grid img,\n.image-placeholder")).toContain("object-fit: contain");
+  });
+
+  it("keeps library artwork images inside their thumbnail frame without cropping", () => {
+    expect(blockFor(".library-thumb")).toContain("position: relative");
+    expect(blockFor(".library-thumb img")).toContain("position: absolute");
+    expect(blockFor(".library-thumb img")).toContain("inset: 0");
+    expect(blockFor(".library-thumb img")).toContain("object-fit: contain");
+  });
+
+  it("uses a compact rectangular remove action beside library metadata", () => {
+    const item = blockFor(".library-item {");
+    const removeAction = blockFor(".library-remove-action");
+    const footer = blockFor(".library-footer {");
+    const narrowMediaStart = css.indexOf("@media (max-width: 420px)");
+    const narrowItem = blockFor(".library-item {", narrowMediaStart);
+
+    expect(item).toContain("grid-template-columns: 62px minmax(0, 1fr)");
+    expect(narrowItem).toContain("grid-template-columns: 92px minmax(0, 1fr)");
+    expect(blockFor(".library-thumb")).toContain("grid-row: 1 / span 2");
+    expect(removeAction).toContain("width: 36px");
+    expect(removeAction).toContain("height: 32px");
+    expect(removeAction).toContain("min-height: 32px");
+    expect(removeAction).toContain("border-radius: 6px");
+    expect(footer).toContain("grid-column: 2");
+    expect(footer).toContain("display: flex");
+    expect(footer).toContain("justify-content: space-between");
+    expect(footer).toContain("align-items: center");
+  });
+
+  it("draws the adjustment frame above the artwork image", () => {
+    const frameOverlay = blockFor(".adjust-base::after");
+
+    expect(frameOverlay).toContain("position: absolute");
+    expect(frameOverlay).toContain("inset: 0");
+    expect(frameOverlay).toContain("pointer-events: none");
+    expect(frameOverlay).toMatch(/box-shadow:\s*inset/);
   });
 
   it("keeps compact result actions in one touch-friendly column", () => {
@@ -205,6 +283,12 @@ describe("mobile touch targets", () => {
     expect(blockFor(".option-preview-frame")).not.toMatch(/background:/);
     expect(blockFor(".expert-sample-frame")).not.toMatch(/background:/);
     expect(blockFor(".result-grid img,\n.image-placeholder")).not.toMatch(/background:/);
+  });
+
+  it("fits the loading image border directly to the image bounds", () => {
+    expect(blockFor(".generating-visual")).not.toMatch(/border:/);
+    expect(blockFor(".generating-visual img")).toContain("border: 1px solid rgba(88, 76, 61, 0.16)");
+    expect(blockFor(".generating-visual img")).toContain("border-radius: inherit");
   });
 
   it("does not keep stitched montage styles for question previews", () => {

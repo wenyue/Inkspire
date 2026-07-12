@@ -389,6 +389,57 @@ test("queued artwork render passes the trusted classic reference without affecti
   });
 });
 
+test("classic artwork titles use five trusted curated names before Chinese ordinals", async () => {
+  await withTempStore(async (temp) => {
+    const projectRoot = path.join(temp, "project");
+    await writeClassicArtwork(projectRoot);
+    const titles = ["溪山清韵", "云壑松声", "烟岚归舟", "松风入画", "远水含光"];
+    const manager = createJobManager({
+      config: classicArtworkConfig(projectRoot, [
+        { id: "trusted", image: "/classic-artworks/trusted.webp", new_artwork_titles: titles },
+        { id: "malformed", image: "/classic-artworks/trusted.webp", new_artwork_titles: Array(5).fill("重复题") },
+        { id: "non-chinese", image: "/classic-artworks/trusted.webp", new_artwork_titles: ["First", "Second", "Third", "Fourth", "Fifth"] }
+      ]),
+      storage: createStorage(path.join(temp, "data")),
+      runner: fakeRunner()
+    });
+    const generatedTitles = [];
+
+    for (let index = 0; index < 6; index += 1) {
+      const result = await manager.createArtwork({
+        userId: "classic-title-user",
+        type: "painting",
+        answers: { creation_mode: "classic_reference", classic_artwork_id: "trusted" }
+      });
+      generatedTitles.push(result.record.title);
+      await manager.waitForIdle();
+    }
+
+    assert.deepEqual(generatedTitles, [...titles, `${titles[0]} 其一`]);
+
+    const malformed = await manager.createArtwork({
+      userId: "malformed-classic-title-user",
+      type: "painting",
+      answers: {
+        creation_mode: "classic_reference",
+        classic_artwork_id: "malformed",
+        new_artwork_titles: ["客户端伪造题名"]
+      }
+    });
+    assert.notEqual(malformed.record.title, "重复题");
+    assert.notEqual(malformed.record.title, "客户端伪造题名");
+    await manager.waitForIdle();
+
+    const nonChinese = await manager.createArtwork({
+      userId: "non-chinese-classic-title-user",
+      type: "painting",
+      answers: { creation_mode: "classic_reference", classic_artwork_id: "non-chinese" }
+    });
+    assert.notEqual(nonChinese.record.title, "First");
+    await manager.waitForIdle();
+  });
+});
+
 test("calligraphy title preserves the full submitted text", async () => {
   await withTempStore(async (temp) => {
     const storage = createStorage(temp);
@@ -404,6 +455,30 @@ test("calligraphy title preserves the full submitted text", async () => {
 
     assert.equal(record.title, text);
     assert.equal(stored.title, text);
+  });
+});
+
+test("calligraphy duplicate titles use Chinese ordinals without truncating the text", async () => {
+  await withTempStore(async (temp) => {
+    const storage = createStorage(temp);
+    const manager = createJobManager({
+      config: { app: { image: { webpQuality: 82 } }, prompts: {}, questions: {} },
+      storage,
+      runner: fakeRunner()
+    });
+    const text = "明月松间照清泉石上流竹喧归浣女莲动下渔舟";
+
+    const first = await manager.createArtwork({ userId: "calligraphy-user", type: "calligraphy", answers: { text } });
+    await manager.waitForIdle();
+    const second = await manager.createArtwork({ userId: "calligraphy-user", type: "calligraphy", answers: { text } });
+    await manager.waitForIdle();
+    const third = await manager.createArtwork({ userId: "calligraphy-user", type: "calligraphy", answers: { text } });
+    await manager.waitForIdle();
+
+    assert.deepEqual(
+      [first.record.title, second.record.title, third.record.title],
+      [text, `${text} 其一`, `${text} 其二`]
+    );
   });
 });
 
@@ -450,6 +525,32 @@ test("painting title is deterministic for the same answers", async () => {
 
     assert.equal(first.record.title, second.record.title);
     assert.notEqual(first.record.title, "花鸟");
+  });
+});
+
+test("concurrent tabs reserve different titles for the same user", async () => {
+  await withTempStore(async (temp) => {
+    const manager = createJobManager({
+      config: { app: { image: { webpQuality: 82 } }, prompts: {}, questions: {} },
+      storage: createStorage(temp),
+      runner: fakeRunner()
+    });
+    const request = {
+      userId: "concurrent-title-user",
+      type: "painting",
+      answers: { painting_subject: "山水" }
+    };
+
+    const [studio, library] = await Promise.all([
+      manager.createArtwork({ ...request, originTab: "studio" }),
+      manager.createArtwork({ ...request, originTab: "library" })
+    ]);
+    const titles = [studio.record.title, library.record.title];
+    const baseTitle = titles.find((title) => !/ 其[一二三四五六七八九十百千]+$/.test(title));
+    await manager.waitForIdle();
+
+    assert.ok(baseTitle);
+    assert.deepEqual(new Set(titles), new Set([baseTitle, `${baseTitle} 其一`]));
   });
 });
 

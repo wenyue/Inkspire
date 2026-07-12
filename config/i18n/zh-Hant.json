@@ -13,6 +13,9 @@
     "idle": "準備就緒",
     "generating": "正在生成"
   },
+  "result": {
+    "loading": "正在打開作品…"
+  },
   "errors": {
     "generic": "暫時無法完成，請稍後再試。"
   },

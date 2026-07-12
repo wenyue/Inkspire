@@ -13,6 +13,9 @@
     "idle": "Ready",
     "generating": "Generating"
   },
+  "result": {
+    "loading": "Opening artwork…"
+  },
   "errors": {
     "generic": "Unable to complete this right now. Please try again."
   },

@@ -278,12 +278,7 @@ test("painting titles avoid kept user history and ignore removed records", async
     await waitForJob(firstUser, secondCreated.body.job.id);
     const secondRecord = await firstUser.get(`/api/records/${secondCreated.body.record.id}`).expect(200);
 
-    assert.notEqual(secondRecord.body.title, firstRecord.body.title);
-
-    await firstUser
-      .post(`/api/records/${firstRecord.body.id}/favorite`)
-      .send({ favorite: false })
-      .expect(200);
+    assert.equal(secondRecord.body.title, `${firstRecord.body.title} 其一`);
 
     const thirdCreated = await firstUser
       .post("/api/generations")
@@ -292,7 +287,21 @@ test("painting titles avoid kept user history and ignore removed records", async
     await waitForJob(firstUser, thirdCreated.body.job.id);
     const thirdRecord = await firstUser.get(`/api/records/${thirdCreated.body.record.id}`).expect(200);
 
-    assert.equal(thirdRecord.body.title, firstRecord.body.title);
+    assert.equal(thirdRecord.body.title, `${firstRecord.body.title} 其二`);
+
+    await firstUser
+      .post(`/api/records/${firstRecord.body.id}/favorite`)
+      .send({ favorite: false })
+      .expect(200);
+
+    const reusedCreated = await firstUser
+      .post("/api/generations")
+      .send({ type: "painting", answers })
+      .expect(201);
+    await waitForJob(firstUser, reusedCreated.body.job.id);
+    const reusedRecord = await firstUser.get(`/api/records/${reusedCreated.body.record.id}`).expect(200);
+
+    assert.equal(reusedRecord.body.title, firstRecord.body.title);
 
     const otherUserCreated = await secondUser
       .post("/api/generations")
@@ -305,23 +314,39 @@ test("painting titles avoid kept user history and ignore removed records", async
   });
 });
 
-test("painting title pools provide more than four kept titles before ordinal fallback", async () => {
+test("painting titles reuse the smallest available ordinal in the current collection", async () => {
   await withTempApp(async ({ app }) => {
     const agent = request.agent(app);
-    const titles = [];
+    const records = [];
 
-    for (let index = 0; index < 5; index += 1) {
+    for (let index = 0; index < 4; index += 1) {
       const created = await agent
         .post("/api/generations")
         .send({ type: "painting", answers: { painting_subject: "山水" } })
         .expect(201);
       await waitForJob(agent, created.body.job.id);
       const record = await agent.get(`/api/records/${created.body.record.id}`).expect(200);
-      titles.push(record.body.title);
+      records.push(record.body);
     }
 
-    assert.equal(new Set(titles).size, 5);
-    assert.equal(titles.some((title) => /\s其\d+$/.test(title)), false);
+    assert.deepEqual(
+      records.map((record) => record.title),
+      [records[0].title, `${records[0].title} 其一`, `${records[0].title} 其二`, `${records[0].title} 其三`]
+    );
+
+    await agent
+      .post(`/api/records/${records[1].id}/favorite`)
+      .send({ favorite: false })
+      .expect(200);
+
+    const created = await agent
+      .post("/api/generations")
+      .send({ type: "painting", answers: { painting_subject: "山水" } })
+      .expect(201);
+    await waitForJob(agent, created.body.job.id);
+    const record = await agent.get(`/api/records/${created.body.record.id}`).expect(200);
+
+    assert.equal(record.body.title, `${records[0].title} 其一`);
   });
 });
 

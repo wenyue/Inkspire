@@ -17,6 +17,7 @@ repository evidence.
 
 - Public assets mirrored from `wenyue/agents` stay public; do not locally adapt them.
 - Project-owned rules and skills are regenerated from current target repository evidence.
+- Write every generated or refreshed project-owned rule and skill in English.
 - Run `scripts/sync_public_agent_assets.py` before changing project-owned agent assets.
 - The sync script mirrors public assets, regenerates thin wrappers and entry files, and deletes
   retired skill directories associated with catalog entries. It does not generate project-owned

@@ -38,6 +38,7 @@ function loadConfig(projectRoot = path.resolve(__dirname, "../..")) {
   const i18n = {
     "zh-Hans": readJson(path.join(configDir, "i18n", "zh-Hans.json")),
     "zh-Hant": readJson(path.join(configDir, "i18n", "zh-Hant.json")),
+    ja: readJson(path.join(configDir, "i18n", "ja.json")),
     en: readJson(path.join(configDir, "i18n", "en.json"))
   };
   const prompts = {

@@ -20,11 +20,11 @@ interface LibraryProps {
     removeFavorite?: string;
     removeFavoriteShort?: string;
     removeConfirmTitle?: string;
-    removeConfirmHint?: string;
     removeConfirmCancel?: string;
     removeConfirmAction?: string;
     workTypePainting?: string;
     workTypeCalligraphy?: string;
+    classicReference?: string;
     format?: string;
     density?: string;
     densitySmall?: string;
@@ -55,15 +55,8 @@ function placeholder(record: LibraryRecord): string {
   return record.type === "painting" ? "画" : "书";
 }
 
-function statusLabel(record: LibraryRecord, labels: LibraryProps["labels"]): string {
-  if (record.status === "failed") {
-    return labels.failed;
-  }
-  return record.has_fusion ? labels.fusion : labels.artwork;
-}
-
 function dateLocale(locale: Locale): string {
-  return locale === "en" ? "en-US" : locale === "zh-Hant" ? "zh-TW" : "zh-CN";
+  return locale === "en" ? "en-US" : locale === "ja" ? "ja-JP" : locale === "zh-Hant" ? "zh-TW" : "zh-CN";
 }
 
 function formattedCreatedAt(record: LibraryRecord, locale: Locale): string {
@@ -85,37 +78,57 @@ function formattedCreatedAt(record: LibraryRecord, locale: Locale): string {
 }
 
 const formatTranslations = [
-  ["横幅", "橫幅", "Horizontal"],
-  ["立轴", "立軸", "Hanging Scroll"],
-  ["斗方", "斗方", "Square"],
-  ["手卷", "手卷", "Handscroll"],
-  ["扇面", "扇面", "Fan"],
-  ["册页", "冊頁", "Album"]
+  ["横幅", "橫幅", "Horizontal", "横長"],
+  ["立轴", "立軸", "Hanging Scroll", "掛軸"],
+  ["斗方", "斗方", "Square", "方形"],
+  ["手卷", "手卷", "Handscroll", "手巻"],
+  ["扇面", "扇面", "Fan", "扇面"],
+  ["册页", "冊頁", "Album", "画冊"]
 ] as const;
 
 function localizedFormat(value: string, locale: Locale): string {
   const match = formatTranslations.find((translations) => translations.some((translation) => translation === value));
   if (!match) return value;
-  return match[locale === "zh-Hans" ? 0 : locale === "zh-Hant" ? 1 : 2];
+  return match[locale === "zh-Hans" ? 0 : locale === "zh-Hant" ? 1 : locale === "en" ? 2 : 3];
 }
 
-function metadata(record: LibraryRecord, labels: LibraryProps["labels"], locale: Locale): string {
-  const savedFormat = record.answers?.painting_format || record.answers?.calligraphy_layout;
-  const format = savedFormat ? localizedFormat(savedFormat, locale) : "";
-  const density = record.generation_complexity === "small"
-    ? labels.densitySmall
-    : record.generation_complexity === "medium"
-      ? labels.densityMedium
-      : record.generation_complexity === "large"
-        ? labels.densityLarge
-        : "";
-  return [
-    statusLabel(record, labels),
-    record.type === "painting" ? labels.workTypePainting : labels.workTypeCalligraphy,
-    format && labels.format ? `${labels.format}：${format}` : "",
-    density && labels.density ? `${labels.density}：${density}` : "",
-    formattedCreatedAt(record, locale)
-  ].filter(Boolean).join(" · ");
+function metadata(record: LibraryRecord, locale: Locale): string {
+  return formattedCreatedAt(record, locale);
+}
+
+function generationParameters(record: LibraryRecord, labels: LibraryProps["labels"], locale: Locale): string {
+  const answers = record.answers ?? {};
+  const workType =
+    record.type === "painting"
+      ? (labels.workTypePainting ??
+        (locale === "en" ? "Painting" : locale === "zh-Hant" ? "國畫" : "国画"))
+      : (labels.workTypeCalligraphy ??
+        (locale === "en"
+          ? "Calligraphy"
+          : locale === "zh-Hant"
+            ? "書法"
+            : "书法"));
+  if (answers.creation_mode === "classic_reference") {
+    const classicReference = labels.classicReference ?? "仿名作";
+    const classicParameter = answers.classic_artwork_title
+      ? locale === "en"
+        ? `${classicReference}: ${answers.classic_artwork_title}`
+        : `${classicReference}《${answers.classic_artwork_title}》`
+      : classicReference;
+    return [workType, classicParameter]
+      .filter(Boolean)
+      .join(" · ");
+  }
+  const parameters = record.type === "painting"
+    ? [answers.painting_subject, answers.painting_brushwork, answers.painting_palette]
+    : [answers.calligraphy_script, answers.calligraphy_spirit, answers.calligraphy_material];
+  if (!parameters.some(Boolean)) {
+    const savedFormat = answers.painting_format || answers.calligraphy_layout;
+    if (savedFormat) {
+      parameters.push(localizedFormat(savedFormat, locale));
+    }
+  }
+  return [workType, ...parameters].filter(Boolean).join(" · ");
 }
 
 function LibraryItem({
@@ -138,9 +151,9 @@ function LibraryItem({
   const removeLabel = labels.removeFavorite ?? "移出藏卷";
   const removeShortLabel = labels.removeFavoriteShort ?? "移出";
   const removeConfirmTitle = labels.removeConfirmTitle ?? "从藏卷移出？";
-  const removeConfirmHint = labels.removeConfirmHint ?? "作品记录不会删除。";
   const removeConfirmCancel = labels.removeConfirmCancel ?? "取消";
   const removeConfirmAction = labels.removeConfirmAction ?? removeShortLabel;
+  const createdAtLabel = metadata(record, locale);
 
   return (
     <article className="library-item">
@@ -149,28 +162,36 @@ function LibraryItem({
         type="button"
         aria-label={`${openLabel} ${record.title || record.id}`}
         onClick={() => onOpen?.(record)}
+      />
+      <span
+        className={`${imageFailed ? "library-thumb library-thumb-unavailable" : "library-thumb"} ${artworkFormatClass(record.answers)}`}
       >
-        <span className={`${imageFailed ? "library-thumb library-thumb-unavailable" : "library-thumb"} ${artworkFormatClass(record.answers)}`}>
-          {src && !imageFailed ? (
-            <img src={src} alt={record.title || record.id} onError={() => setImageFailed(true)} />
-          ) : imageFailed ? (
-            <span>图像暂不可用</span>
-          ) : (
-            <span>{placeholder(record)}</span>
-          )}
+        {src && !imageFailed ? (
+          <img
+            src={src}
+            alt={record.title || record.id}
+            onError={() => setImageFailed(true)}
+          />
+        ) : imageFailed ? (
+          <span>图像暂不可用</span>
+        ) : (
+          <span>{placeholder(record)}</span>
+        )}
+      </span>
+      <span className="library-copy">
+        <strong>{record.title || record.id}</strong>
+        <span className="library-parameters">
+          {generationParameters(record, labels, locale)}
         </span>
-        <span className="library-copy">
-          <strong>{record.title || record.id}</strong>
-          <span className="library-meta">{metadata(record, labels, locale)}</span>
-          <span className="library-open-action">
-            <span>{openLabel}</span>
-            <span aria-hidden="true">→</span>
-          </span>
-        </span>
-      </button>
-      <div className="library-actions">
-        {onFavoriteToggle ? (
-          <>
+      </span>
+      <div className="library-footer">
+        {createdAtLabel ? (
+          <span className="library-meta">{createdAtLabel}</span>
+        ) : (
+          <span />
+        )}
+        <div className="library-actions">
+          {onFavoriteToggle ? (
             <button
               className="library-remove-action"
               type="button"
@@ -179,17 +200,23 @@ function LibraryItem({
               onClick={() => setConfirmingRemove(true)}
             >
               <BookmarkX aria-hidden="true" size={16} />
-              <span>{removeShortLabel}</span>
             </button>
-          </>
-        ) : null}
+          ) : null}
+        </div>
       </div>
       {confirmingRemove ? (
-        <div className="library-remove-confirm" role="group" aria-label={removeConfirmTitle}>
+        <div
+          className="library-remove-confirm"
+          role="group"
+          aria-label={removeConfirmTitle}
+        >
           <strong>{removeConfirmTitle}</strong>
-          <span>{removeConfirmHint}</span>
           <div>
-            <button type="button" className="secondary-action compact-action" onClick={() => setConfirmingRemove(false)}>
+            <button
+              type="button"
+              className="secondary-action compact-action"
+              onClick={() => setConfirmingRemove(false)}
+            >
               {removeConfirmCancel}
             </button>
             <button

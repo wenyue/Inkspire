@@ -3,11 +3,13 @@ import { ArrowLeft, Brush, ImagePlus, Wand2 } from "lucide-react";
 import type { GenerationRecord } from "../api";
 import { artworkFormatClass, resultLayoutForWidth } from "../domain";
 import { generationFailureKind } from "../generationFailure";
+import ArtworkFrame from "./ArtworkFrame";
 import ImageViewer from "./ImageViewer";
 
 interface ResultViewProps {
   record: GenerationRecord;
   artworkLabel: string;
+  currentArtworkLabel: string;
   fusionLabel: string;
   makeLabel: string;
   makeHint: string;
@@ -27,14 +29,17 @@ interface ResultViewProps {
   actionError?: string;
   isAttachingPhoto?: boolean;
   canMake?: boolean;
+  autoScroll?: boolean;
   onBack?: () => void;
   onMake: () => void;
+  onMakePointerDown?: () => void;
   onAdjust: () => void;
   onAttachPhoto: (file: File) => void;
   onGenerateFusion: () => void;
   t: (key: string) => string;
   onSelectClassic: () => void;
   onRetryCalligraphy: () => void;
+  onAutoScrollComplete?: (recordId: string) => void;
 }
 
 function recordImage(record: GenerationRecord, kind: "artwork" | "fusion") {
@@ -56,6 +61,7 @@ function openNestedFileInput(event: React.KeyboardEvent<HTMLElement>): void {
 export default function ResultView({
   record,
   artworkLabel,
+  currentArtworkLabel,
   fusionLabel,
   makeLabel,
   makeHint,
@@ -75,14 +81,17 @@ export default function ResultView({
   actionError = "",
   isAttachingPhoto = false,
   canMake = true,
+  autoScroll = false,
   onBack,
   onMake,
+  onMakePointerDown,
   onAdjust,
   onAttachPhoto,
   onGenerateFusion,
   t,
   onSelectClassic,
-  onRetryCalligraphy
+  onRetryCalligraphy,
+  onAutoScrollComplete
 }: ResultViewProps) {
   const [layout, setLayout] = useState(resultLayoutForWidth(window.innerWidth));
   const [failedImages, setFailedImages] = useState<Record<string, boolean>>({});
@@ -98,11 +107,15 @@ export default function ResultView({
   }, []);
 
   useEffect(() => {
-    if (typeof resultRef.current?.scrollIntoView === "function") {
-      resultRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
-    }
     setFailedImages({});
   }, [record.id]);
+
+  useEffect(() => {
+    if (autoScroll && typeof resultRef.current?.scrollIntoView === "function") {
+      resultRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+      onAutoScrollComplete?.(record.id);
+    }
+  }, [autoScroll, onAutoScrollComplete, record.id]);
 
   useEffect(() => () => {
     if (pendingPhotoTimer.current !== null && typeof window !== "undefined") {
@@ -149,32 +162,23 @@ export default function ResultView({
   const fusionFailed = Boolean(fusion && failedImages.fusion);
   const hasEnvironmentImage = Boolean(record.source_photo_path);
   const mediaClassName = layout === "stacked" ? "compact-result-media" : undefined;
-  const artworkMediaClassName = [mediaClassName, artworkFormatClass(record.answers)].filter(Boolean).join(" ");
+  const artworkFormatClassName = artworkFormatClass(record.answers);
   const uploadPhotoLabel = fusion ? reuploadEnvironmentPhotoLabel : attachPhotoLabel;
-  const artworkFigure = (
-    <figure>
-      {artwork && !artworkFailed ? (
-        <button
-          className={`image-open-button ${artworkMediaClassName}`.trim()}
-          type="button"
-          aria-label={`查看${artworkLabel}`}
-          onClick={() => setViewerImage({ src: artwork, alt: artworkLabel })}
-        >
-          <img
-            className={artworkMediaClassName}
-            src={artwork}
-            alt={artworkLabel}
-            onError={() => setFailedImages((current) => ({ ...current, artwork: true }))}
-          />
-        </button>
-      ) : (
-        <div className={`image-placeholder image-error ${artworkMediaClassName}`.trim()} role="status">
-          <strong>{imageUnavailableTitle}</strong>
-          <span>{imageUnavailableHint}</span>
-        </div>
-      )}
-      <figcaption>{artworkLabel}</figcaption>
-    </figure>
+  const artworkFigure = artwork && !artworkFailed ? (
+    <ArtworkFrame
+      src={artwork}
+      imageAlt={artworkLabel}
+      openLabel={`查看${currentArtworkLabel} ${artworkLabel}`}
+      frameLabel={currentArtworkLabel}
+      formatClassName={artworkFormatClassName}
+      onOpen={() => setViewerImage({ src: artwork, alt: artworkLabel })}
+      onError={() => setFailedImages((current) => ({ ...current, artwork: true }))}
+    />
+  ) : (
+    <div className={`image-placeholder image-error ${artworkFormatClassName}`.trim()} role="status">
+      <strong>{imageUnavailableTitle}</strong>
+      <span>{imageUnavailableHint}</span>
+    </div>
   );
   const fusionFigure = fusion ? (
     <figure>
@@ -204,9 +208,14 @@ export default function ResultView({
   const resultActions = (
     <>
       {canMake && !failed && !artworkFailed ? <p className="result-conversion-hint">{makeHint}</p> : null}
-      <div className="result-actions mobile-action-surface">
+      <div className="result-actions">
         {canMake && !failed && !artworkFailed ? (
-          <button className="primary-action result-action-button" type="button" onClick={onMake}>
+          <button
+            className="primary-action result-action-button"
+            type="button"
+            onPointerDown={onMakePointerDown}
+            onClick={onMake}
+          >
             <Brush aria-hidden="true" size={16} />
             {makeLabel}
           </button>

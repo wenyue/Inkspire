@@ -1,10 +1,14 @@
 import { BrowserRouter } from "react-router-dom";
 import App from "./App";
+import BackgroundMusic from "./components/BackgroundMusic";
 
 export default function AppRoot() {
   return (
-    <BrowserRouter>
-      <App />
-    </BrowserRouter>
+    <>
+      <BackgroundMusic />
+      <BrowserRouter>
+        <App />
+      </BrowserRouter>
+    </>
   );
 }

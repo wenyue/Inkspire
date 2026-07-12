@@ -1,4 +1,4 @@
-export type Locale = "zh-Hans" | "zh-Hant" | "en";
+export type Locale = "zh-Hans" | "zh-Hant" | "en" | "ja";
 export type WorkType = "painting" | "calligraphy";
 export type ResultLayout = "stacked" | "split";
 
@@ -35,22 +35,26 @@ export const WORK_TYPE_QUESTION: Question = {
   option_preview_images: [
     "/previews/options/work-type-0-painting.webp",
     "/previews/options/work-type-1-calligraphy.webp",
+    "/previews/options/work-type-2-classics.webp",
     "/previews/questions/painting-subject.webp"
   ],
   preview_prompt: {
-    "zh-Hans": "选择国画、书法，或从历代名作取意",
-    "zh-Hant": "選擇國畫、書法，或從歷代名作取意",
+    "zh-Hans": "选择国画、书法、历代名作取意或热门模板",
+    "zh-Hant": "選擇國畫、書法、歷代名作取意或熱門模板",
+    ja: "中国画、書道、歴代の名作、または人気テンプレートから選ぶ",
     en: "Preview the artwork direction"
   },
   title: {
     "zh-Hans": "先定创作方向",
     "zh-Hant": "先定創作方向",
+    ja: "創作の方向を選ぶ",
     en: "Choose a creative direction"
   },
   options: {
-    "zh-Hans": ["国画", "书法", "从历代名作取意"],
-    "zh-Hant": ["國畫", "書法", "從歷代名作取意"],
-    en: ["Painting", "Calligraphy", "Draw from Masterworks"]
+    "zh-Hans": ["国画", "书法", "从历代名作取意", "热门模板"],
+    "zh-Hant": ["國畫", "書法", "從歷代名作取意", "熱門模板"],
+    ja: ["中国画", "書道", "名作から着想", "人気テンプレート"],
+    en: ["Painting", "Calligraphy", "Draw from Masterworks", "Popular Templates"]
   }
 };
 
@@ -62,6 +66,9 @@ export function optionValueForQuestion(question: Question, option: string, local
   const index = question.options?.[locale]?.indexOf(option) ?? -1;
   if (index === 2) {
     return "classic_reference";
+  }
+  if (index === 3) {
+    return "template";
   }
   return index === 1 ? "calligraphy" : "painting";
 }

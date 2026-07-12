@@ -56,8 +56,12 @@ import {
   type Tab
 } from "./navigation";
 import {
+  readRecordScrollPositions,
   readTabScrollPositions,
+  recordScrollPositionKey,
+  writeRecordScrollPositions,
   writeTabScrollPositions,
+  type RecordScrollPositions,
   type TabScrollPositions
 } from "./tabScrollPosition";
 
@@ -267,7 +271,7 @@ function hasProductionContact(config: PublicConfig): boolean {
 }
 
 function isLocale(value: string | null): value is Locale {
-  return value === "zh-Hans" || value === "zh-Hant" || value === "en";
+  return value === "zh-Hans" || value === "zh-Hant" || value === "en" || value === "ja";
 }
 
 function readStoredLocale(defaultLocale: Locale): Locale {
@@ -290,6 +294,7 @@ export default function App() {
   const [library, setLibrary] = useState<LibraryRecord[]>([]);
   const [currentRecord, setCurrentRecord] = useState<GenerationRecord | null>(null);
   const [recordViewOpen, setRecordViewOpen] = useState(false);
+  const [autoScrollRecordId, setAutoScrollRecordId] = useState("");
   const [activeJobs, setActiveJobs] = useState<GenerationJob[]>([]);
   const [generationSessions, setGenerationSessions] = useState<GenerationSessionMap>(() => readGenerationSessions());
   const [generationRetryErrors, setGenerationRetryErrors] = useState<Partial<Record<OriginTab, string>>>({});
@@ -307,6 +312,7 @@ export default function App() {
     typeof window === "undefined" ? "/studio" : `${window.location.pathname}${window.location.search}`
   ));
   const [initialTabScrollPositions] = useState(readTabScrollPositions);
+  const [initialRecordScrollPositions] = useState(readRecordScrollPositions);
   const activeJobsRef = useRef<GenerationJob[]>([]);
   const generationSessionsRef = useRef<GenerationSessionMap>(generationSessions);
   const autoFusionRecordIds = useRef<Set<string>>(new Set());
@@ -320,9 +326,12 @@ export default function App() {
   const studioResultPathRef = useRef("/studio");
   const imageViewerHandledPopRef = useRef(false);
   const mainSurfaceRef = useRef<HTMLElement | null>(null);
+  const pendingProductionScrollSnapshotRef = useRef<{ owner: string; top: number } | null>(null);
+  const productionScrollSnapshotRef = useRef<{ owner: string; top: number } | null>(null);
   const tabScrollPositionsRef = useRef<TabScrollPositions>(initialTabScrollPositions);
-  const pendingScrollRestoreRef = useRef<{ tab: Tab; top: number } | null>(null);
-  const programmaticScrollRef = useRef<{ tab: Tab; top: number } | null>(null);
+  const recordScrollPositionsRef = useRef<RecordScrollPositions>(initialRecordScrollPositions);
+  const pendingScrollRestoreRef = useRef<{ owner: string; top: number } | null>(null);
+  const programmaticScrollRef = useRef<{ owner: string; top: number } | null>(null);
   const pageHiddenRef = useRef(false);
   const userScrollActiveRef = useRef(false);
 
@@ -338,16 +347,39 @@ export default function App() {
     writeTabScrollPositions(next);
   }, []);
 
-  const restoreTabScrollPosition = useCallback((tab: Tab) => {
+  const recordScrollKey = recordRoute
+    ? recordScrollPositionKey(recordRoute.recordId, readSourceTab(location.search))
+    : "";
+  const scrollOwner = recordScrollKey ? `record:${recordScrollKey}` : `tab:${activeTab}`;
+  const recordRouteReady = Boolean(
+    recordRoute && recordViewOpen && currentRecord?.id === recordRoute.recordId
+  );
+  const scrollContentReady = !recordRoute || recordRouteReady;
+
+  const saveScrollPosition = useCallback((owner: string, top: number) => {
+    const normalizedTop = Math.max(0, top);
+    if (owner.startsWith("record:")) {
+      const key = owner.slice("record:".length);
+      const next = { ...recordScrollPositionsRef.current, [key]: normalizedTop };
+      recordScrollPositionsRef.current = next;
+      writeRecordScrollPositions(next);
+      return;
+    }
+    saveTabScrollPosition(owner.slice("tab:".length) as Tab, normalizedTop);
+  }, [saveTabScrollPosition]);
+
+  const restoreScrollPosition = useCallback((owner: string) => {
     const surface = mainSurfaceRef.current;
     if (!surface) {
       return;
     }
-    const top = tabScrollPositionsRef.current[tab];
+    const top = owner.startsWith("record:")
+      ? recordScrollPositionsRef.current[owner.slice("record:".length)] ?? 0
+      : tabScrollPositionsRef.current[owner.slice("tab:".length) as Tab];
     userScrollActiveRef.current = false;
-    pendingScrollRestoreRef.current = { tab, top };
+    pendingScrollRestoreRef.current = { owner, top };
     surface.scrollTop = top;
-    programmaticScrollRef.current = { tab, top: surface.scrollTop };
+    programmaticScrollRef.current = { owner, top: surface.scrollTop };
     if (Math.abs(surface.scrollTop - top) < 1) {
       pendingScrollRestoreRef.current = null;
     }
@@ -357,7 +389,7 @@ export default function App() {
     if (pageHiddenRef.current) {
       return;
     }
-    if (pendingScrollRestoreRef.current?.tab === activeTab) {
+    if (!scrollContentReady || pendingScrollRestoreRef.current?.owner === scrollOwner) {
       return;
     }
     if (!userScrollActiveRef.current) {
@@ -365,27 +397,29 @@ export default function App() {
     }
     const top = event.currentTarget.scrollTop;
     const programmatic = programmaticScrollRef.current;
-    if (programmatic?.tab === activeTab && Math.abs(programmatic.top - top) < 1) {
+    if (programmatic?.owner === scrollOwner && Math.abs(programmatic.top - top) < 1) {
       programmaticScrollRef.current = null;
       return;
     }
     programmaticScrollRef.current = null;
     pendingScrollRestoreRef.current = null;
-    saveTabScrollPosition(activeTab, top);
+    saveScrollPosition(scrollOwner, top);
     userScrollActiveRef.current = false;
-  }, [activeTab, saveTabScrollPosition]);
+  }, [saveScrollPosition, scrollContentReady, scrollOwner]);
 
   const beginUserScroll = useCallback(() => {
     userScrollActiveRef.current = true;
-    if (pendingScrollRestoreRef.current?.tab === activeTab) {
+    if (pendingScrollRestoreRef.current?.owner === scrollOwner) {
       pendingScrollRestoreRef.current = null;
       programmaticScrollRef.current = null;
     }
-  }, [activeTab]);
+  }, [scrollOwner]);
 
   useLayoutEffect(() => {
-    restoreTabScrollPosition(activeTab);
-  }, [activeTab, restoreTabScrollPosition]);
+    if (scrollContentReady) {
+      restoreScrollPosition(scrollOwner);
+    }
+  }, [restoreScrollPosition, scrollContentReady, scrollOwner]);
 
   useEffect(() => {
     const onPageHide = () => {
@@ -406,15 +440,15 @@ export default function App() {
     };
   }, []);
 
-  const activeTabContentVersion = activeTab === "library"
-    ? library.length
-    : activeTab === "experts" ? config.experts.length : 0;
+  const activeTabContentVersion = recordRoute
+    ? recordRouteReady ? currentRecord?.id ?? "" : "loading"
+    : activeTab === "library" ? library.length : activeTab === "experts" ? config.experts.length : 0;
 
   useLayoutEffect(() => {
-    if (pendingScrollRestoreRef.current?.tab === activeTab) {
-      restoreTabScrollPosition(activeTab);
+    if (scrollContentReady && pendingScrollRestoreRef.current?.owner === scrollOwner) {
+      restoreScrollPosition(scrollOwner);
     }
-  }, [activeTab, activeTabContentVersion, restoreTabScrollPosition]);
+  }, [activeTabContentVersion, restoreScrollPosition, scrollContentReady, scrollOwner]);
 
   useEffect(() => {
     const content = mainSurfaceRef.current?.firstElementChild;
@@ -422,13 +456,13 @@ export default function App() {
       return;
     }
     const observer = new ResizeObserver(() => {
-      if (pendingScrollRestoreRef.current?.tab === activeTab) {
-        restoreTabScrollPosition(activeTab);
+      if (scrollContentReady && pendingScrollRestoreRef.current?.owner === scrollOwner) {
+        restoreScrollPosition(scrollOwner);
       }
     });
     observer.observe(content);
     return () => observer.disconnect();
-  }, [activeTab, activeTabContentVersion, restoreTabScrollPosition]);
+  }, [activeTabContentVersion, restoreScrollPosition, scrollContentReady, scrollOwner]);
 
   const updateGenerationSessions = useCallback((updater: (sessions: GenerationSessionMap) => GenerationSessionMap) => {
     setGenerationSessions((current) => {
@@ -675,6 +709,19 @@ export default function App() {
   const productionEnabled = hasProductionContact(config);
   const productionDialogOpen = showProduction && recordRoute?.mode === "production";
 
+  useLayoutEffect(() => {
+    const snapshot = productionScrollSnapshotRef.current;
+    if (showProduction || recordRoute?.mode === "production" || !snapshot) {
+      return;
+    }
+    productionScrollSnapshotRef.current = null;
+    if (snapshot.owner !== scrollOwner || !mainSurfaceRef.current) {
+      return;
+    }
+    mainSurfaceRef.current.scrollTop = snapshot.top;
+    saveScrollPosition(snapshot.owner, snapshot.top);
+  }, [recordRoute?.mode, saveScrollPosition, scrollOwner, showProduction]);
+
   const onResult = useCallback((record: GenerationRecord) => {
     recordCacheRef.current.set(record.id, record);
     setCurrentRecord(record);
@@ -682,6 +729,10 @@ export default function App() {
       const withoutDuplicate = records.filter((item) => item.id !== record.id);
       return visibleLibraryRecords([record, ...withoutDuplicate]);
     });
+  }, []);
+
+  const onResultAutoScrollComplete = useCallback((recordId: string) => {
+    setAutoScrollRecordId((current) => current === recordId ? "" : current);
   }, []);
 
   const mergeActiveJob = useCallback((job: GenerationJob) => {
@@ -778,6 +829,9 @@ export default function App() {
     const finishingAdjustment = adjustSubmitRef.current;
     const shouldOpenResult = activeTab === "studio" || finishingAdjustment;
     setRecordViewOpen(shouldOpenResult);
+    if (shouldOpenResult) {
+      setAutoScrollRecordId(record.id);
+    }
     const source = readSourceTab(location.search);
     if (finishingAdjustment) {
       adjustSubmitRef.current = false;
@@ -797,6 +851,7 @@ export default function App() {
     if (!shouldOpenResult) {
       return;
     }
+    setAutoScrollRecordId(record.id);
     setAdjustOpen(false);
     setShowProduction(false);
     navigate(pathForRecord(record.id, originTab), { replace: true });
@@ -1086,8 +1141,9 @@ export default function App() {
     }
     const surface = mainSurfaceRef.current;
     if (surface) {
-      saveTabScrollPosition(activeTab, surface.scrollTop);
+      saveScrollPosition(scrollOwner, surface.scrollTop);
     }
+    setAutoScrollRecordId("");
     setShowProduction(false);
     setAdjustOpen(false);
     const currentTabHistory = pushTabRoute(tabHistoryRef.current, pathWithSearch);
@@ -1122,10 +1178,31 @@ export default function App() {
     navigate(pathForRecord(currentRecord.id, readSourceTab(location.search), "adjust"));
   };
 
+  const captureProductionScrollPosition = () => {
+    if (!mainSurfaceRef.current) {
+      return;
+    }
+    const snapshot = {
+      owner: scrollOwner,
+      top: mainSurfaceRef.current.scrollTop
+    };
+    pendingProductionScrollSnapshotRef.current = snapshot;
+    window.setTimeout(() => {
+      if (pendingProductionScrollSnapshotRef.current === snapshot) {
+        pendingProductionScrollSnapshotRef.current = null;
+      }
+    }, 0);
+  };
+
   const openProduction = () => {
     if (!currentRecord || currentRecord.status === "failed") {
       return;
     }
+    const pendingSnapshot = pendingProductionScrollSnapshotRef.current;
+    productionScrollSnapshotRef.current = pendingSnapshot?.owner === scrollOwner
+      ? pendingSnapshot
+      : mainSurfaceRef.current ? { owner: scrollOwner, top: mainSurfaceRef.current.scrollTop } : null;
+    pendingProductionScrollSnapshotRef.current = null;
     navigate(pathForRecord(currentRecord.id, readSourceTab(location.search), "production"));
   };
 
@@ -1271,6 +1348,7 @@ export default function App() {
     <ResultView
       record={currentRecord}
       artworkLabel={t("result.artwork")}
+      currentArtworkLabel={t("adjust.baseLabel")}
       fusionLabel={t("result.fusion")}
       makeLabel={t("buttons.make")}
       makeHint={t("result.makeHint")}
@@ -1290,8 +1368,10 @@ export default function App() {
       actionError={resultActionError}
       isAttachingPhoto={isAttachingPhoto}
       canMake={productionEnabled}
+      autoScroll={autoScrollRecordId === currentRecord.id}
       onBack={resultOnBack}
       onMake={openProduction}
+      onMakePointerDown={captureProductionScrollPosition}
       onAdjust={openAdjust}
       onGenerateFusion={async () => {
         if (!currentRecord?.id || !currentRecord.source_photo_path) {
@@ -1310,6 +1390,7 @@ export default function App() {
       t={t}
       onSelectClassic={() => recoverClassicReference()}
       onRetryCalligraphy={retryCalligraphyRecord}
+      onAutoScrollComplete={onResultAutoScrollComplete}
       onAttachPhoto={async (file) => {
         if (!currentRecord?.id) {
           return;
@@ -1332,28 +1413,32 @@ export default function App() {
     />
   ) : null;
 
-  const recordView = currentRecord && adjustOpen ? (
+  const adjustDialog = currentRecord && adjustOpen ? (
     <AdjustView
-      record={currentRecord}
       title={t("adjust.title")}
       intro={t("adjust.intro")}
       placeholder={t("adjust.placeholder")}
       submitLabel={t("adjust.submit")}
       submittingLabel={t("adjust.submitting")}
-      backLabel={t("adjust.back")}
+      closeLabel={t("adjust.back")}
       clearLabel={t("adjust.clearNote")}
-      baseLabel={t("adjust.baseLabel")}
-      artworkLabel={t("result.artwork")}
-      t={t}
       suggestions={list(currentRecord.type === "calligraphy"
         ? "suggestions.calligraphy"
         : "suggestions.painting").slice(1)}
       isSubmitting={isAdjusting}
       error={adjustError}
-      onBack={navigateBack}
+      onClose={navigateBack}
       onSubmit={submitAdjustment}
     />
-  ) : recordRoute && activeTab !== "studio" && recordViewOpen ? resultSlot : null;
+  ) : null;
+  const recordRouteLoading = Boolean(recordRoute && !recordRouteReady);
+  const recordLoadingView = recordRouteLoading ? (
+    <section className="record-route-loading" role="status">
+      <span className="record-route-loading-mark" aria-hidden="true" />
+      <p>{t("result.loading")}</p>
+    </section>
+  ) : null;
+  const recordView = recordRoute && activeTab !== "studio" && recordViewOpen ? resultSlot : null;
   const activeTabSession = generationSessions[tabToOriginTab(activeTab)];
   const activeTabSessionRetry = activeTabSession && isRetryableGenerationSession(activeTabSession)
     ? () => retryGenerationSession(activeTabSession)
@@ -1378,6 +1463,7 @@ export default function App() {
             <option value="zh-Hans">简</option>
             <option value="zh-Hant">繁</option>
             <option value="en">EN</option>
+            <option value="ja">日</option>
           </select>
         </label>
       </header>
@@ -1409,7 +1495,7 @@ export default function App() {
             recoveryError={generationRetryErrors[activeTabSession.originTab]}
             expectsPreviewGeneration={expectsPreviewGeneration(activeTabSession)}
           />
-        ) : recordView ?? (
+        ) : recordLoadingView ?? recordView ?? (
           <>
             {activeTab === "studio" ? (
             <Studio
@@ -1441,11 +1527,11 @@ export default function App() {
                   removeFavorite: t("library.removeFavorite"),
                   removeFavoriteShort: t("library.removeFavoriteShort"),
                   removeConfirmTitle: t("library.removeConfirmTitle"),
-                  removeConfirmHint: t("library.removeConfirmHint"),
                   removeConfirmCancel: t("library.removeConfirmCancel"),
                   removeConfirmAction: t("library.removeConfirmAction"),
                   workTypePainting: t("library.workTypePainting"),
                   workTypeCalligraphy: t("library.workTypeCalligraphy"),
+                  classicReference: t("library.classicReference"),
                   format: t("library.format"),
                   density: t("library.density"),
                   densitySmall: t("library.densitySmall"),
@@ -1538,6 +1624,7 @@ export default function App() {
           onClose={closeProduction}
         />
       ) : null}
+      {adjustDialog}
       {pendingBackExit ? (
         <ConfirmDialog
           title={t("result.backConfirmTitle")}

@@ -87,7 +87,18 @@ function summarizeRecord(record) {
     summary.recommended_artwork_size = record.recommended_artwork_size;
   }
   const displayAnswers = {};
-  for (const key of ["painting_format", "calligraphy_layout"]) {
+  for (const key of [
+    "painting_subject",
+    "painting_brushwork",
+    "painting_palette",
+    "painting_format",
+    "calligraphy_script",
+    "calligraphy_spirit",
+    "calligraphy_layout",
+    "calligraphy_material",
+    "creation_mode",
+    "classic_artwork_title"
+  ]) {
     const value = record.answers?.[key];
     if (typeof value === "string" && value.trim()) {
       displayAnswers[key] = value;

@@ -10,7 +10,6 @@ const CLIENT_OVERRIDES: Dictionaries = {
     studio: {
       title: "墨起",
       subtitle: "国画与书法创作辅助",
-      optionsScrollHint: "下方还有选项，可继续滑动",
       photo: "可选：添加环境照片",
       photoHint: "用于生成摆放效果图；不添加也能直接生成作品图。",
       camera: "拍照",
@@ -104,13 +103,14 @@ const CLIENT_OVERRIDES: Dictionaries = {
       libraryOpenFailed: "作品暂时无法打开，请稍后再试。"
     },
     result: {
+      loading: "正在打开作品…",
       artwork: "作品图",
       fusion: "效果图",
       continue: "按这张图继续调整",
       retry: "重新调整要求",
       adjust: "调整作品",
       adjustRetry: "重新生成",
-      attachPhotoFusion: "添加环境照片生成效果图",
+      attachPhotoFusion: "生成效果图",
       generateFusion: "生成效果图",
       reuploadEnvironmentPhoto: "重新上传环境照片",
       addNotes: "补充要求",
@@ -147,11 +147,11 @@ const CLIENT_OVERRIDES: Dictionaries = {
       removeFavorite: "移出藏卷",
       removeFavoriteShort: "移出",
       removeConfirmTitle: "从藏卷移出？",
-      removeConfirmHint: "作品记录不会删除。",
       removeConfirmCancel: "取消",
       removeConfirmAction: "移出",
       workTypePainting: "国画",
       workTypeCalligraphy: "书法",
+      classicReference: "仿名作",
       format: "形制",
       density: "疏密",
       densitySmall: "疏朗",
@@ -177,7 +177,7 @@ const CLIENT_OVERRIDES: Dictionaries = {
       serviceBoundary: "服务范围、修改轮次与交付时间均以承接确认单为准。",
       consultLabel: "发起咨询",
       consultHint: "复制平台微信，说明想咨询的方向与作品用途。",
-      consultCopied: "平台微信已复制",
+      consultCopied: "已拷贝微信号",
       productionUnavailable: "暂未开放制作咨询"
     },
     production: {
@@ -190,7 +190,7 @@ const CLIENT_OVERRIDES: Dictionaries = {
       wechat: "微信：",
       copyHint: "（点击拷贝）",
       copiedOrder: "已拷贝单号",
-      copiedWechat: "已拷贝微信",
+      copiedWechat: "已拷贝微信号",
       successTitle: "制作意向已记录",
       successIntro: "已保存当前规格与参考要求，接下来可直接联系沟通制作细节。",
       summaryService: "制作方式",
@@ -208,7 +208,6 @@ const CLIENT_OVERRIDES: Dictionaries = {
     studio: {
       title: "墨起",
       subtitle: "國畫與書法創作輔助",
-      optionsScrollHint: "下方還有選項，可繼續滑動",
       photo: "可選：加入擺放環境照片",
       photoHint: "用於生成擺放效果圖；不加入也能直接生成作品圖。",
       camera: "拍照",
@@ -302,13 +301,14 @@ const CLIENT_OVERRIDES: Dictionaries = {
       libraryOpenFailed: "作品暫時無法打開，請稍後再試。"
     },
     result: {
+      loading: "正在打開作品…",
       artwork: "作品圖",
       fusion: "效果圖",
       continue: "按這張圖繼續調整",
       retry: "重新調整要求",
       adjust: "調整作品",
       adjustRetry: "重新生成",
-      attachPhotoFusion: "加入環境照片生成效果圖",
+      attachPhotoFusion: "生成效果圖",
       generateFusion: "生成效果圖",
       reuploadEnvironmentPhoto: "重新上傳環境照片",
       addNotes: "補充要求",
@@ -345,11 +345,11 @@ const CLIENT_OVERRIDES: Dictionaries = {
       removeFavorite: "移出藏卷",
       removeFavoriteShort: "移出",
       removeConfirmTitle: "從藏卷移出？",
-      removeConfirmHint: "作品記錄不會刪除。",
       removeConfirmCancel: "取消",
       removeConfirmAction: "移出",
       workTypePainting: "國畫",
       workTypeCalligraphy: "書法",
+      classicReference: "仿名作",
       format: "形制",
       density: "疏密",
       densitySmall: "疏朗",
@@ -375,7 +375,7 @@ const CLIENT_OVERRIDES: Dictionaries = {
       serviceBoundary: "服務範圍、修改輪次與交付時間均以承接確認單為準。",
       consultLabel: "發起諮詢",
       consultHint: "複製平台微信，說明想諮詢的方向與作品用途。",
-      consultCopied: "平台微信已複製",
+      consultCopied: "已拷貝微信號",
       productionUnavailable: "暫未開放製作諮詢"
     },
     production: {
@@ -388,7 +388,7 @@ const CLIENT_OVERRIDES: Dictionaries = {
       wechat: "微信：",
       copyHint: "（點擊拷貝）",
       copiedOrder: "已拷貝單號",
-      copiedWechat: "已拷貝微信",
+      copiedWechat: "已拷貝微信號",
       successTitle: "製作意向已記錄",
       successIntro: "已保存目前規格與參考要求，接下來可直接聯絡溝通製作細節。",
       summaryService: "製作方式",
@@ -405,7 +405,6 @@ const CLIENT_OVERRIDES: Dictionaries = {
     studio: {
       title: "Inkspire",
       subtitle: "Chinese painting and calligraphy creation assistant",
-      optionsScrollHint: "More choices below — scroll to continue",
       photo: "Optional: add a placement photo",
       photoHint: "Use it to generate a room preview. You can skip it and create artwork now.",
       camera: "Camera",
@@ -499,13 +498,14 @@ const CLIENT_OVERRIDES: Dictionaries = {
       libraryOpenFailed: "This artwork cannot be opened right now. Please try again later."
     },
     result: {
+      loading: "Opening artwork…",
       artwork: "Artwork",
       fusion: "Preview",
       continue: "Adjust from this artwork",
       retry: "Adjust request again",
       adjust: "Adjust artwork",
       adjustRetry: "Generate again",
-      attachPhotoFusion: "Add a placement photo for preview",
+      attachPhotoFusion: "Generate preview",
       generateFusion: "Generate preview",
       reuploadEnvironmentPhoto: "Reupload environment photo",
       addNotes: "Add notes",
@@ -542,11 +542,11 @@ const CLIENT_OVERRIDES: Dictionaries = {
       removeFavorite: "Remove from Library",
       removeFavoriteShort: "Remove",
       removeConfirmTitle: "Remove from Library?",
-      removeConfirmHint: "The artwork record will not be deleted.",
       removeConfirmCancel: "Cancel",
       removeConfirmAction: "Remove",
       workTypePainting: "Painting",
       workTypeCalligraphy: "Calligraphy",
+      classicReference: "After a Masterwork",
       format: "Format",
       density: "Density",
       densitySmall: "Open",
@@ -572,7 +572,7 @@ const CLIENT_OVERRIDES: Dictionaries = {
       serviceBoundary: "Scope, revisions, and delivery are set in the final engagement confirmation.",
       consultLabel: "Start a consultation",
       consultHint: "Copy the platform WeChat and share the direction and intended use.",
-      consultCopied: "Platform WeChat copied",
+      consultCopied: "WeChat ID copied",
       productionUnavailable: "Production consultation is not open yet"
     },
     production: {
@@ -585,7 +585,7 @@ const CLIENT_OVERRIDES: Dictionaries = {
       wechat: "WeChat: ",
       copyHint: "(click to copy)",
       copiedOrder: "Copied order number",
-      copiedWechat: "Copied WeChat",
+      copiedWechat: "Copied WeChat ID",
       successTitle: "Production request recorded",
       successIntro: "Your selected size and reference direction are saved. You can now contact the artisan directly.",
       summaryService: "Service",
@@ -627,6 +627,7 @@ export function normalizeDictionaries(dictionaries: Dictionaries): Dictionaries 
   return {
     "zh-Hans": mergeDictionary(dictionaries["zh-Hans"], CLIENT_OVERRIDES["zh-Hans"]),
     "zh-Hant": mergeDictionary(dictionaries["zh-Hant"], CLIENT_OVERRIDES["zh-Hant"]),
+    ja: mergeDictionary(dictionaries.ja, CLIENT_OVERRIDES.ja),
     en: mergeDictionary(dictionaries.en, CLIENT_OVERRIDES.en)
   };
 }

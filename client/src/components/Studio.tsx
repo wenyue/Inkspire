@@ -1,6 +1,7 @@
 import { Camera, ImagePlus, RotateCcw, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import { answersForArtworkTemplate, type ArtworkTemplate } from "../artworkTemplates";
 import {
   isGenerationLimitError,
   isPhotoTooLargeError,
@@ -24,6 +25,7 @@ import {
   type WorkType
 } from "../domain";
 import ClassicArtworkPicker from "./ClassicArtworkPicker";
+import ArtworkTemplatePicker from "./ArtworkTemplatePicker";
 
 const STUDIO_DRAFT_KEY = "inkspire.studioDraft.v1";
 
@@ -40,7 +42,8 @@ interface StudioDraft {
 
 type StudioStepQuery =
   | { step: "work_type" }
-  | { step: "classic" }
+  | { step: "template" }
+  | { step: "classic"; artworkId: string }
   | { step: "question"; index: number }
   | { step: "photo" }
   | { step: "complexity" }
@@ -116,6 +119,9 @@ function continueLabel(locale: Locale): string {
   if (locale === "en") {
     return "Continue";
   }
+  if (locale === "ja") {
+    return "続ける";
+  }
   if (locale === "zh-Hant") {
     return "繼續";
   }
@@ -165,6 +171,9 @@ function progressLabel(step: number, total: number, locale: Locale): string {
   if (locale === "en") {
     return `Step ${step} / ${total}`;
   }
+  if (locale === "ja") {
+    return `ステップ ${step} / ${total}`;
+  }
   if (locale === "zh-Hant") {
     return `第 ${step} / ${total} 步`;
   }
@@ -175,23 +184,16 @@ function progressStepOnly(step: number, locale: Locale): string {
   if (locale === "en") {
     return `Step ${step}`;
   }
+  if (locale === "ja") {
+    return `ステップ ${step}`;
+  }
   return `第 ${step} 步`;
-}
-
-function expectedInitialStepTotal(config: PublicConfig): number | null {
-  const totals = [
-    config.questions.painting.length,
-    config.questions.calligraphy.length,
-  ]
-    .filter((total) => total > 0)
-    .map((total) => total + 2);
-  return totals.length > 0 && totals.every((total) => total === totals[0]) ? totals[0] : null;
 }
 
 function generationJobLabel(job: GenerationJob, locale: Locale): string {
   const stage = job.stage === "fusion_render"
-    ? (locale === "en" ? "preview" : "效果图")
-    : (locale === "en" ? "artwork" : "作品图");
+    ? (locale === "en" ? "preview" : locale === "ja" ? "プレビュー" : "效果图")
+    : (locale === "en" ? "artwork" : locale === "ja" ? "作品" : "作品图");
   return job.title ? `${job.title} ${stage}` : stage;
 }
 
@@ -215,6 +217,9 @@ function studioStepUrlForState(
   }
   if (isChoosingClassicReference(answers)) {
     return "/studio?step=classic";
+  }
+  if (answers.work_type === "template") {
+    return "/studio?step=template";
   }
   const currentQuestion = nextQuestion(config, answers);
   if (currentQuestion) {
@@ -248,6 +253,15 @@ export function previousStudioStepUrlForState({
   if (isChoosingClassicReference(answers)) {
     return "/studio?step=work_type";
   }
+  if (answers.work_type === "template") {
+    return "/studio?step=work_type";
+  }
+  if (answers.creation_mode === "template" && answers.work_type === "painting" && !photoStepComplete) {
+    return "/studio?step=template";
+  }
+  if (answers.creation_mode === "template" && answers.work_type === "calligraphy" && !photoStepComplete) {
+    return nextQuestion(config, answers) ? "/studio?step=template" : "/studio?step=question&index=0";
+  }
   if (isClassicReferenceComplete(answers) && !photoStepComplete && !hasSourcePhoto && notesFocusRequest <= 0) {
     return "/studio?step=classic";
   }
@@ -271,9 +285,9 @@ function readStudioStepQuery(search: string): StudioStepQuery | null {
   const params = new URLSearchParams(search);
   const step = params.get("step");
   if (step === "classic") {
-    return { step };
+    return { step, artworkId: params.get("artwork") ?? "" };
   }
-  if (step === "work_type" || step === "photo" || step === "complexity" || step === "notes") {
+  if (step === "work_type" || step === "template" || step === "photo" || step === "complexity" || step === "notes") {
     return { step };
   }
   if (step === "question") {
@@ -288,6 +302,14 @@ function trimAnswersForStudioQuestion(config: PublicConfig, answers: Answers, in
     return answers;
   }
   const branchQuestions = questionsForAnswers(config, answers);
+  if (answers.creation_mode === "template") {
+    const nextAnswers = { ...answers };
+    const targetQuestion = branchQuestions[index];
+    if (targetQuestion) {
+      delete nextAnswers[targetQuestion.id];
+    }
+    return nextAnswers;
+  }
   const keepIds = new Set(["work_type", ...branchQuestions.slice(0, index).map((item) => item.id)]);
   const nextAnswers = { ...answers };
   for (const question of branchQuestions) {
@@ -298,18 +320,47 @@ function trimAnswersForStudioQuestion(config: PublicConfig, answers: Answers, in
   return nextAnswers;
 }
 
-export function getProgressLabel(config: PublicConfig, answers: Answers, locale: Locale): string {
+type StudioProgressStage = "questions" | "photo" | "complexity" | "notes";
+
+export function getProgressLabel(
+  config: PublicConfig,
+  answers: Answers,
+  locale: Locale,
+  stage: StudioProgressStage,
+): string {
   const workType = answers.work_type;
   if (!workType) {
-    const initialTotal = expectedInitialStepTotal(config);
-    return initialTotal ? progressLabel(1, initialTotal, locale) : progressStepOnly(1, locale);
+    return progressStepOnly(1, locale);
   }
-  const total = 1 + questionsForAnswers(config, answers).length + 1;
+  if (isChoosingClassicReference(answers) || isClassicReferenceComplete(answers)) {
+    const step = stage === "notes" ? 4 : stage === "photo" || stage === "complexity" ? 3 : 2;
+    return progressLabel(step, 4, locale);
+  }
+  if (answers.work_type === "template") {
+    return progressLabel(2, 4, locale);
+  }
+  if (answers.creation_mode === "template") {
+    const total = answers.work_type === "calligraphy" ? 5 : 4;
+    if (stage === "notes") {
+      return progressLabel(total, total, locale);
+    }
+    if (stage === "photo" || stage === "complexity") {
+      return progressLabel(total - 1, total, locale);
+    }
+    return progressLabel(3, total, locale);
+  }
+  const total = questionsForAnswers(config, answers).length + 3;
+  if (stage === "notes") {
+    return progressLabel(total, total, locale);
+  }
+  if (stage === "photo" || stage === "complexity") {
+    return progressLabel(total - 1, total, locale);
+  }
   const currentQuestion = nextQuestion(config, answers);
   const branchQuestions = questionsForAnswers(config, answers);
   const step = currentQuestion
     ? branchQuestions.findIndex((item) => item.id === currentQuestion.id) + 2
-    : total;
+    : total - 2;
   return progressLabel(step, total, locale);
 }
 
@@ -351,12 +402,13 @@ export default function Studio({
   const [isUploading, setIsUploading] = useState(false);
   const [isSubmittingGeneration, setIsSubmittingGeneration] = useState(false);
   const [error, setError] = useState("");
+  const [selectedClassicArtworkId, setSelectedClassicArtworkId] = useState("");
   const notesRef = useRef<HTMLTextAreaElement | null>(null);
   const pendingPhotoSelection = useRef<{ file: File; input: HTMLInputElement } | null>(null);
   const pendingPhotoTimer = useRef<number | null>(null);
 
   const question = useMemo(() => {
-    if (isChoosingClassicReference(answers)) {
+    if (isChoosingClassicReference(answers) || answers.work_type === "template") {
       return null;
     }
     if (!answers.work_type) {
@@ -370,6 +422,7 @@ export default function Studio({
     : "suggestions.painting");
   const noteSuggestions = suggestions.slice(1);
   const showClassicPicker = isChoosingClassicReference(answers);
+  const showTemplatePicker = answers.work_type === "template";
   const canGoBack = Boolean(answers.work_type);
   const showPhotoStep = complete && !photoStepComplete;
   const showComplexityStep = complete
@@ -378,6 +431,13 @@ export default function Studio({
     && !complexityStepComplete
     && notesFocusRequest <= 0;
   const showConversationStep = complete && photoStepComplete && !showComplexityStep;
+  const progressStage: StudioProgressStage = showPhotoStep
+    ? "photo"
+    : showComplexityStep
+      ? "complexity"
+      : showConversationStep
+        ? "notes"
+        : "questions";
   const showCreationPanel = !hasResult || notesFocusRequest > 0;
   const isIteratingResult = showConversationStep && notesFocusRequest > 0;
   const studioActiveJobs = activeJobs.filter((job) => (job.origin_tab ?? "studio") === "studio");
@@ -484,6 +544,13 @@ export default function Studio({
       setComplexityStepComplete(false);
       return;
     }
+    if (studioStep.step === "template") {
+      setAnswers({ work_type: "template" });
+      setPhotoStepComplete(false);
+      setGenerationComplexity(undefined);
+      setComplexityStepComplete(false);
+      return;
+    }
     if (studioStep.step === "question") {
       setAnswers((current) => trimAnswersForStudioQuestion(config, current, studioStep.index));
       setPhotoStepComplete(false);
@@ -493,6 +560,11 @@ export default function Studio({
     }
     if (studioStep.step === "classic") {
       setAnswers({ work_type: "classic_reference" });
+      setSelectedClassicArtworkId(
+        config.classicArtworks.some((artwork) => artwork.id === studioStep.artworkId)
+          ? studioStep.artworkId
+          : ""
+      );
       setPhotoStepComplete(false);
       setGenerationComplexity(undefined);
       setComplexityStepComplete(false);
@@ -521,6 +593,7 @@ export default function Studio({
     const value = optionValueForQuestion(question, option, locale);
     if (question.id === "work_type" && value === "classic_reference") {
       const nextAnswers = { work_type: "classic_reference" };
+      setSelectedClassicArtworkId("");
       setAnswers(nextAnswers);
       setPhotoStepComplete(false);
       setGenerationComplexity(undefined);
@@ -529,8 +602,27 @@ export default function Studio({
       navigate("/studio?step=classic");
       return;
     }
+    if (question.id === "work_type" && value === "template") {
+      setAnswers({ work_type: "template" });
+      setPhotoStepComplete(false);
+      setGenerationComplexity(undefined);
+      setComplexityStepComplete(false);
+      setError("");
+      navigate("/studio?step=template");
+      return;
+    }
     const nextAnswers = { ...answers, [question.id]: value };
     setAnswers(nextAnswers);
+    navigate(studioStepUrlForState(config, nextAnswers, false, false, false));
+  };
+
+  const selectArtworkTemplate = (template: ArtworkTemplate) => {
+    const nextAnswers = answersForArtworkTemplate(template, locale);
+    setAnswers(nextAnswers);
+    setPhotoStepComplete(false);
+    setGenerationComplexity(undefined);
+    setComplexityStepComplete(false);
+    setError("");
     navigate(studioStepUrlForState(config, nextAnswers, false, false, false));
   };
 
@@ -551,7 +643,13 @@ export default function Studio({
     setGenerationComplexity(undefined);
     setComplexityStepComplete(false);
     setError("");
+    setSelectedClassicArtworkId("");
     navigate("/studio?step=photo");
+  };
+
+  const openClassicArtwork = (artworkId: string) => {
+    setSelectedClassicArtworkId(artworkId);
+    navigate(`/studio?step=classic&artwork=${encodeURIComponent(artworkId)}`);
   };
 
   const answerTextQuestion = () => {
@@ -568,6 +666,29 @@ export default function Studio({
   };
 
   const goToPreviousStudioStep = () => {
+    if (answers.work_type === "template") {
+      setAnswers({});
+      setError("");
+      return;
+    }
+    if (answers.creation_mode === "template" && answers.work_type === "painting" && !photoStepComplete) {
+      setAnswers({ work_type: "template" });
+      setError("");
+      return;
+    }
+    if (answers.creation_mode === "template" && answers.work_type === "calligraphy" && !photoStepComplete) {
+      if (nextQuestion(config, answers)) {
+        setAnswers({ work_type: "template" });
+      } else {
+        setAnswers((current) => {
+          const nextAnswers = { ...current };
+          delete nextAnswers.text;
+          return nextAnswers;
+        });
+      }
+      setError("");
+      return;
+    }
     if (isChoosingClassicReference(answers)) {
       setAnswers({});
       setError("");
@@ -607,6 +728,11 @@ export default function Studio({
   };
 
   const goBack = () => {
+    if (showClassicPicker && selectedClassicArtworkId) {
+      setSelectedClassicArtworkId("");
+      navigate("/studio?step=classic", { replace: true });
+      return;
+    }
     const previousUrl = readStudioStepQuery(location.search)
       ? previousStudioStepUrlForState({
         config,
@@ -770,7 +896,7 @@ export default function Studio({
         <>
           <div className="scroll-question">
             <div className="question-toolbar">
-              <span>{getProgressLabel(config, answers, locale)}</span>
+              <span>{getProgressLabel(config, answers, locale, progressStage)}</span>
               {canGoBack ? (
                 <button className="back-action" type="button" onClick={goBack}>
                   {t("studio.back")}
@@ -781,8 +907,12 @@ export default function Studio({
               <ClassicArtworkPicker
                 artworks={config.classicArtworks}
                 locale={locale}
+                selectedArtworkId={selectedClassicArtworkId}
+                onSelectedArtworkIdChange={openClassicArtwork}
                 onSelect={selectClassicArtwork}
               />
+            ) : showTemplatePicker ? (
+              <ArtworkTemplatePicker locale={locale} onSelect={selectArtworkTemplate} />
             ) : question ? (
               <>
                 {question.id !== "calligraphy_script" ? (
@@ -795,13 +925,10 @@ export default function Studio({
                   </div>
                 ) : (
                   <p className="script-source-intro">
-                    {locale === "en" ? "Choose by structure and brush rhythm. Source notes point to established works; the cards are not facsimiles." : locale === "zh-Hant" ? "按結體與筆勢選擇。以下只標明取法來源，卡片不冒充原帖摹本。" : "按结体与笔势选择。以下只标明取法来源，卡片不冒充原帖摹本。"}
+                    {locale === "en" ? "Choose by structure and brush rhythm. Source notes point to established works; the cards are not facsimiles." : locale === "ja" ? "字形と筆勢で選びます。参考先は伝世作を示すもので、カードは原帖の複製ではありません。" : locale === "zh-Hant" ? "按結體與筆勢選擇。以下只標明取法來源，卡片不冒充原帖摹本。" : "按结体与笔势选择。以下只标明取法来源，卡片不冒充原帖摹本。"}
                   </p>
                 )}
                 <h2>{localizedText(question.title, locale)}</h2>
-                {question.input_type !== "textarea" && questionOptions(question, locale).length >= 3 ? (
-                  <p className="option-scroll-hint">{t("studio.optionsScrollHint")}</p>
-                ) : null}
                 {question.input_type === "textarea" ? (
                   <div className="text-question">
                     <textarea

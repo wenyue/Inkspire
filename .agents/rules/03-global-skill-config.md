@@ -15,10 +15,16 @@ Scope: Project overrides for workflow tools, worktrees, git, and prose outputs.
 - Report subagent usage in the final response, including the delegated purpose and whether any
   delegated changes were integrated.
 
+## Superpowers
+
+- Never invoke `superpowers:*` proactively.
+- Use Superpowers only when the user explicitly requests it.
+- References to Superpowers elsewhere do not authorize automatic activation.
+
 ## Git And Worktree
 
-- Delegate worktree timing, detection, consent, location, and creation to
-  `superpowers:using-git-worktrees`; do not define a second trigger policy here.
+- Subject to the Superpowers policy above, delegate worktree timing, detection, consent, location,
+  and creation to `superpowers:using-git-worktrees`.
 - After creating a worktree, use the target repository's `worktree-environment-setup` skill when it
   exists, then run the baseline verification required by `superpowers:using-git-worktrees`.
 - When worktree implementation is complete, use `worktree-integrate`. Its default review mode

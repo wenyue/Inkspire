@@ -1,14 +1,54 @@
 ---
 name: worktree-environment-setup
-description: Use when preparing an already-created linked Inkspire Git worktree before implementation begins.
+description: Use when defining, generating, or validating a target repository's environment setup skill for an already-created Git worktree.
 ---
 
 # Worktree Environment Setup
 
-Use this skill only inside an already-created linked Inkspire worktree. Prepare the environment
-without changing the project implementation or generating assets.
+This target-owned skill retains its generator contract and provides the executable Inkspire
+procedure for ordinary use inside an already-created Git worktree.
 
-## Procedure
+## Generation Contract
+
+`setup-project-agents` regenerates this file from current repository evidence, especially
+`.agents/rules/20-project-tools.md`, package manifests, the root lockfile, project scripts, CI
+configuration when present, and generated-file ownership.
+
+The generated skill must prepare only an already-created Git worktree. It must check each command,
+report the exact blocker, and stop after the environment is ready.
+
+## What Belongs Here
+
+- Dependency installation required in an already-created Git worktree.
+- Project-specific setup for a linter, checker, formatter, compiler, or generator when the
+  repository actually defines one.
+- Checks for generated files, local data, credentials, environment variables, or services required
+  before implementation.
+- Exact failure reporting for missing tools, files, credentials, or services.
+- The current executable ordinary-use preparation procedure.
+
+## What Does Not Belong Here
+
+- Worktree selection, consent, branch creation, or worktree creation.
+- Business implementation, clean-baseline verification, task-completion verification, review,
+  commit creation, rebase, integration, or cleanup.
+- Agent configuration synchronization, wrapper generation, or public catalog changes.
+- Commands or project facts not proven by current Inkspire evidence.
+- A self-test that creates another worktree during ordinary use.
+
+## Suggested Generated Content
+
+The generated target skill should:
+
+1. Confirm that it is running inside an already-created Git worktree and locate the repository
+   root.
+2. Install locked dependencies and perform only required environment preparation.
+3. Confirm required generated files, assets, local services, and working directories.
+4. Check every result and report the exact blocker without inventing a degraded path.
+5. Stop when the environment is ready, leaving baseline tests, implementation, and Git integration
+   to their owning workflows.
+
+## Current Inkspire Ordinary-Use Procedure
 
 1. Locate the repository:
    - Run `git rev-parse --show-toplevel`.
@@ -46,6 +86,17 @@ without changing the project implementation or generating assets.
    - Report the repository root, confirmation of the linked worktree, the Node and npm versions,
      successful completion of `npm ci`, and the presence of both asset paths.
    - Stop here. Do not run any additional steps.
+
+## Acceptance Expectations
+
+When `setup-project-agents` creates or materially changes this candidate, acceptance must invoke the
+exact candidate from a real temporary worktree. If the candidate or relevant tooling rule is not
+committed, copy byte-identical content into that worktree and verify equality before invocation.
+
+Acceptance must functionally invoke every repository-defined linter, checker, and formatter with
+real project configuration. A version command alone is insufficient; a formatter must use a
+non-writing check or dry-run mode. Inkspire currently defines a TypeScript checker but no linter or
+formatter. Acceptance is separate from ordinary use and must not be added to the procedure above.
 
 ## Failure Report
 

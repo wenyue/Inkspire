@@ -11,8 +11,9 @@ test("loads required Inkspire configuration", () => {
   assert.equal(config._projectRoot, root);
   assert.equal(config.app.name, "墨起");
   assert.equal(config.app.defaultLocale, "zh-Hans");
+  assert.deepEqual(config.app.locales, ["zh-Hans", "zh-Hant", "en", "ja"]);
   assert.equal(config.app.runtime.codexCommand, "codex");
-  assert.equal(config.app.runtime.codexModel, "gpt-5.5");
+  assert.equal(config.app.runtime.codexModel, "gpt-5.6-terra");
   assert.equal(config.app.runtime.codexReasoningEffort, "medium");
   assert.equal(config.app.runtime.generatedImagesRoot, "");
   assert.deepEqual(config.app.runtime.generationCanvas, {
@@ -53,6 +54,12 @@ test("loads required Inkspire configuration", () => {
     assert.equal(fs.existsSync(path.join(root, asset)), false, `${asset} must not be published`);
   }
   for (const question of [...config.questions.painting, ...config.questions.calligraphy]) {
+    for (const locale of config.app.locales) {
+      assert.equal(typeof question.title[locale], "string", `${question.id}.title.${locale} must be localized`);
+      if (question.options) {
+        assert.equal(question.options[locale].length, question.options["zh-Hans"].length, `${question.id}.options.${locale} must align`);
+      }
+    }
     if (question.id === "calligraphy_script") {
       assert.equal(question.preview_image, undefined);
       assert.equal(question.option_preview_images, undefined);
@@ -76,6 +83,7 @@ test("loads required Inkspire configuration", () => {
   assert.equal(config.i18n["zh-Hans"].tabs.studio, "画案");
   assert.equal(config.i18n["zh-Hant"].tabs.library, "藏卷");
   assert.equal(config.i18n.en.tabs.experts, "Artisans");
+  assert.equal(config.i18n.ja.tabs.experts, "職人");
   assert.match(config.prompts.painting.system, /中国画/);
   assert.match(config.prompts.calligraphy.system, /书法/);
   assert.match(config.prompts.fusion.system, /融合图/);
@@ -144,6 +152,7 @@ test("classic artworks config contains exactly 100 complete painting records", (
   const config = loadConfig(root);
   assert.equal(config.classicArtworks.length, 100);
   const ids = new Set();
+  const newArtworkTitles = new Set();
   for (const artwork of config.classicArtworks) {
     assert.equal(typeof artwork.id, "string");
     assert.ok(artwork.id.length > 0);
@@ -155,12 +164,31 @@ test("classic artworks config contains exactly 100 complete painting records", (
       assert.ok(artwork[field]["zh-Hant"]);
       assert.ok(artwork[field].en);
     }
+    assert.notEqual(artwork.description["zh-Hans"], artwork.description["zh-Hant"]);
+    assert.doesNotMatch(artwork.description.en, /[\p{Script=Han}]/u);
+    assert.ok(artwork.description.en.trim().split(/\s+/).length >= 30);
+    for (const field of ["title", "artist"]) {
+      assert.match(artwork[field]["zh-Hans"], /[\p{Script=Han}]/u);
+      assert.match(artwork[field]["zh-Hant"], /[\p{Script=Han}]/u);
+      assert.doesNotMatch(artwork[field].en, /[\p{Script=Han}]/u);
+      assert.match(artwork[field].en, /[A-Za-z]/);
+    }
     assert.match(artwork.image, /^\/classic-artworks\/.+\.webp$/);
     assert.match(artwork.thumbnail, /^\/classic-artworks\/.+\.webp$/);
     assert.ok(fs.existsSync(path.join(root, "client/public", artwork.image)));
     assert.ok(fs.existsSync(path.join(root, "client/public", artwork.thumbnail)));
     assert.ok(artwork.reference_focus);
+    assert.equal(artwork.new_artwork_titles?.length, 5);
+    for (const title of artwork.new_artwork_titles) {
+      assert.equal(typeof title, "string");
+      assert.equal(title, title.trim());
+      assert.ok(title.length > 0);
+      assert.match(title, /^\p{Script=Han}+$/u);
+      assert.ok(!newArtworkTitles.has(title), `duplicate new artwork title: ${title}`);
+      newArtworkTitles.add(title);
+    }
   }
+  assert.equal(newArtworkTitles.size, 500);
 });
 
 test("public config exposes classic artworks", () => {

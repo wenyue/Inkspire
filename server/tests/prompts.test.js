@@ -324,18 +324,21 @@ test("prompt config uses format and rubbing texture terminology for calligraphy"
   assert.deepEqual(textQuestion.helper_text, {
     "zh-Hans": "这会作为书法正文进入生成；后面再选择书体、气息、形制和纸墨。",
     "zh-Hant": "這會作為書法正文進入生成；後面再選擇書體、氣息、形制和紙墨。",
-    en: "This becomes the calligraphy wording; script, spirit, format, and material come next."
+    en: "This becomes the calligraphy wording; script, spirit, format, and material come next.",
+    ja: "この文字を本文とし、次に書体、趣、形式、紙墨を選びます。"
   });
   assert.equal(formatQuestion.preview_prompt, "书法形制，立轴横幅斗方手卷册页");
   assert.deepEqual(formatQuestion.title, {
     "zh-Hans": "想要哪种形制？",
     "zh-Hant": "想要哪種形制？",
-    en: "Which format should it take?"
+    en: "Which format should it take?",
+    ja: "どの形式にしますか？"
   });
   assert.equal(materialQuestion.preview_prompt, "书法纸墨质感，素宣仿古洒金碑拓肌理");
   assert.equal(materialQuestion.options["zh-Hans"].at(-1), "碑拓肌理");
   assert.equal(materialQuestion.options["zh-Hant"].at(-1), "碑拓肌理");
   assert.equal(materialQuestion.options.en.at(-1), "Rubbing Texture");
+  assert.equal(materialQuestion.options.ja.at(-1), "拓本調");
 });
 
 test("artwork prompt includes recommended production size when available", () => {

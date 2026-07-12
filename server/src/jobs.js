@@ -212,20 +212,38 @@ function paintingTitleCandidatesFromAnswers(answers = {}) {
   return pool.slice(start).concat(pool.slice(0, start));
 }
 
-function unusedTitle(candidates, usedTitles) {
-  for (const candidate of candidates) {
-    if (!usedTitles.has(candidate)) {
-      return candidate;
+function chineseInteger(value) {
+  if (!Number.isInteger(value) || value <= 0 || value > 9999) {
+    throw new RangeError("Chinese title ordinal must be an integer from 1 to 9999");
+  }
+  const digits = ["零", "一", "二", "三", "四", "五", "六", "七", "八", "九"];
+  const units = ["", "十", "百", "千"];
+  let result = "";
+  let pendingZero = false;
+  for (let position = 3; position >= 0; position -= 1) {
+    const unitValue = 10 ** position;
+    const digit = Math.floor(value / unitValue) % 10;
+    if (digit === 0) {
+      if (result && value % unitValue !== 0) pendingZero = true;
+      continue;
     }
+    if (pendingZero) {
+      result += digits[0];
+      pendingZero = false;
+    }
+    if (!(digit === 1 && position === 1 && !result)) result += digits[digit];
+    result += units[position];
   }
-  const fallback = candidates[0] || "中国画作品";
-  let ordinal = 2;
-  let candidate = `${fallback} 其${ordinal}`;
-  while (usedTitles.has(candidate)) {
-    ordinal += 1;
-    candidate = `${fallback} 其${ordinal}`;
+  return result;
+}
+
+function titleAvailableInCollection(baseTitle, usedTitles) {
+  if (!usedTitles.has(baseTitle)) return baseTitle;
+  for (let ordinal = 1; ordinal <= 9999; ordinal += 1) {
+    const candidate = `${baseTitle} 其${chineseInteger(ordinal)}`;
+    if (!usedTitles.has(candidate)) return candidate;
   }
-  return candidate;
+  throw new Error("Artwork title ordinal limit reached");
 }
 
 function titleFromRequest(type, answers = {}) {
@@ -381,6 +399,7 @@ function createJobManager({ config, storage, runner }) {
   const waiters = [];
   const activeCounts = new Map();
   const runningCounts = new Map();
+  const reservedTitlesByUser = new Map();
   let runningCount = 0;
   let legacyLocked = false;
   let schedulePending = false;
@@ -399,8 +418,25 @@ function createJobManager({ config, storage, runner }) {
     return VALID_OPERATIONS.has(operation) ? operation : "create";
   }
 
+  function classicArtworkTitles(answers = {}) {
+    if (answers.creation_mode !== "classic_reference"
+      || typeof answers.classic_artwork_id !== "string"
+      || !answers.classic_artwork_id.trim()) {
+      return [];
+    }
+    const artwork = (config.classicArtworks || []).find((entry) => entry?.id === answers.classic_artwork_id);
+    const titles = artwork?.new_artwork_titles;
+    if (!Array.isArray(titles)
+      || titles.length !== 5
+      || titles.some((title) => typeof title !== "string" || !/^\p{Script=Han}+$/u.test(title))
+      || new Set(titles).size !== titles.length) {
+      return [];
+    }
+    return [...titles];
+  }
+
   async function titleForNewArtwork(type, answers = {}, userId = "") {
-    if (type !== "painting" || !userId || typeof storage.listKeptRecordTitles !== "function") {
+    if (!userId || typeof storage.listKeptRecordTitles !== "function") {
       return titleFromRequest(type, answers);
     }
     const usedTitles = new Set(
@@ -408,7 +444,26 @@ function createJobManager({ config, storage, runner }) {
         .map((title) => (typeof title === "string" ? title.trim() : ""))
         .filter(Boolean)
     );
-    return unusedTitle(paintingTitleCandidatesFromAnswers(answers), usedTitles);
+    const reservedTitles = reservedTitlesByUser.get(userId) || new Set();
+    for (const title of reservedTitles) usedTitles.add(title);
+    const classicTitles = type === "painting" ? classicArtworkTitles(answers) : [];
+    let title;
+    if (classicTitles.length > 0) {
+      title = classicTitles.find((candidate) => !usedTitles.has(candidate))
+        || titleAvailableInCollection(classicTitles[0], usedTitles);
+    } else {
+      title = titleAvailableInCollection(titleFromRequest(type, answers), usedTitles);
+    }
+    reservedTitles.add(title);
+    reservedTitlesByUser.set(userId, reservedTitles);
+    return title;
+  }
+
+  function releaseTitleReservation(userId, title) {
+    const reservedTitles = reservedTitlesByUser.get(userId);
+    if (!reservedTitles) return;
+    reservedTitles.delete(title);
+    if (reservedTitles.size === 0) reservedTitlesByUser.delete(userId);
   }
 
   function tabKey(userId, originTab) {
@@ -1192,7 +1247,13 @@ function createJobManager({ config, storage, runner }) {
     const recordId = newId("record");
     const createdAt = new Date().toISOString();
     const artworkPath = relativeRecordPath(recordId, "artwork.webp");
-    const title = await titleForNewArtwork(type, answers, ownerId);
+    let title;
+    try {
+      title = await titleForNewArtwork(type, answers, ownerId);
+    } catch (error) {
+      releaseActiveSlot(ownerId, normalizedOriginTab);
+      throw error;
+    }
     let ownedSourcePhotoPath;
     try {
       ownedSourcePhotoPath = await measureProfileStage(
@@ -1201,6 +1262,7 @@ function createJobManager({ config, storage, runner }) {
         () => copySourcePhotoForRecord(storage, recordId, sourcePhotoPath)
       );
     } catch (error) {
+      releaseTitleReservation(ownerId, title);
       releaseActiveSlot(ownerId, normalizedOriginTab);
       throw error;
     }
@@ -1247,6 +1309,7 @@ function createJobManager({ config, storage, runner }) {
 
     try {
       await saveRecordProfiled(record, ownerId);
+      releaseTitleReservation(ownerId, title);
       queuedJobs.push({
         userId: ownerId,
         stage: "artwork",
@@ -1269,6 +1332,7 @@ function createJobManager({ config, storage, runner }) {
       flushWaiters();
       return { job: cloneJob(job), record: cloneRecord(record) };
     } catch (error) {
+      releaseTitleReservation(ownerId, title);
       jobs.delete(job.id);
       releaseActiveSlot(ownerId, normalizedOriginTab);
       throw error;

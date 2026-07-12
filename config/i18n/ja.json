@@ -1,0 +1,33 @@
+{
+  "tabs": { "studio": "創作", "library": "作品集", "experts": "職人" },
+  "buttons": { "skip": "スキップ", "generate": "生成", "make": "作品を制作" },
+  "status": { "idle": "準備完了", "generating": "生成中" },
+  "language": { "label": "言語" },
+  "studio": {
+    "title": "Inkspire", "subtitle": "中国画と書道の創作アシスタント",
+    "photo": "任意：設置場所の写真を追加", "photoHint": "室内プレビューの生成に使用します。写真なしで作品だけを生成することもできます。", "camera": "カメラ", "album": "アルバム",
+    "skipPhoto": "プレビューなしで作品を生成", "uploadingPhoto": "写真を準備中", "photoReady": "環境写真を追加しました。プレビューに使用します。", "photoUploaded": "選択した写真", "selectedPhotoPreview": "選択した写真のプレビュー", "removePhoto": "写真を削除",
+    "complexityTitle": "画面の密度と余白をどう整えますか？", "complexityHint": "設置写真がない場合、細密さと余白のバランスから情報量と制作サイズを見積もります。", "complexitySmall": "疎", "complexitySmallHint": "主題を集中させ、十分な余白を残します。", "complexityMedium": "均衡", "complexityMediumHint": "主従を明確にし、密と疎を組み合わせます。", "complexityLarge": "密", "complexityLargeHint": "豊かな層を持たせつつ、余白も残します。",
+    "notesPlaceholder": "ご希望を追加できます", "clearNotes": "メモを消去", "iterationHint": "前回の主題、スタイル、選択内容をもとに生成します。必要に応じて新しい指示を追加できます。", "continueGenerate": "前回の選択から生成", "startOver": "最初から", "suggestionStart": "生成を開始", "generating": "墨が広がっています", "generatingWait": "墨が広がっています。2～3分かかる場合があります。", "generationLimit": "創作で別の生成処理が進行中です。完了までお待ちください。", "back": "戻る", "generationSummaryArtwork": "作品画像を生成します。", "generationSummaryWithPreview": "作品画像と設置プレビューを生成します。"
+  },
+  "generationLoading": {
+    "backgroundContinuation": "ページを切り替えても、バックグラウンドで生成が続きます。", "estimate": { "single": "通常約30秒です。", "double": "通常約50秒です。" }, "retry": "再試行", "failedTitle": "生成が完了しませんでした", "failedHint": "再試行するか、いったん別のページに移動してください。", "backConfirm": "この結果を離れて元のページに戻りますか？",
+    "tabBusy": { "studio": "創作で生成中", "library": "作品集で生成中", "experts": "職人ページで生成中" },
+    "create": { "thinking": "作家が構想しています", "paper": "作家が紙を広げています", "painting": "作家が描いています", "details": "作家が細部を仕上げています" },
+    "adjust": { "understanding": "作家が元作を読み取っています", "direction": "作家が調整方針を練っています", "repainting": "作家が筆墨を描き直しています", "adjustDetails": "作家が新しい下絵を仕上げています" }
+  },
+  "generationFailure": { "retryError": "現在は再生成できません。接続を確認して再試行してください。", "classicReference": { "title": "参考作品を利用できません", "hint": "選択した参考画像を読み込めないため、参考なしの作品は生成しませんでした。", "action": "別の名作を選ぶ" }, "calligraphyReview": { "title": "書道作品の再生成が必要です", "hint": "すべての文字を確認できなかったため、この画像は採用されませんでした。", "status": "文字検証：再確認が必要", "action": "書道を再生成" } },
+  "imageViewer": { "back": "戻る", "error": "画像を表示できません", "gestureHint": "ピンチで拡大縮小 · ダブルタップで拡大", "resetZoom": "倍率をリセット", "controls": "画像の拡大縮小", "zoomOut": "縮小", "reset": "リセット", "zoomIn": "拡大" },
+  "suggestions": {
+    "painting": ["生成を開始", "主従をより明確に", "余白を増やす", "墨の濃淡と湿潤を明確に", "抜けをよくする", "色彩を控える", "リズムをゆったりと", "壁面に合わせて形式を調整", "装飾的な効果を減らす"],
+    "calligraphy": ["生成を開始", "本文をより際立たせる", "行間の流れを強める", "字形をより落ち着かせる", "字間と行間を調整", "筆圧の変化を明確に", "潤渇の変化を控える", "章法を安定させる", "展示サイズに合わせて行列を調整"]
+  },
+  "errors": { "generic": "現在は完了できません。後でもう一度お試しください。", "photoTooLarge": "写真が大きすぎます。小さい画像を選ぶか、圧縮してください。", "libraryOpenFailed": "現在この作品を開けません。後でもう一度お試しください。" },
+  "result": { "loading": "作品を開いています…", "artwork": "作品", "fusion": "プレビュー", "continue": "この作品から調整", "retry": "要望を調整", "adjust": "作品を調整", "adjustRetry": "再生成", "attachPhotoFusion": "プレビューを生成", "generateFusion": "プレビューを生成", "reuploadEnvironmentPhoto": "環境写真を再アップロード", "addNotes": "要望を追加", "makeHint": "まずサイズと概算を確認し、意向確認後に制作についてご連絡ください。", "failedTitle": "生成が完了しませんでした", "failedHint": "要望を追加して再試行するか、後で再生成してください。", "imageUnavailableTitle": "現在作品を表示できません", "imageUnavailableHint": "要望を追加して再生成するか、後で作品集から開いてください。", "fusionUnavailableTitle": "現在プレビューを表示できません", "fusionUnavailableHint": "作品は引き続き表示できます。後で環境写真を追加できます。", "back": "作品集に戻る", "backStudio": "創作に戻る", "backConfirmTitle": "作品制作を終了しますか？", "backConfirmBody": "この作品は作品集から再び開けます。", "backConfirmConfirm": "戻る", "backConfirmCancel": "閲覧を続ける" },
+  "adjust": { "title": "この作品を調整", "intro": "ご希望の方向を記入すると、この作品の設定から新しい作品を生成します。", "placeholder": "例：より上品に、余白を多く、縦形式に…", "submit": "調整後の作品を生成", "submitting": "墨が広がっています", "back": "作品に戻る", "clearNote": "メモを消去", "baseLabel": "現在の作品", "emptyHint": "まず調整の方向を入力してください。" },
+  "library": { "artwork": "作品", "fusion": "作品とプレビュー", "failed": "生成が完了しませんでした", "openRecord": "作品を見る", "removeFavorite": "作品集から削除", "removeFavoriteShort": "削除", "removeConfirmTitle": "作品集から削除しますか？", "removeConfirmHint": "作品データ自体は削除されません。", "removeConfirmCancel": "キャンセル", "removeConfirmAction": "削除", "workTypePainting": "中国画", "workTypeCalligraphy": "書道", "classicReference": "名作を参考", "format": "形式", "density": "密度", "densitySmall": "疎", "densityMedium": "均衡", "densityLarge": "密" },
+  "empty": { "library": "作品集はまだ空です", "libraryHint": "創作で主題と形式を決め、気に入った作品を保存しましょう。", "libraryDetail": "作品集には題名、形式、密度の情報が保存されます。", "libraryAction": "創作へ" },
+  "experts": { "title": "職人", "contactPending": "連絡先は確認中です", "serviceHeading": "相談できる内容", "extraServiceName": "表装と制作のご相談", "extraServiceDescription": "贈り物や室内展示に向けて、サイズ、素材、制作方法を確認します。", "credentialsLabel": "専門資格", "sampleHeading": "代表作", "sampleHint": "横にスワイプして作品を見る", "profileNotice": "呉嘉茵はプラットフォーム登録済みの専門家です。日程と納品は相談後に確認します。", "serviceBoundary": "サービス範囲、修正回数、納期は最終確認書に基づきます。", "consultLabel": "相談を始める", "consultHint": "プラットフォームのWeChatをコピーし、ご希望の方向と用途をお知らせください。", "consultCopied": "WeChat IDをコピーしました", "productionUnavailable": "制作相談は現在受け付けていません" },
+  "production": { "title": "作品を制作", "intro": "サイズ、サービス、参考度を調整します。見積もりは概算で、確認後に注文番号と連絡先が発行されます。", "size": "サイズ", "estimate": "概算", "contact": "詳細は職人にご相談ください", "phone": "電話：", "wechat": "WeChat：", "copyHint": "（クリックしてコピー）", "copiedOrder": "注文番号をコピーしました", "copiedWechat": "WeChat IDをコピーしました", "successTitle": "制作依頼を記録しました", "successIntro": "選択したサイズと参考方針を保存しました。職人に直接ご連絡いただけます。", "summaryService": "サービス", "summarySize": "サイズ", "summaryReference": "参考度", "referenceRecommendedBadge": "おすすめ", "referenceCautionBadge": "注意", "close": "閉じる", "confirm": "制作依頼を確認" },
+  "making": { "title": "作品を制作" }
+}

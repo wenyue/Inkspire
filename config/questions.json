@@ -15,79 +15,14 @@
       "title": {
         "zh-Hans": "想画什么内容？",
         "zh-Hant": "想畫什麼內容？",
-        "en": "What should the painting show?"
+        "en": "What should the painting show?",
+        "ja": "何を描きますか？"
       },
       "options": {
         "zh-Hans": ["山水", "花鸟", "人物", "走兽游鱼", "文房雅物"],
         "zh-Hant": ["山水", "花鳥", "人物", "走獸游魚", "文房雅物"],
-        "en": ["Landscape", "Birds and Flowers", "Figures", "Animals and Fish", "Studio Objects"]
-      }
-    },
-    {
-      "id": "painting_brushwork",
-      "applies_to": ["painting", "fusion"],
-      "preview_image": "/previews/questions/painting-brushwork.webp",
-      "option_preview_images": [
-        "/previews/options/painting-brushwork-0-gongbi.webp",
-        "/previews/options/painting-brushwork-1-xieyi.webp",
-        "/previews/options/painting-brushwork-2-baimiao.webp",
-        "/previews/options/painting-brushwork-3-mogu.webp"
-      ],
-      "preview_prompt": "中国画笔墨语言，工写白描没骨",
-      "title": {
-        "zh-Hans": "偏好哪种笔墨？",
-        "zh-Hant": "偏好哪種筆墨？",
-        "en": "Which brushwork do you prefer?"
-      },
-      "options": {
-        "zh-Hans": ["工笔", "写意", "白描", "没骨"],
-        "zh-Hant": ["工筆", "寫意", "白描", "沒骨"],
-        "en": ["Gongbi", "Freehand", "Plain Outline", "Boneless"]
-      }
-    },
-    {
-      "id": "painting_palette",
-      "applies_to": ["painting", "fusion"],
-      "preview_image": "/previews/questions/painting-palette.webp",
-      "option_preview_images": [
-        "/previews/options/painting-palette-0-ink-wash.webp",
-        "/previews/options/painting-palette-1-blue-green.webp",
-        "/previews/options/painting-palette-2-light-umber.webp",
-        "/previews/options/painting-palette-3-heavy-color.webp"
-      ],
-      "preview_prompt": "中国画设色，水墨青绿浅绛重彩",
-      "title": {
-        "zh-Hans": "偏好哪种设色？",
-        "zh-Hant": "偏好哪種設色？",
-        "en": "Which color treatment do you prefer?"
-      },
-      "options": {
-        "zh-Hans": ["水墨", "青绿", "浅绛", "重彩"],
-        "zh-Hant": ["水墨", "青綠", "淺絳", "重彩"],
-        "en": ["Ink Wash", "Blue-Green", "Light Umber", "Rich Color"]
-      }
-    },
-    {
-      "id": "painting_mood",
-      "applies_to": ["painting", "fusion"],
-      "preview_image": "/previews/questions/painting-mood.webp",
-      "option_preview_images": [
-        "/previews/options/painting-mood-0-refined.webp",
-        "/previews/options/painting-mood-1-ethereal.webp",
-        "/previews/options/painting-mood-2-grand.webp",
-        "/previews/options/painting-mood-3-archaic.webp",
-        "/previews/options/painting-mood-4-luminous.webp"
-      ],
-      "preview_prompt": "中国画意境，清雅空灵雄浑古拙明丽",
-      "title": {
-        "zh-Hans": "希望作品是什么气质？",
-        "zh-Hant": "希望作品是什麼氣質？",
-        "en": "What mood should the work carry?"
-      },
-      "options": {
-        "zh-Hans": ["清雅", "空灵", "雄浑", "古拙", "明丽"],
-        "zh-Hant": ["清雅", "空靈", "雄渾", "古拙", "明麗"],
-        "en": ["Refined", "Ethereal", "Grand", "Archaic", "Luminous"]
+        "en": ["Landscape", "Birds and Flowers", "Figures", "Animals and Fish", "Studio Objects"],
+        "ja": ["山水", "花鳥", "人物", "動物と魚", "文房具"]
       }
     },
     {
@@ -105,12 +40,87 @@
       "title": {
         "zh-Hans": "希望做成什么形制？",
         "zh-Hant": "希望做成什麼形制？",
-        "en": "Which format should it take?"
+        "en": "Which format should it take?",
+        "ja": "どの形式にしますか？"
       },
       "options": {
         "zh-Hans": ["横幅", "立轴", "斗方", "手卷", "扇面"],
         "zh-Hant": ["橫幅", "立軸", "斗方", "手卷", "扇面"],
-        "en": ["Horizontal", "Hanging Scroll", "Square", "Handscroll", "Fan"]
+        "en": ["Horizontal", "Hanging Scroll", "Square", "Handscroll", "Fan"],
+        "ja": ["横長", "掛軸", "方形", "手巻", "扇面"]
+      }
+    },
+    {
+      "id": "painting_brushwork",
+      "applies_to": ["painting", "fusion"],
+      "preview_image": "/previews/questions/painting-brushwork.webp",
+      "option_preview_images": [
+        "/previews/options/painting-brushwork-0-gongbi.webp",
+        "/previews/options/painting-brushwork-1-xieyi.webp",
+        "/previews/options/painting-brushwork-2-baimiao.webp",
+        "/previews/options/painting-brushwork-3-mogu.webp"
+      ],
+      "preview_prompt": "中国画笔墨语言，工写白描没骨",
+      "title": {
+        "zh-Hans": "偏好哪种笔墨？",
+        "zh-Hant": "偏好哪種筆墨？",
+        "en": "Which brushwork do you prefer?",
+        "ja": "どの筆法がお好みですか？"
+      },
+      "options": {
+        "zh-Hans": ["工笔", "写意", "白描", "没骨"],
+        "zh-Hant": ["工筆", "寫意", "白描", "沒骨"],
+        "en": ["Gongbi", "Freehand", "Plain Outline", "Boneless"],
+        "ja": ["工筆", "写意", "白描", "没骨"]
+      }
+    },
+    {
+      "id": "painting_palette",
+      "applies_to": ["painting", "fusion"],
+      "preview_image": "/previews/questions/painting-palette.webp",
+      "option_preview_images": [
+        "/previews/options/painting-palette-0-ink-wash.webp",
+        "/previews/options/painting-palette-1-blue-green.webp",
+        "/previews/options/painting-palette-2-light-umber.webp",
+        "/previews/options/painting-palette-3-heavy-color.webp"
+      ],
+      "preview_prompt": "中国画设色，水墨青绿浅绛重彩",
+      "title": {
+        "zh-Hans": "偏好哪种设色？",
+        "zh-Hant": "偏好哪種設色？",
+        "en": "Which color treatment do you prefer?",
+        "ja": "どの色彩表現がお好みですか？"
+      },
+      "options": {
+        "zh-Hans": ["水墨", "青绿", "浅绛", "重彩"],
+        "zh-Hant": ["水墨", "青綠", "淺絳", "重彩"],
+        "en": ["Ink Wash", "Blue-Green", "Light Umber", "Rich Color"],
+        "ja": ["水墨", "青緑", "浅絳", "重彩"]
+      }
+    },
+    {
+      "id": "painting_mood",
+      "applies_to": ["painting", "fusion"],
+      "preview_image": "/previews/questions/painting-mood.webp",
+      "option_preview_images": [
+        "/previews/options/painting-mood-0-refined.webp",
+        "/previews/options/painting-mood-1-ethereal.webp",
+        "/previews/options/painting-mood-2-grand.webp",
+        "/previews/options/painting-mood-3-archaic.webp",
+        "/previews/options/painting-mood-4-luminous.webp"
+      ],
+      "preview_prompt": "中国画意境，清雅空灵雄浑古拙明丽",
+      "title": {
+        "zh-Hans": "希望作品是什么气质？",
+        "zh-Hant": "希望作品是什麼氣質？",
+        "en": "What mood should the work carry?",
+        "ja": "どのような趣の作品にしますか？"
+      },
+      "options": {
+        "zh-Hans": ["清雅", "空灵", "雄浑", "古拙", "明丽"],
+        "zh-Hant": ["清雅", "空靈", "雄渾", "古拙", "明麗"],
+        "en": ["Refined", "Ethereal", "Grand", "Archaic", "Luminous"],
+        "ja": ["清雅", "空霊", "雄渾", "古拙", "明麗"]
       }
     }
   ],
@@ -124,22 +134,26 @@
       "title": {
         "zh-Hans": "想写什么正文？",
         "zh-Hant": "想寫什麼正文？",
-        "en": "What text should the calligraphy write?"
+        "en": "What text should the calligraphy write?",
+        "ja": "書道で何を書きますか？"
       },
       "placeholder": {
         "zh-Hans": "例如：年年有余、平安喜乐，或一两句祝福语",
         "zh-Hant": "例如：年年有餘、平安喜樂，或一兩句祝福語",
-        "en": "For example: Peace and joy, or a short blessing"
+        "en": "For example: Peace and joy, or a short blessing",
+        "ja": "例：平安と喜び、または短い祝いの言葉"
       },
       "helper_text": {
         "zh-Hans": "这会作为书法正文进入生成；后面再选择书体、气息、形制和纸墨。",
         "zh-Hant": "這會作為書法正文進入生成；後面再選擇書體、氣息、形制和紙墨。",
-        "en": "This becomes the calligraphy wording; script, spirit, format, and material come next."
+        "en": "This becomes the calligraphy wording; script, spirit, format, and material come next.",
+        "ja": "この文字を本文とし、次に書体、趣、形式、紙墨を選びます。"
       },
       "submit_label": {
         "zh-Hans": "继续定书体",
         "zh-Hant": "繼續定書體",
-        "en": "Continue to script"
+        "en": "Continue to script",
+        "ja": "書体を選ぶ"
       }
     },
     {
@@ -149,19 +163,21 @@
       "title": {
         "zh-Hans": "偏好哪种书体？",
         "zh-Hant": "偏好哪種書體？",
-        "en": "Which script do you prefer?"
+        "en": "Which script do you prefer?",
+        "ja": "どの書体がお好みですか？"
       },
       "options": {
         "zh-Hans": ["楷书", "行书", "草书", "隶书", "篆书"],
         "zh-Hant": ["楷書", "行書", "草書", "隸書", "篆書"],
-        "en": ["Regular", "Running", "Cursive", "Clerical", "Seal"]
+        "en": ["Regular", "Running", "Cursive", "Clerical", "Seal"],
+        "ja": ["楷書", "行書", "草書", "隷書", "篆書"]
       },
       "option_source_notes": [
-        { "zh-Hans": "取法线索：唐 · 颜真卿《多宝塔碑》", "zh-Hant": "取法線索：唐 · 顏真卿《多寶塔碑》", "en": "Source reference: Yan Zhenqing, Duobao Pagoda Stele" },
-        { "zh-Hans": "取法线索：唐摹王羲之《兰亭序》神龙本（旧传冯承素摹）", "zh-Hant": "取法線索：唐摹王羲之《蘭亭序》神龍本（舊傳馮承素摹）", "en": "Source reference: Tang copy of Wang Xizhi's Orchid Pavilion Preface, Shenlong version (traditionally attributed to Feng Chengsu)" },
-        { "zh-Hans": "取法线索：唐 · 孙过庭《书谱》", "zh-Hant": "取法線索：唐 · 孫過庭《書譜》", "en": "Source reference: Sun Guoting, Treatise on Calligraphy" },
-        { "zh-Hans": "取法线索：东汉《曹全碑》", "zh-Hant": "取法線索：東漢《曹全碑》", "en": "Source reference: Eastern Han, Cao Quan Stele" },
-        { "zh-Hans": "取法线索：秦《泰山刻石》", "zh-Hant": "取法線索：秦《泰山刻石》", "en": "Source reference: Qin dynasty, Mount Tai Inscription" }
+        { "zh-Hans": "取法线索：唐 · 颜真卿《多宝塔碑》", "zh-Hant": "取法線索：唐 · 顏真卿《多寶塔碑》", "en": "Source reference: Yan Zhenqing, Duobao Pagoda Stele", "ja": "参考：唐・顔真卿『多宝塔碑』" },
+        { "zh-Hans": "取法线索：唐摹王羲之《兰亭序》神龙本（旧传冯承素摹）", "zh-Hant": "取法線索：唐摹王羲之《蘭亭序》神龍本（舊傳馮承素摹）", "en": "Source reference: Tang copy of Wang Xizhi's Orchid Pavilion Preface, Shenlong version (traditionally attributed to Feng Chengsu)", "ja": "参考：唐摹・王羲之『蘭亭序』神龍本" },
+        { "zh-Hans": "取法线索：唐 · 孙过庭《书谱》", "zh-Hant": "取法線索：唐 · 孫過庭《書譜》", "en": "Source reference: Sun Guoting, Treatise on Calligraphy", "ja": "参考：唐・孫過庭『書譜』" },
+        { "zh-Hans": "取法线索：东汉《曹全碑》", "zh-Hant": "取法線索：東漢《曹全碑》", "en": "Source reference: Eastern Han, Cao Quan Stele", "ja": "参考：後漢『曹全碑』" },
+        { "zh-Hans": "取法线索：秦《泰山刻石》", "zh-Hant": "取法線索：秦《泰山刻石》", "en": "Source reference: Qin dynasty, Mount Tai Inscription", "ja": "参考：秦『泰山刻石』" }
       ]
     },
     {
@@ -179,12 +195,14 @@
       "title": {
         "zh-Hans": "希望书法是什么气息？",
         "zh-Hant": "希望書法是什麼氣息？",
-        "en": "What spirit should the calligraphy have?"
+        "en": "What spirit should the calligraphy have?",
+        "ja": "どのような気品の書にしますか？"
       },
       "options": {
         "zh-Hans": ["端庄", "俊逸", "雄强", "古拙", "温润"],
         "zh-Hant": ["端莊", "俊逸", "雄強", "古拙", "溫潤"],
-        "en": ["Dignified", "Graceful", "Forceful", "Archaic", "Warm"]
+        "en": ["Dignified", "Graceful", "Forceful", "Archaic", "Warm"],
+        "ja": ["端庄", "俊逸", "雄強", "古拙", "温潤"]
       }
     },
     {
@@ -202,12 +220,14 @@
       "title": {
         "zh-Hans": "想要哪种形制？",
         "zh-Hant": "想要哪種形制？",
-        "en": "Which format should it take?"
+        "en": "Which format should it take?",
+        "ja": "どの形式にしますか？"
       },
       "options": {
         "zh-Hans": ["立轴", "横幅", "斗方", "手卷", "册页"],
         "zh-Hant": ["立軸", "橫幅", "斗方", "手卷", "冊頁"],
-        "en": ["Hanging Scroll", "Horizontal", "Square", "Handscroll", "Album"]
+        "en": ["Hanging Scroll", "Horizontal", "Square", "Handscroll", "Album"],
+        "ja": ["掛軸", "横長", "方形", "手巻", "画冊"]
       }
     },
     {
@@ -224,12 +244,14 @@
       "title": {
         "zh-Hans": "偏好哪种纸墨质感？",
         "zh-Hant": "偏好哪種紙墨質感？",
-        "en": "Which paper and ink surface do you prefer?"
+        "en": "Which paper and ink surface do you prefer?",
+        "ja": "どの紙と墨の質感がお好みですか？"
       },
       "options": {
         "zh-Hans": ["素宣", "仿古", "洒金", "碑拓肌理"],
         "zh-Hant": ["素宣", "仿古", "灑金", "碑拓肌理"],
-        "en": ["Plain Xuan", "Antique Paper", "Gold-flecked", "Rubbing Texture"]
+        "en": ["Plain Xuan", "Antique Paper", "Gold-flecked", "Rubbing Texture"],
+        "ja": ["白宣紙", "古色紙", "金砂子", "拓本調"]
       }
     }
   ]

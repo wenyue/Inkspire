@@ -13,18 +13,18 @@ const SQUARE = { width: 1024, height: 1024, aspectRatio: "1:1", orientation: "sq
 const HANDSCROLL = { width: 1536, height: 768, aspectRatio: "2:1", orientation: "landscape" };
 
 const paintingFormats = [
-  ["立轴", PORTRAIT], ["立軸", PORTRAIT], ["Hanging Scroll", PORTRAIT],
-  ["横幅", LANDSCAPE], ["橫幅", LANDSCAPE], ["Horizontal", LANDSCAPE],
-  ["斗方", SQUARE], ["斗方", SQUARE], ["Square", SQUARE],
-  ["手卷", HANDSCROLL], ["手卷", HANDSCROLL], ["Handscroll", HANDSCROLL],
+  ["立轴", PORTRAIT], ["立軸", PORTRAIT], ["Hanging Scroll", PORTRAIT], ["掛軸", PORTRAIT],
+  ["横幅", LANDSCAPE], ["橫幅", LANDSCAPE], ["Horizontal", LANDSCAPE], ["横長", LANDSCAPE],
+  ["斗方", SQUARE], ["斗方", SQUARE], ["Square", SQUARE], ["方形", SQUARE],
+  ["手卷", HANDSCROLL], ["手卷", HANDSCROLL], ["Handscroll", HANDSCROLL], ["手巻", HANDSCROLL],
   ["扇面", LANDSCAPE], ["扇面", LANDSCAPE], ["Fan", LANDSCAPE]
 ];
 const calligraphyFormats = [
-  ["立轴", PORTRAIT], ["立軸", PORTRAIT], ["Hanging Scroll", PORTRAIT],
-  ["横幅", LANDSCAPE], ["橫幅", LANDSCAPE], ["Horizontal", LANDSCAPE],
-  ["斗方", SQUARE], ["斗方", SQUARE], ["Square", SQUARE],
-  ["手卷", HANDSCROLL], ["手卷", HANDSCROLL], ["Handscroll", HANDSCROLL],
-  ["册页", SQUARE], ["冊頁", SQUARE], ["Album", SQUARE]
+  ["立轴", PORTRAIT], ["立軸", PORTRAIT], ["Hanging Scroll", PORTRAIT], ["掛軸", PORTRAIT],
+  ["横幅", LANDSCAPE], ["橫幅", LANDSCAPE], ["Horizontal", LANDSCAPE], ["横長", LANDSCAPE],
+  ["斗方", SQUARE], ["斗方", SQUARE], ["Square", SQUARE], ["方形", SQUARE],
+  ["手卷", HANDSCROLL], ["手卷", HANDSCROLL], ["Handscroll", HANDSCROLL], ["手巻", HANDSCROLL],
+  ["册页", SQUARE], ["冊頁", SQUARE], ["Album", SQUARE], ["画冊", SQUARE]
 ];
 const formatCases = [
   ...paintingFormats.map(([format, canvas]) => ({

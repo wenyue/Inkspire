@@ -1,46 +1,100 @@
 # Project Rules
 
-Strength: Default
+Strength: `Default`
 
-## Shared Product Configuration
+Scope: Shared product configuration, API and domain boundaries, persistence, job lifecycle, and
+generated-content conventions.
 
-- `config/` 是客户端 fallback 与服务端 loader 共用的产品数据源。
-- 修改共享配置时，保持客户端与服务端对同一字段、默认值和兼容行为的一致理解。
-- 支持的 locale 为 `zh-Hans`、`zh-Hant`、`en`；新增用户可见产品数据时保持三者一致。
+## Generation Contract
 
-## API And Domain
+`setup-project-agents` refreshes this project-owned rule from current Inkspire evidence whenever it
+runs. Preserve the generator-contract sections and update the concrete project conventions below
+from source modules, API behavior, framework configuration, generated-file ownership, persistence,
+state lifecycle, concurrency, and domain terminology.
 
-- HTTP 接口保持在 `/api` 命名空间内，健康状态保持由 `/api/health` 提供。
-- UI 不应直接承担服务端存储、任务调度、提示词组装或 Codex 执行职责。
-- 客户端 API 层负责传输边界，domain 层负责领域表达，UI 层负责交互与展示。
-- 服务端 API 层应把请求交给对应 runtime、storage、jobs、prompts 或 Codex runner。
-- 保持请求、持久化记录与文件路径中的 ID 安全；不得把未经验证的 ID 拼接为路径。
+Keep commands in `20-project-tools.md` and top-level ownership or dependency direction in
+`22-project-structure.md`.
 
-## Persistence
+## What Belongs Here
 
-- 运行时 SQLite 位于数据目录下的 `inkspire.db`，保存 records、uploads 与 orders。
-- `INKSPIRE_DATA_DIR` 可改变数据根目录；不得假设数据总在仓库内的固定绝对路径。
-- 保持旧版 JSON 导入兼容，除非任务明确包含迁移或移除该能力。
-- 数据库记录、上传文件和订单之间的引用必须保持一致。
-- 文件写入必须限制在选定的数据或生成根目录内，避免路径逃逸。
+- Public API and route boundaries, payload compatibility, and ownership checks.
+- Framework conventions already enforced by the project.
+- Shared configuration, generated-file ownership, and localization conventions.
+- Persistence, migration, lifecycle, concurrency, and failure-handling contracts.
+- Domain-specific security and path-safety requirements.
 
-## Jobs And Lifecycle
+## What Does Not Belong Here
 
-- 保持现有任务并发限制、任务所有权和状态生命周期。
-- 不得通过 UI 重试、进程重启或错误恢复绕过并发与所有权检查。
-- 启动、关闭和测试栈管理应继续由各自现有生命周期组件负责。
-- E2E 的确定性模式与真实 Codex 模式必须保持显式分离。
-- 真实生成失败应保留可诊断信息，不得静默退回模拟生成。
+- Tool, runtime, build, test, or verification commands; use `20-project-tools.md`.
+- Top-level directory maps or dependency direction; use `22-project-structure.md`.
+- General code style already covered by base rules.
+- Conventions not supported by current repository evidence.
 
-## Framework Conventions
+## Suggested Generated Content
 
-- 客户端保持 React 18、Vite 与严格 TypeScript 约束。
-- 服务端保持 CommonJS 模块约定，除非任务明确要求迁移模块系统。
-- 测试应放在其所属 client、server 或 e2e 边界内，并验证可观察行为。
-- 图片处理继续通过服务端既有图像依赖与 WebP 输出约定完成。
+- API namespaces, ownership boundaries, payload compatibility, and health contracts.
+- Framework and module-system conventions.
+- Shared product configuration and localization requirements.
+- Persistence, migration, lifecycle, concurrency, and diagnostic behavior.
+- Generated-content ownership and regeneration restrictions.
 
-## Generated Content
+## Current Shared Product Configuration
 
-- 经典艺术品清单和静态目录是脚本拥有的生成物。
-- 修改生成物需求时应修改拥有它们的构建或验证逻辑，再由明确的资产任务重建。
-- 普通功能开发、测试修复与环境 setup 不得顺带刷新远程艺术品资源。
+- `config/` is the shared product-data source for server loaders and client fallbacks.
+- When shared configuration changes, keep client and server interpretations of fields, defaults,
+  and compatibility behavior aligned.
+- Supported locales are `zh-Hans`, `zh-Hant`, `en`, and `ja`; user-visible product data must keep
+  all four variants aligned.
+
+## Current API And Domain
+
+- Keep HTTP endpoints under `/api`, with readiness exposed by `/api/health`.
+- The UI must not own server persistence, job scheduling, prompt construction, or Codex execution.
+- The client API layer owns transport boundaries, the client domain layer owns domain expression,
+  and UI components own interaction and presentation.
+- Server API handlers delegate to the appropriate runtime, storage, jobs, prompts, image, or Codex
+  runner owner.
+- Preserve user ownership checks for records, jobs, uploads, generated images, and production
+  orders.
+- Validate IDs before using them in persisted paths; never concatenate an untrusted ID into a
+  filesystem path.
+
+## Current Persistence
+
+- Runtime SQLite is stored as `inkspire.db` under the selected data directory and owns records and
+  production orders; uploaded and generated files live under the same data root.
+- `INKSPIRE_DATA_DIR` changes the data root. Do not assume runtime data lives at a fixed absolute
+  path or inside the repository.
+- Preserve the one-time legacy JSON import unless a task explicitly includes migration or removal.
+- Keep references among database records, uploads, generated record files, and production orders
+  consistent.
+- Restrict file reads and writes to the selected data root or configured generation root and reject
+  path traversal.
+
+## Current Jobs And Lifecycle
+
+- Preserve the existing queue concurrency limits, per-user and per-origin-tab ownership, and job
+  and record status lifecycles.
+- UI retries, process restart, and failure recovery must not bypass concurrency or ownership
+  checks.
+- Keep startup, shutdown, and test-stack management with their existing lifecycle owners.
+- Keep deterministic E2E execution explicitly separate from real Codex execution.
+- Real-generation failures must retain diagnostic information and must not silently fall back to
+  simulated generation.
+
+## Current Framework Conventions
+
+- Keep the client on React 18, Vite, and strict TypeScript unless a task explicitly changes that
+  platform boundary.
+- Keep the server on CommonJS unless a task explicitly includes a module-system migration.
+- Put tests inside their owning `client`, `server`, or `e2e` boundary and verify observable
+  behavior.
+- Continue to use the existing server image pipeline and WebP output convention.
+
+## Current Generated Content
+
+- The classic-artwork manifest and static directory are script-owned generated outputs.
+- To change generated-asset requirements, change the owning build or validation logic first and
+  rebuild only as part of an explicit asset task.
+- Ordinary feature work, test fixes, and environment setup must not refresh remote artwork assets
+  as a side effect.

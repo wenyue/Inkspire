@@ -4,17 +4,20 @@
     "name": {
       "zh-Hans": "吴嘉茵",
       "zh-Hant": "吳嘉茵",
-      "en": "Wu Jiayin"
+      "en": "Wu Jiayin",
+      "ja": "呉嘉茵"
     },
     "region": {
       "zh-Hans": "广东省",
       "zh-Hant": "廣東省",
-      "en": "Guangdong, China"
+      "en": "Guangdong, China",
+      "ja": "中国・広東省"
     },
     "bio": {
       "zh-Hans": "中山大学哲学博士，中国书法家协会会员，现为广东技术师范大学教师，长期从事书法理论、创作与美育实践。",
       "zh-Hant": "中山大學哲學博士，中國書法家協會會員，現為廣東技術師範大學教師，長期從事書法理論、創作與美育實踐。",
-      "en": "PhD in Philosophy from Sun Yat-sen University, member of the China Calligraphers Association, and faculty member at Guangdong Polytechnic Normal University, working across calligraphy theory, practice, and arts education."
+      "en": "PhD in Philosophy from Sun Yat-sen University, member of the China Calligraphers Association, and faculty member at Guangdong Polytechnic Normal University, working across calligraphy theory, practice, and arts education.",
+      "ja": "中山大学哲学博士、中国書法家協会会員。広東技術師範大学で教鞭を執り、書法理論、制作、芸術教育に長年携わっています。"
     },
     "phone": "",
     "wechat": "",
@@ -22,12 +25,14 @@
       {
         "zh-Hans": "中国书法家协会会员",
         "zh-Hant": "中國書法家協會會員",
-        "en": "China Calligraphers Association member"
+        "en": "China Calligraphers Association member",
+        "ja": "中国書法家協会会員"
       },
       {
         "zh-Hans": "中山大学哲学博士",
         "zh-Hant": "中山大學哲學博士",
-        "en": "PhD, Sun Yat-sen University"
+        "en": "PhD, Sun Yat-sen University",
+        "ja": "中山大学 哲学博士"
       }
     ],
     "sampleImages": [
@@ -41,12 +46,14 @@
         "name": {
           "zh-Hans": "专家定制",
           "zh-Hant": "專家定製",
-          "en": "Expert Custom"
+          "en": "Expert Custom",
+          "ja": "専門家によるオーダーメイド"
         },
         "description": {
           "zh-Hans": "由吴嘉茵直接创作或深度主导，并共同确认创作方向与交付安排。",
           "zh-Hant": "由吳嘉茵直接創作或深度主導，並共同確認創作方向與交付安排。",
-          "en": "Wu Jiayin creates or closely leads the work, with the creative direction and delivery arrangements confirmed together."
+          "en": "Wu Jiayin creates or closely leads the work, with the creative direction and delivery arrangements confirmed together.",
+          "ja": "呉嘉茵が直接制作または深く監修し、制作方針と納品方法を共に確認します。"
         },
         "priceEstimate": {
           "base": 1800,
@@ -59,12 +66,14 @@
         "name": {
           "zh-Hans": "专家指导",
           "zh-Hant": "專家指導",
-          "en": "Expert Guided"
+          "en": "Expert Guided",
+          "ja": "専門家による指導"
         },
         "description": {
           "zh-Hans": "由吴嘉茵提供创作方向、修改意见或作品把关，并共同确认指导轮次。",
           "zh-Hant": "由吳嘉茵提供創作方向、修改意見或作品把關，並共同確認指導輪次。",
-          "en": "Wu Jiayin provides creative direction, revision notes, or review, with the guidance rounds confirmed together."
+          "en": "Wu Jiayin provides creative direction, revision notes, or review, with the guidance rounds confirmed together.",
+          "ja": "呉嘉茵が制作方針、修正意見、または作品の講評を行い、指導回数を共に確認します。"
         },
         "priceEstimate": {
           "base": 600,

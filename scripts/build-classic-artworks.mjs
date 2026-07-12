@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import sharp from "sharp";
+import { curationByObjectId, referenceFocusForCategory } from "./classic-artwork-curation.mjs";
 
 const root = process.cwd();
 const outputDir = path.join(root, "client", "public", "classic-artworks");
@@ -160,18 +161,6 @@ function categoryFor(region, object) {
   return "宫廷/风俗";
 }
 
-function descriptionFor({ title, artist, period, region, category }) {
-  const subject = category === "日本绘画" || category === "朝鲜绘画" ? "东亚绘画" : category;
-  return `${title}为${period}${region}绘画作品，作者${artist || "佚名"}。作品适合作为${subject}方向的参考，重点借鉴构图经营、笔墨层次、设色关系和整体气韵，并在生成时转化为新的绘画作品。`;
-}
-
-function referenceFocusFor({ category }) {
-  const base = category === "日本绘画" || category === "朝鲜绘画"
-    ? "参考其画面章法、线描节奏、设色关系和东亚绘画气韵"
-    : `参考其${category}题材的构图、笔墨、设色和气韵`;
-  return `${base}，生成新的绘画作品，不直接复制原作。`;
-}
-
 async function searchObjectIds(query) {
   const url = `https://collectionapi.metmuseum.org/public/collection/v1/search?hasImages=true&departmentId=6&q=${encodeURIComponent(query)}`;
   const payload = await fetchJson(url);
@@ -208,23 +197,26 @@ async function writeImages(id, url) {
 }
 
 function recordFromObject({ object, id, region, category, period }) {
+  const curation = curationByObjectId.get(String(object.objectID));
+  if (!curation) throw new Error(`Missing curated metadata for object ${object.objectID}`);
   const title = object.title || `Artwork ${object.objectID}`;
   const artist = object.artistDisplayName || "佚名";
+  const curatedCategory = curation.category || category;
   return {
     id,
     title: {
-      "zh-Hans": title,
-      "zh-Hant": title,
+      "zh-Hans": curation.title,
+      "zh-Hant": curation.titleHant,
       en: title
     },
     artist: {
-      "zh-Hans": artist,
-      "zh-Hant": artist,
-      en: artist === "佚名" ? "Anonymous" : artist
+      "zh-Hans": curation.artist,
+      "zh-Hant": curation.artistHant,
+      en: curation.artistEn || (artist === "佚名" ? "Anonymous" : artist)
     },
     period: {
-      "zh-Hans": period,
-      "zh-Hant": period,
+      "zh-Hans": curation.period,
+      "zh-Hant": curation.periodHant,
       en: period
     },
     region: {
@@ -232,15 +224,16 @@ function recordFromObject({ object, id, region, category, period }) {
       "zh-Hant": region,
       en: region === "中国" ? "China" : region === "日本" ? "Japan" : "Korea"
     },
-    category,
+    category: curatedCategory,
     description: {
-      "zh-Hans": descriptionFor({ title, artist, period, region, category }),
-      "zh-Hant": descriptionFor({ title, artist, period, region, category }),
-      en: `${title} is an ancient ${region === "中国" ? "Chinese" : "East Asian"} painting. It is used as a reference for composition, brushwork, color, spatial rhythm, and atmosphere while generating a new artwork.`
+      "zh-Hans": curation.description,
+      "zh-Hant": curation.descriptionHant,
+      en: curation.descriptionEn
     },
     image: `/classic-artworks/${id}.webp`,
     thumbnail: `/classic-artworks/${id}-thumb.webp`,
-    reference_focus: referenceFocusFor({ category }),
+    reference_focus: referenceFocusForCategory(curatedCategory),
+    new_artwork_titles: [...curation.newArtworkTitles],
     source_note: `Metropolitan Museum of Art Open Access object ${object.objectID}; processed as artwork-only WebP with light trim and tone normalization.`
   };
 }
@@ -264,6 +257,7 @@ async function main() {
     for (const objectId of candidateIds) {
       if (added >= target.target || records.length >= targetTotal) break;
       if (usedObjectIds.has(objectId)) continue;
+      if (!curationByObjectId.has(String(objectId))) continue;
       usedObjectIds.add(objectId);
       let object;
       try {

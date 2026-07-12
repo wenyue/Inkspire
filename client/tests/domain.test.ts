@@ -15,14 +15,30 @@ import {
 const config: QuestionConfig = { questions: questions as QuestionConfig["questions"] };
 
 describe("domain question flow", () => {
+  it("keeps script selection image-free unless verified calligraphy sources are supplied", () => {
+    const script = (questions as QuestionConfig["questions"]).calligraphy.find((question) => question.id === "calligraphy_script");
+    expect(script?.option_preview_images).toBeUndefined();
+    expect(script?.option_source_notes).toHaveLength(5);
+  });
+
+  it("orders painting decisions from subject and format through visual treatment", () => {
+    expect(questions.painting.map((question) => question.id)).toEqual([
+      "painting_subject",
+      "painting_format",
+      "painting_brushwork",
+      "painting_palette",
+      "painting_mood"
+    ]);
+  });
+
   it("starts with the work type question", () => {
     const question = getInitialQuestion(config);
 
     expect(question.id).toBe("work_type");
     expect(question.title["zh-Hans"]).toBe("先定创作方向");
     expect(question.title.en).toBe("Choose a creative direction");
-    expect(question.options?.["zh-Hans"]).toEqual(["国画", "书法", "从历代名作取意"]);
-    expect(question.options?.en).toEqual(["Painting", "Calligraphy", "Draw from Masterworks"]);
+    expect(question.options?.["zh-Hans"]).toEqual(["国画", "书法", "从历代名作取意", "热门模板"]);
+    expect(question.options?.en).toEqual(["Painting", "Calligraphy", "Draw from Masterworks", "Popular Templates"]);
   });
 
   it("maps the third work type option to the classic reference picker", () => {
@@ -30,6 +46,13 @@ describe("domain question flow", () => {
 
     expect(optionValueForQuestion(question, "从历代名作取意", "zh-Hans")).toBe("classic_reference");
     expect(optionValueForQuestion(question, "Draw from Masterworks", "en")).toBe("classic_reference");
+  });
+
+  it("maps the fourth work type option to the template picker", () => {
+    const question = getInitialQuestion(config);
+
+    expect(optionValueForQuestion(question, "热门模板", "zh-Hans")).toBe("template");
+    expect(optionValueForQuestion(question, "Popular Templates", "en")).toBe("template");
   });
 
   it("shows only painting follow-up questions after choosing painting", () => {

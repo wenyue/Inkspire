@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Expert } from "../api";
 import type { Locale } from "../domain";
 
@@ -43,13 +43,31 @@ export default function Experts({
   consultWechat
 }: ExpertsProps) {
   const [copiedExpertId, setCopiedExpertId] = useState("");
+  const copyToastTimerRef = useRef<number | null>(null);
+
+  useEffect(() => () => {
+    if (copyToastTimerRef.current !== null) {
+      window.clearTimeout(copyToastTimerRef.current);
+    }
+  }, []);
+
+  const showCopyToast = (expertId: string) => {
+    if (copyToastTimerRef.current !== null) {
+      window.clearTimeout(copyToastTimerRef.current);
+    }
+    setCopiedExpertId(expertId);
+    copyToastTimerRef.current = window.setTimeout(() => {
+      setCopiedExpertId("");
+      copyToastTimerRef.current = null;
+    }, 1600);
+  };
 
   const copyConsultContact = async (expertId: string) => {
     if (!consultWechat) return;
     try {
       await navigator.clipboard?.writeText(consultWechat);
       if (navigator.clipboard) {
-        setCopiedExpertId(expertId);
+        showCopyToast(expertId);
         return;
       }
     } catch {}
@@ -62,12 +80,11 @@ export default function Experts({
     copyField.select();
     const copied = typeof document.execCommand === "function" && document.execCommand("copy");
     copyField.remove();
-    if (copied) setCopiedExpertId(expertId);
+    if (copied) showCopyToast(expertId);
   };
 
   return (
-    <section className="experts-panel" aria-labelledby="experts-heading">
-      <h2 id="experts-heading">{title}</h2>
+    <section className="experts-panel" aria-label={title}>
       {experts.map((expert) => (
         <article className="expert-card" key={expert.id}>
           <div className="expert-profile">
@@ -129,7 +146,9 @@ export default function Experts({
               <button className="primary-action" type="button" onClick={() => copyConsultContact(expert.id)}>
                 {consultLabel}
               </button>
-              {copiedExpertId === expert.id && copiedLabel ? <span role="status">{copiedLabel}</span> : null}
+              {copiedExpertId === expert.id && copiedLabel ? (
+                <span className="copy-toast consult-copy-toast" role="status">{copiedLabel}</span>
+              ) : null}
             </div>
           ) : null}
         </article>

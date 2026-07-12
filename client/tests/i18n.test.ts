@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import en from "../../config/i18n/en.json";
+import ja from "../../config/i18n/ja.json";
 import zhHans from "../../config/i18n/zh-Hans.json";
 import zhHant from "../../config/i18n/zh-Hant.json";
 import { createListTranslator, createTranslator } from "../src/i18n";
@@ -7,6 +8,7 @@ import { createListTranslator, createTranslator } from "../src/i18n";
 const dictionaries = {
   "zh-Hans": zhHans,
   "zh-Hant": zhHant,
+  ja,
   en
 };
 
@@ -35,6 +37,22 @@ describe("i18n", () => {
     expect(createTranslator("en", dictionaries)("empty.libraryDetail")).toBe("The library retains each title, format, and density note.");
   });
 
+  it("localizes the artwork route loading boundary", () => {
+    expect(createTranslator("zh-Hans", dictionaries)("result.loading")).toBe("正在打开作品…");
+    expect(createTranslator("zh-Hant", dictionaries)("result.loading")).toBe("正在打開作品…");
+    expect(createTranslator("en", dictionaries)("result.loading")).toBe("Opening artwork…");
+    expect(createTranslator("ja", dictionaries)("result.loading")).toBe("作品を開いています…");
+  });
+
+  it("provides Japanese navigation and creation copy", () => {
+    const translate = createTranslator("ja", dictionaries);
+
+    expect(translate("language.label")).toBe("言語");
+    expect(translate("tabs.studio")).toBe("創作");
+    expect(translate("tabs.library")).toBe("作品集");
+    expect(translate("studio.subtitle")).toBe("中国画と書道の創作アシスタント");
+  });
+
   it("falls back to zh-Hans when a key is missing from the active locale", () => {
     const t = createTranslator("en", {
       "zh-Hans": { custom: { label: "默认文案" } },
@@ -61,9 +79,6 @@ describe("i18n", () => {
     expect(zhHansTranslator("studio.subtitle")).toBe("国画与书法创作辅助");
     expect(zhHantTranslator("studio.subtitle")).toBe("國畫與書法創作輔助");
     expect(enTranslator("studio.subtitle")).toBe("Chinese painting and calligraphy creation assistant");
-    expect(zhHansTranslator("studio.optionsScrollHint")).toBe("下方还有选项，可继续滑动");
-    expect(zhHantTranslator("studio.optionsScrollHint")).toBe("下方還有選項，可繼續滑動");
-    expect(enTranslator("studio.optionsScrollHint")).toBe("More choices below — scroll to continue");
     expect(zhHansTranslator("experts.sampleHint")).toBe("左右滑动查看更多作品");
     expect(zhHantTranslator("experts.sampleHint")).toBe("左右滑動查看更多作品");
     expect(enTranslator("experts.sampleHint")).toBe("Swipe sideways to see more works");

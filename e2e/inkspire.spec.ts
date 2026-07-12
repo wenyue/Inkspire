@@ -10,12 +10,14 @@ const samplePng = {
   )
 };
 
-async function completePaintingFlow(page) {
+async function completePaintingFlow(page, inspectFirstQuestion?: () => Promise<void>) {
   await page.getByRole("button", { name: "国画" }).click();
-  for (const option of ["山水", "写意", "水墨", "清雅", "立轴"]) {
+  await inspectFirstQuestion?.();
+  for (const option of ["山水", "立轴", "写意", "水墨", "清雅"]) {
     await page.getByRole("button", { name: option }).click();
   }
   await expect(page.getByRole("heading", { name: "可选：添加环境照片" })).toBeVisible();
+  await expect(page.getByText("第 7 / 8 步")).toBeVisible();
   await expect(page.getByRole("button", { name: "生成", exact: true })).not.toBeVisible();
 }
 
@@ -24,13 +26,16 @@ async function addPhotoAndContinue(page, entry: "album" | "camera" = "album") {
   await page.getByLabel(inputLabel).setInputFiles(samplePng);
   await expect(page.getByText("已提供环境图片，将用于生成效果图。")).toBeVisible();
   await page.getByRole("button", { name: "继续" }).click();
+  await expect(page.getByText("第 8 / 8 步")).toBeVisible();
   await expect(page.getByRole("button", { name: "生成", exact: true })).toBeVisible();
 }
 
 async function continueToNotesWithoutPhoto(page) {
   await page.getByRole("button", { name: "不需要效果图，直接生成" }).click();
+  await expect(page.getByText("第 7 / 8 步")).toBeVisible();
   await page.getByRole("button", { name: "均衡" }).click();
   await expect(page.getByRole("heading", { name: "也可以补一句想法" })).toBeVisible();
+  await expect(page.getByText("第 8 / 8 步")).toBeVisible();
 }
 
 async function expectFullyAboveBottomTabs(page, action) {
@@ -51,7 +56,14 @@ for (const productionViewport of [
     await page.setViewportSize(productionViewport);
     await page.goto("/");
 
-    await completePaintingFlow(page);
+    await completePaintingFlow(page, async () => {
+      await expect(page.getByRole("heading", { name: "想画什么内容？" })).toBeVisible();
+      const firstOptionFrame = page.locator(".option-preview-frame").first();
+      await expect(firstOptionFrame).toHaveCSS("width", "100px");
+      await expect(firstOptionFrame).toHaveCSS("height", "75px");
+      await expect(firstOptionFrame.locator("..")).toHaveCSS("min-height", "92px");
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+    });
     await addPhotoAndContinue(page);
     const generateButton = page.getByRole("button", { name: "生成", exact: true });
     await expectFullyAboveBottomTabs(page, generateButton);
@@ -239,6 +251,23 @@ for (const viewport of [
   });
 }
 
+test("phone browser back from a classic artwork detail returns to the classic step", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+
+  await page.getByRole("button", { name: "从历代名作取意" }).click();
+  await page.getByRole("button", { name: /照夜白图/ }).click();
+
+  await expect(page.getByRole("img", { name: "照夜白图" })).toBeVisible();
+  await expect(page).toHaveURL(/\/studio\?step=classic&artwork=/);
+
+  await page.goBack();
+
+  await expect(page).toHaveURL(/\/studio\?step=classic$/);
+  await expect(page.getByRole("searchbox", { name: "搜索作品、作者、年代或地域" })).toBeVisible();
+  await expect(page.getByText("第 2 / 4 步")).toBeVisible();
+});
+
 test("wide artisan gallery shows all current works in one row", async ({ page }) => {
   await page.setViewportSize({ width: 900, height: 900 });
   await page.goto("/");
@@ -413,6 +442,7 @@ test("mobile user can complete Inkspire creation flow with mocked generation", a
   await expect(page.getByRole("button", { name: "画案", exact: true })).toHaveAttribute("aria-pressed", "false");
   await expect(page.getByRole("img", { name: "作品图" })).toBeVisible();
   await expect(page.getByRole("button", { name: "制作作品" })).toBeVisible();
+
   await page.getByRole("button", { name: "雅匠" }).click();
   await expect(page.getByText("可咨询方向")).toBeVisible();
   await page.getByRole("button", { name: "发起咨询" }).click();
@@ -428,6 +458,89 @@ test("mobile user can complete Inkspire creation flow with mocked generation", a
     return window.getComputedStyle(element).gridTemplateColumns.split(" ").length;
   });
   expect(resultColumns).toBe(1);
+});
+
+test("refreshing a library artwork avoids Library flash and restores its scroll position", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.addInitScript(() => {
+    document.addEventListener("DOMContentLoaded", () => {
+      const style = document.createElement("style");
+      style.textContent = ".result-view{min-height:1800px!important}";
+      document.head.append(style);
+    });
+  });
+  await page.goto("/");
+
+  await completePaintingFlow(page);
+  await addPhotoAndContinue(page);
+  await page.getByRole("button", { name: "生成", exact: true }).click();
+  await expect(page.getByRole("img", { name: "作品图" })).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByRole("img", { name: "效果图" })).toBeVisible();
+
+  const studioResultSurface = page.locator(".main-surface");
+  const studioScrollTopBeforeProduction = await studioResultSurface.evaluate((element) => element.scrollTop);
+  await page.getByRole("button", { name: "制作作品" }).click();
+  await expect(page.getByRole("dialog", { name: "制作作品" })).toBeVisible();
+  await page.getByRole("button", { name: "关闭" }).click();
+  await expect(page.getByRole("dialog", { name: "制作作品" })).toBeHidden();
+  await expect.poll(async () => Math.abs(
+    await studioResultSurface.evaluate((element) => element.scrollTop) - studioScrollTopBeforeProduction
+  )).toBeLessThanOrEqual(2);
+
+  const studioScrollTopBeforeBrowserBack = await studioResultSurface.evaluate((element) => element.scrollTop);
+  await page.getByRole("button", { name: "制作作品" }).click();
+  await expect(page.getByRole("dialog", { name: "制作作品" })).toBeVisible();
+  await page.goBack();
+  await expect(page.getByRole("dialog", { name: "制作作品" })).toBeHidden();
+  await expect.poll(async () => Math.abs(
+    await studioResultSurface.evaluate((element) => element.scrollTop) - studioScrollTopBeforeBrowserBack
+  )).toBeLessThanOrEqual(2);
+
+  await page.getByRole("button", { name: "藏卷", exact: true }).click();
+  await page.getByRole("button", { name: /查看/ }).first().click();
+  await expect(page).toHaveURL(/\/records\/[^/]+\?from=library/);
+  await expect(page.getByRole("img", { name: "作品图" })).toBeVisible();
+
+  const resultSurface = page.locator(".main-surface");
+  await resultSurface.evaluate((element) => {
+    element.dispatchEvent(new WheelEvent("wheel", { bubbles: true }));
+    element.scrollTop = 240;
+    element.dispatchEvent(new Event("scroll", { bubbles: true }));
+  });
+
+  let releaseRecordRequest: (() => void) | undefined;
+  let shouldDelayRecordRequest = true;
+  await page.route(/\/api\/records\/[^/?]+(?:\?.*)?$/, async (route) => {
+    if (shouldDelayRecordRequest && route.request().method() === "GET") {
+      shouldDelayRecordRequest = false;
+      await new Promise<void>((resolve) => {
+        releaseRecordRequest = resolve;
+      });
+    }
+    await route.continue();
+  });
+
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await expect(page.getByRole("status")).toHaveText("正在打开作品…");
+  await expect(page.locator(".library-grid")).toHaveCount(0);
+  releaseRecordRequest?.();
+  await expect(page.getByRole("img", { name: "作品图" })).toBeVisible();
+  await expect.poll(async () => Math.abs(
+    await resultSurface.evaluate((element) => element.scrollTop) - 240
+  )).toBeLessThanOrEqual(2);
+
+  const makeArtworkButton = page.getByRole("button", { name: "制作作品" });
+  const scrollTopBeforeOpen = await resultSurface.evaluate((element) => {
+    element.scrollTop = element.scrollHeight;
+    return element.scrollTop;
+  });
+  await makeArtworkButton.evaluate((button: HTMLButtonElement) => button.click());
+  await expect(page.getByRole("dialog", { name: "制作作品" })).toBeVisible();
+  await page.getByRole("button", { name: "关闭" }).click();
+  await expect(page.getByRole("dialog", { name: "制作作品" })).toBeHidden();
+  await expect.poll(async () => Math.abs(
+    await resultSurface.evaluate((element) => element.scrollTop) - scrollTopBeforeOpen
+  )).toBeLessThanOrEqual(2);
 });
 
 test("wide viewport shows artwork and fusion side by side", async ({ page }) => {
@@ -468,16 +581,16 @@ test("studio keeps the current question step after switching to library and back
 
   await page.getByRole("button", { name: "国画" }).click();
   await page.getByRole("button", { name: "山水" }).click();
-  await expect(page.getByRole("heading", { name: "偏好哪种笔墨？" })).toBeVisible();
-  await expect(page.getByText("第 3 / 7 步")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "希望做成什么形制？" })).toBeVisible();
+  await expect(page.getByText("第 3 / 8 步")).toBeVisible();
   await expect(page).toHaveURL(/\/studio\?step=question&index=1$/);
 
   await page.getByRole("button", { name: "藏卷", exact: true }).click();
   await expect(page).toHaveURL(/\/library$/);
 
   await page.getByRole("button", { name: "画案", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "偏好哪种笔墨？" })).toBeVisible();
-  await expect(page.getByText("第 3 / 7 步")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "希望做成什么形制？" })).toBeVisible();
+  await expect(page.getByText("第 3 / 8 步")).toBeVisible();
   await expect(page.getByText("先定作品类型")).toBeHidden();
   await expect(page).toHaveURL(/\/studio\?step=question&index=1$/);
 });
